@@ -4,13 +4,15 @@
 /// * [AAT](https://developer.apple.com/fonts/TrueType-Reference-Manual/RM06/Chap6AATIntro.html).
 ///
 /// Font parsing starts with a [`Face`].
-
-const std = @import("std");
 const cfg = @import("config");
 const parser = @import("parser.zig");
 const tables = @import("tables.zig");
+const opentype_layout = @import("ggg.zig");
 
 const LazyArray16 = parser.LazyArray16;
+
+/// A type-safe wrapper for glyph ID.
+pub const GlyphId = struct { u16 };
 
 /// A font face.
 ///
@@ -60,7 +62,7 @@ pub const FaceTables = struct {
 
     bdat: ?tables.cbdt.Table = null,
     cbdt: ?tables.cbdt.Table = null,
-    cff: ?tables.cff.Table = null,
+    cff: ?tables.cff1.Table = null,
     cmap: ?tables.cmap.Table = null,
     colr: ?tables.colr.Table = null,
     ebdt: ?tables.cbdt.Table = null,
@@ -79,8 +81,8 @@ pub const FaceTables = struct {
 
     opentype_layout: if (cfg.opentype_layout) struct {
         gdef: ?tables.gdef.Table = null,
-        gpos: ?tables.opentype_layout.LayoutTable = null,
-        gsub: ?tables.opentype_layout.LayoutTable = null,
+        gpos: ?opentype_layout.LayoutTable = null,
+        gsub: ?opentype_layout.LayoutTable = null,
         math: ?tables.math.Table = null,
     } else void,
 
@@ -129,3 +131,23 @@ const VarCoords = struct {
 ///
 /// The number is stored as f2.16
 pub const NormalizedCoordinate = struct { i16 };
+
+/// A rectangle.
+///
+/// Doesn't guarantee that `x_min` <= `x_max` and/or `y_min` <= `y_max`.
+pub const Rect = struct {
+    x_min: i16,
+    y_min: i16,
+    x_max: i16,
+    y_max: i16,
+};
+
+/// A line metrics.
+///
+/// Used for underline and strikeout.
+pub const LineMetrics = struct {
+    /// Line position.
+    position: i16,
+    /// Line thickness.
+    thickness: i16,
+};
