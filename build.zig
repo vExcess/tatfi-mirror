@@ -22,6 +22,9 @@ pub fn build(b: *std.Build) void {
             .desc = "Enables ankr, feat, format1 subtable in kern, kerx, morx and trak tables",
         },
     });
+
+    if (b.pkg_hash.len == 0)
+        set_up_testing_exe(b, mod);
 }
 
 fn add_config(
@@ -39,4 +42,33 @@ fn add_config(
 
     // in case we need to add non-bool options
     return options;
+}
+
+fn set_up_testing_exe(
+    b: *std.Build,
+    mod: *std.Build.Module,
+) void {
+    const target = b.standardTargetOptions(.{});
+    const optimize = b.standardOptimizeOption(.{});
+
+    const exe = b.addExecutable(.{
+        .name = "foo",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/main.zig"),
+
+            .target = target,
+            .optimize = optimize,
+
+            .imports = &.{
+                .{ .name = "tetfy", .module = mod },
+            },
+        }),
+    });
+
+    b.installArtifact(exe);
+
+    const run_step = b.step("run", "Run the app");
+
+    const run_cmd = b.addRunArtifact(exe);
+    run_step.dependOn(&run_cmd.step);
 }
