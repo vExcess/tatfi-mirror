@@ -4,6 +4,7 @@
 /// * [AAT](https://developer.apple.com/fonts/TrueType-Reference-Manual/RM06/Chap6AATIntro.html).
 ///
 /// Font parsing starts with a [`Face`].
+const std = @import("std");
 const cfg = @import("config");
 const parser = @import("parser.zig");
 const tables = @import("tables.zig");
@@ -46,7 +47,7 @@ pub const Face = struct {
     ///
     /// If an optional table has invalid data it will be skipped.
     pub fn parse(
-        data: []u8,
+        data: []const u8,
         index: u32,
     ) FaceParsingError!Self {
         const raw_face = try RawFace.parse(data, index);
@@ -73,10 +74,96 @@ pub const Face = struct {
     fn collect_tables(
         raw_face: RawFace,
     ) RawFaceTables {
-        _ = raw_face;
         var ret_tables: RawFaceTables = .{};
-        // TODO
-        _ = &ret_tables;
+
+        var iterator = raw_face.table_records.iterator();
+        while (iterator.next()) |record| {
+            const start: usize = record.offset;
+            if (start > raw_face.data.len) continue;
+
+            const end = std.math.add(usize, start, record.length) catch continue;
+            if (end > raw_face.data.len) continue;
+
+            const table_data = raw_face.data[start..end];
+
+            switch (record.tag.inner) {
+                Tag.from_bytes("bdat") => ret_tables.bdat = table_data,
+                Tag.from_bytes("bloc") => ret_tables.bloc = table_data,
+                Tag.from_bytes("CBDT") => ret_tables.cbdt = table_data,
+                Tag.from_bytes("CBLC") => ret_tables.cblc = table_data,
+                Tag.from_bytes("CFF ") => ret_tables.cff = table_data,
+                Tag.from_bytes("CFF2") => if (cfg.variable_fonts) {
+                    ret_tables.variable_fonts.cff2 = table_data;
+                },
+                Tag.from_bytes("COLR") => ret_tables.colr = table_data,
+                Tag.from_bytes("CPAL") => ret_tables.cpal = table_data,
+                Tag.from_bytes("EBDT") => ret_tables.ebdt = table_data,
+                Tag.from_bytes("EBLC") => ret_tables.eblc = table_data,
+                Tag.from_bytes("GDEF") => if (cfg.opentype_layout) {
+                    ret_tables.opentype_layout.gdef = table_data;
+                },
+                Tag.from_bytes("GPOS") => if (cfg.opentype_layout) {
+                    ret_tables.opentype_layout.gpos = table_data;
+                },
+                Tag.from_bytes("GSUB") => if (cfg.opentype_layout) {
+                    ret_tables.opentype_layout.gsub = table_data;
+                },
+                Tag.from_bytes("MATH") => if (cfg.opentype_layout) {
+                    ret_tables.opentype_layout.math = table_data;
+                },
+                Tag.from_bytes("HVAR") => if (cfg.variable_fonts) {
+                    ret_tables.variable_fonts.hvar = table_data;
+                },
+                Tag.from_bytes("MVAR") => if (cfg.variable_fonts) {
+                    ret_tables.variable_fonts.mvar = table_data;
+                },
+                Tag.from_bytes("OS/2") => ret_tables.os2 = table_data,
+                Tag.from_bytes("SVG ") => ret_tables.svg = table_data,
+                Tag.from_bytes("VORG") => ret_tables.vorg = table_data,
+                Tag.from_bytes("VVAR") => if (cfg.variable_fonts) {
+                    ret_tables.variable_fonts.vvar = table_data;
+                },
+                Tag.from_bytes("ankr") => if (cfg.apple_layout) {
+                    ret_tables.apple_layout.ankr = table_data;
+                },
+                Tag.from_bytes("avar") => if (cfg.variable_fonts) {
+                    ret_tables.variable_fonts.avar = table_data;
+                },
+                Tag.from_bytes("cmap") => ret_tables.cmap = table_data,
+                Tag.from_bytes("feat") => if (cfg.apple_layout) {
+                    ret_tables.apple_layout.feat = table_data;
+                },
+                Tag.from_bytes("fvar") => if (cfg.variable_fonts) {
+                    ret_tables.variable_fonts.fvar = table_data;
+                },
+                Tag.from_bytes("glyf") => ret_tables.glyf = table_data,
+                Tag.from_bytes("gvar") => if (cfg.variable_fonts) {
+                    ret_tables.variable_fonts.gvar = table_data;
+                },
+                Tag.from_bytes("head") => ret_tables.head = table_data,
+                Tag.from_bytes("hhea") => ret_tables.hhea = table_data,
+                Tag.from_bytes("hmtx") => ret_tables.hmtx = table_data,
+                Tag.from_bytes("kern") => ret_tables.kern = table_data,
+                Tag.from_bytes("kerx") => if (cfg.apple_layout) {
+                    ret_tables.apple_layout.kerx = table_data;
+                },
+                Tag.from_bytes("loca") => ret_tables.loca = table_data,
+                Tag.from_bytes("maxp") => ret_tables.maxp = table_data,
+                Tag.from_bytes("morx") => if (cfg.apple_layout) {
+                    ret_tables.apple_layout.morx = table_data;
+                },
+                Tag.from_bytes("name") => ret_tables.name = table_data,
+                Tag.from_bytes("post") => ret_tables.post = table_data,
+                Tag.from_bytes("sbix") => ret_tables.sbix = table_data,
+                Tag.from_bytes("STAT") => ret_tables.stat = table_data,
+                Tag.from_bytes("trak") => if (cfg.apple_layout) {
+                    ret_tables.apple_layout.trak = table_data;
+                },
+                Tag.from_bytes("vhea") => ret_tables.vhea = table_data,
+                Tag.from_bytes("vmtx") => ret_tables.vmtx = table_data,
+                else => {},
+            }
+        }
 
         return ret_tables;
     }
@@ -84,9 +171,123 @@ pub const Face = struct {
     fn parse_tables(
         raw_tables: RawFaceTables,
     ) FaceParsingError!FaceTables {
-        _ = raw_tables;
-        // TODO
-        return error.UnknownMagic;
+        const head = tables.head.Table.parse(raw_tables.head) orelse
+            return error.NoHeadTable;
+        const hhea = tables.hhea.Table.parse(raw_tables.hhea) orelse
+            return error.NoHheaTable;
+        const maxp = tables.maxp.Table.parse(raw_tables.maxp) orelse
+            return error.NoMaxpTable;
+
+        const hmtx: ?tables.hmtx.Table = t: {
+            const data = raw_tables.hmtx orelse break :t null;
+            break :t tables.hmtx.Table.parse(
+                hhea.number_of_metrics,
+                maxp.number_of_glyphs,
+                data,
+            );
+        };
+
+        const vhea = tables.vhea.Table.parse(raw_tables.vhea orelse &.{});
+        const vmtx: ?tables.hmtx.Table = t: {
+            const data = raw_tables.vmtx orelse break :t null;
+            break :t tables.hmtx.Table.parse(
+                (vhea orelse break :t null).number_of_metrics,
+                maxp.number_of_glyphs,
+                data,
+            );
+        };
+
+        const loca: ?tables.loca.Table = t: {
+            const data = raw_tables.loca orelse break :t null;
+            break :t tables.loca.Table.parse(
+                maxp.number_of_glyphs,
+                head.index_to_location_format,
+                data,
+            );
+        };
+
+        const glyf: ?tables.glyf.Table = if (loca) |l| t: {
+            const data = raw_tables.glyf orelse break :t null;
+            break :t tables.glyf.Table.parse(l, data);
+        } else null;
+
+        const bdat: ?tables.cbdt.Table = if (raw_tables.bloc) |bloc_data| b: {
+            const bloc = tables.cblc.Table.parse(bloc_data);
+            const data = raw_tables.bdat orelse break :b null;
+            break :b tables.cbdt.Table.parse(bloc, data);
+        } else null;
+
+        const cbdt: ?tables.cbdt.Table = if (raw_tables.cblc) |cblc_data| c: {
+            const cblc = tables.cblc.Table.parse(cblc_data);
+            const data = raw_tables.cbdt orelse break :c null;
+            break :c tables.cbdt.Table.parse(cblc, data);
+        } else null;
+
+        const ebdt: ?tables.cbdt.Table = if (raw_tables.eblc) |eblc_data| e: {
+            const eblc = tables.cblc.Table.parse(eblc_data);
+            const data = raw_tables.ebdt orelse break :e null;
+            break :e tables.cbdt.Table.parse(eblc, data);
+        } else null;
+
+        const cpal = if (raw_tables.cpal) |data|
+            tables.cpal.Table.parse(data)
+        else
+            null;
+
+        const colr = if (cpal) |cpal_table|
+            if (raw_tables.colr) |data|
+                tables.colr.Table.parse(cpal_table, data)
+            else
+                null
+        else
+            null;
+
+        return .{
+            .head = head,
+            .hhea = hhea,
+            .maxp = maxp,
+
+            .bdat = bdat,
+            .cbdt = cbdt,
+            .cff = null, // [ARS} TODO
+            .cmap = null, // [ARS} TODO
+            .colr = colr,
+            .ebdt = ebdt,
+            .glyf = glyf,
+            .hmtx = hmtx,
+            .kern = null, // [ARS} TODO
+            .name = null, // [ARS} TODO
+            .os2 = null, // [ARS} TODO
+            .post = null, // [ARS} TODO
+            .sbix = null, // [ARS} TODO
+            .stat = null, // [ARS} TODO
+            .svg = null, // [ARS} TODO
+            .vhea = null, // [ARS} TODO
+            .vmtx = vmtx,
+            .vorg = null, // [ARS} TODO
+            .opentype_layout = if (cfg.opentype_layout) .{
+                .gdef = null, // [ARS} TODO
+                .gpos = null, // [ARS} TODO
+                .gsub = null, // [ARS} TODO
+                .math = null, // [ARS} TODO
+            },
+            .apple_layout = if (cfg.apple_layout) .{
+                .ankr = null, // [ARS} TODO
+                .feat = null, // [ARS} TODO
+                .kerx = null, // [ARS} TODO
+                .morx = null, // [ARS} TODO
+                .trak = null, // [ARS} TODO
+            },
+            .variable_fonts = if (cfg.variable_fonts) .{
+                .avar = null, // [ARS} TODO
+                .cff2 = null, // [ARS} TODO
+                .fvar = null, // [ARS} TODO
+                .gvar = null, // [ARS} TODO
+                .hvar = null, // [ARS} TODO
+                .mvar = null, // [ARS} TODO
+                .vvar = null, // [ARS} TODO
+            },
+        };
     }
 };
 
@@ -114,13 +315,52 @@ pub const RawFace = struct {
     ///
     /// While we do reuse [`FaceParsingError`], `No*Table` errors will not be throws.
     pub fn parse(
-        data: []u8,
+        data: []const u8,
         index: u32,
     ) FaceParsingError!Self {
-        // TODO
-        _ = data;
-        _ = index;
-        return error.UnknownMagic;
+        var s = parser.Stream.new(data);
+        const magic = s.read(Magic) orelse return error.UnknownMagic;
+        switch (magic) {
+            .font_collection => {
+                s.skip(u32); // version
+                const number_of_faces = s.read(u32) orelse
+                    return error.MalformedFont;
+
+                const offsets = s.read_array(parser.Offset32, number_of_faces) orelse
+                    return error.MalformedFont;
+
+                const face_offset = offsets.get(index) orelse
+                    return error.FaceIndexOutOfBounds;
+
+                // Face offset is from the start of the font data,
+                // so we have to adjust it to the current parser offset.
+                const offset = std.math.sub(usize, face_offset[0], s.offset) catch
+                    return error.MalformedFont;
+
+                if (!s.advance_checked(offset)) return error.MalformedFont;
+
+                // Read **face** magic.
+                // Each face in a font collection also starts with a magic.
+                const face_magic = s.read(Magic) orelse return error.UnknownMagic;
+                // And face in a font collection can't be another collection.
+                if (face_magic == .font_collection) return error.UnknownMagic;
+            },
+            // When reading from a regular font (not a collection) disallow index to be non-zero
+            // Basically treat the font as a one-element collection
+            else => if (index != 0) return error.FaceIndexOutOfBounds,
+        }
+
+        const num_tables = s.read(u16) orelse
+            return error.MalformedFont;
+        s.advance(6); // searchRange (u16) + entrySelector (u16) + rangeShift (u16)
+
+        const table_records = s.read_array(TableRecord, num_tables) orelse
+            return error.MalformedFont;
+
+        return .{
+            .data = data,
+            .table_records = table_records,
+        };
     }
 };
 
@@ -293,10 +533,60 @@ pub const TableRecord = struct {
     check_sum: u32,
     offset: u32,
     length: u32,
+
+    const Self = @This();
+    pub const FromData = struct {
+        // [ARS] impl of FromData trait
+        pub const SIZE: usize = 16;
+
+        pub fn parse(data: *const [SIZE]u8) ?Self {
+            var s = parser.Stream.new(data);
+
+            return .{
+                .tag = s.read(Tag) orelse return null,
+                .check_sum = s.read(u32) orelse return null,
+                .offset = s.read(u32) orelse return null,
+                .length = s.read(u32) orelse return null,
+            };
+        }
+    };
 };
 
 /// A 4-byte tag.
-pub const Tag = struct { u32 };
+pub const Tag = struct {
+    inner: u32,
+
+    const Self = @This();
+    pub const FromData = struct {
+        // [ARS] impl of FromData trait
+        pub const SIZE: usize = 4;
+
+        pub fn parse(data: *const [SIZE]u8) ?Self {
+            const u = std.mem.readInt(u32, data, .big);
+            return .{ .inner = u };
+        }
+    };
+
+    /// Creates a `Tag` from bytes.
+    pub fn from_bytes(bytes: *const [4]u8) u32 {
+        const _0 = @as(u32, bytes[0]) << 24;
+        const _1 = @as(u32, bytes[1]) << 16;
+        const _2 = @as(u32, bytes[2]) << 8;
+        const _3 = @as(u32, bytes[3]);
+
+        return _0 | _1 | _2 | _3;
+    }
+
+    /// Returns tag as 4-element byte array.
+    pub fn to_bytes(self: Self) [4]u8 {
+        return .{
+            @truncate((self.inner >> 24 & 0xff)),
+            @truncate((self.inner >> 16 & 0xff)),
+            @truncate((self.inner >> 8 & 0xff)),
+            @truncate((self.inner >> 0 & 0xff)),
+        };
+    }
+};
 
 /// A list of font face parsing errors.
 pub const FaceParsingError = error{
@@ -339,6 +629,31 @@ pub const LineMetrics = struct {
     position: i16,
     /// Line thickness.
     thickness: i16,
+};
+
+/// A TrueType font magic.
+///
+/// https://docs.microsoft.com/en-us/typography/opentype/spec/otff#organization-of-an-opentype-font
+pub const Magic = enum {
+    true_type,
+    open_type,
+    font_collection,
+
+    const Self = @This();
+    pub const FromData = struct {
+        // [ARS] impl of FromData trait
+        pub const SIZE: usize = 4;
+
+        pub fn parse(data: *const [SIZE]u8) ?Self {
+            const u = std.mem.readInt(u32, data, .big);
+            switch (u) {
+                0x00010000, 0x74727565 => return .true_type,
+                0x4F54544F => return .open_type,
+                0x74746366 => return .font_collection,
+                else => return null,
+            }
+        }
+    };
 };
 
 // VARIABLE FONTS

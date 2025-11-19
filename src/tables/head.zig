@@ -1,6 +1,9 @@
 //! A [Font Header Table](
 //! https://docs.microsoft.com/en-us/typography/opentype/spec/head) implementation.
 
+const std = @import("std");
+const parser = @import("../parser.zig");
+
 const Rect = @import("../lib.zig").Rect;
 
 /// A [Font Header Table](https://docs.microsoft.com/en-us/typography/opentype/spec/head).
@@ -14,6 +17,52 @@ pub const Table = struct {
     /// An index format used by the [Index to Location Table](
     /// https://docs.microsoft.com/en-us/typography/opentype/spec/loca).
     index_to_location_format: IndexToLocationFormat,
+
+    /// Parses a table from raw data.
+    pub fn parse(
+        data: []const u8,
+    ) ?Table {
+        // Do not check the exact length, because some fonts include
+        // padding in table's length in table records, which is incorrect.
+        if (data.len < 54)
+            return null;
+
+        var s = parser.Stream.new(data);
+        s.skip(u32); // version
+        s.skip(i32); // font revision // should be parser.Fixed
+        s.skip(u32); // checksum adjustment
+        s.skip(u32); // magic number
+        s.skip(u16); // flags
+        const units_per_em = s.read(u16) orelse return null;
+        if (units_per_em < 16 or units_per_em > 16248) return null;
+
+        s.skip(u64); // created time
+        s.skip(u64); // modified time
+        const x_min = s.read(i16) orelse return null;
+        const y_min = s.read(i16) orelse return null;
+        const x_max = s.read(i16) orelse return null;
+        const y_max = s.read(i16) orelse return null;
+        s.skip(u16); // mac style
+        s.skip(u16); // lowest PPEM
+        s.skip(i16); // font direction hint
+        const index_to_location_format: IndexToLocationFormat =
+            switch (s.read(u16) orelse return null) {
+                0 => .short,
+                1 => .long,
+                else => return null,
+            };
+
+        return .{
+            .units_per_em = units_per_em,
+            .global_bbox = .{
+                .x_min = x_min,
+                .y_min = y_min,
+                .x_max = x_max,
+                .y_max = y_max,
+            },
+            .index_to_location_format = index_to_location_format,
+        };
+    }
 };
 
 /// An index format used by the [Index to Location Table](

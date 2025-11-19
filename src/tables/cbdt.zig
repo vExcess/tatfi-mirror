@@ -10,4 +10,15 @@ const cblc = @import("cblc.zig");
 pub const Table = struct {
     locations: cblc.Table,
     data: []const u8,
+
+    /// Parses a table from raw data.
+    pub fn parse(
+        locations: cblc.Table,
+        data: []const u8,
+    ) Table {
+        return .{
+            .data = data,
+            .locations = locations,
+        };
+    }
 };
