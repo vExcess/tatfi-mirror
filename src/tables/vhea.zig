@@ -24,11 +24,11 @@ pub const Table = struct {
 
         var s = parser.Stream.new(data);
         s.skip(u32); // version
-        const ascender = try s.read(i16) ;
-        const descender = try s.read(i16) ;
-        const line_gap = try s.read(i16) ;
+        const ascender = try s.read(i16);
+        const descender = try s.read(i16);
+        const line_gap = try s.read(i16);
         s.advance(24);
-        const number_of_metrics = try s.read(u16) ;
+        const number_of_metrics = try s.read(u16);
 
         return .{
             .ascender = ascender,

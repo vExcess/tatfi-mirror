@@ -51,7 +51,9 @@ const BgraColor = struct {
         // [ARS] impl of FromData trait
         pub const SIZE: usize = 4;
 
-        pub fn parse(data: *const [SIZE]u8) parser.Error!Self {
+        pub fn parse(
+            data: *const [SIZE]u8,
+        ) parser.Error!Self {
             var s = parser.Stream.new(data);
             return .{
                 .blue = try s.read(u8),
