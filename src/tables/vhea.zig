@@ -15,18 +15,20 @@ pub const Table = struct {
     number_of_metrics: u16,
 
     /// Parses a table from raw data.
-    pub fn parse(data: []const u8) ?Table {
+    pub fn parse(
+        data: []const u8,
+    ) parser.Error!Table {
         // Do not check the exact length, because some fonts include
         // padding in table's length in table records, which is incorrect.
-        if (data.len < 36) return null;
+        if (data.len < 36) return error.ParseFail;
 
         var s = parser.Stream.new(data);
         s.skip(u32); // version
-        const ascender = s.read(i16) orelse return null;
-        const descender = s.read(i16) orelse return null;
-        const line_gap = s.read(i16) orelse return null;
+        const ascender = try s.read(i16) ;
+        const descender = try s.read(i16) ;
+        const line_gap = try s.read(i16) ;
         s.advance(24);
-        const number_of_metrics = s.read(u16) orelse return null;
+        const number_of_metrics = try s.read(u16) ;
 
         return .{
             .ascender = ascender,

@@ -45,28 +45,25 @@ pub const Table = struct {
     pub fn parse(
         palettes: cpal.Table,
         data: []const u8,
-    ) ?Table {
+    ) parser.Error!Table {
         var s = parser.Stream.new(data);
 
-        const version = s.read(u16) orelse return null;
-        if (version > 1) return null;
+        const version = try s.read(u16);
+        if (version > 1) return error.ParseFail;
 
-        const num_base_glyphs = s.read(u16) orelse return null;
-        const base_glyphs_offset = s.read(Offset32) orelse return null;
-        const layers_offset = s.read(Offset32) orelse return null;
-        const num_layers = s.read(u16) orelse return null;
+        const num_base_glyphs = try s.read(u16);
+        const base_glyphs_offset = try s.read(Offset32);
+        const layers_offset = try s.read(Offset32);
+        const num_layers = try s.read(u16);
 
         const base_glyphs = bg: {
-            var sbg = parser.Stream.new_at(data, base_glyphs_offset[0]) orelse
-                return null;
-            break :bg sbg.read_array(BaseGlyphRecord, num_base_glyphs) orelse
-                return null;
+            var sbg = try parser.Stream.new_at(data, base_glyphs_offset[0]);
+            break :bg try sbg.read_array(BaseGlyphRecord, num_base_glyphs);
         };
 
         const layers = l: {
-            var sl = parser.Stream.new_at(data, layers_offset[0]) orelse
-                return null;
-            break :l sl.read_array(LayerRecord, num_layers) orelse return null;
+            var sl = try parser.Stream.new_at(data, layers_offset[0]);
+            break :l try sl.read_array(LayerRecord, num_layers);
         };
 
         var table: Table = .{
@@ -87,48 +84,47 @@ pub const Table = struct {
 
         if (version == 0) return table;
 
-        table.base_glyph_paints_offset = s.read(Offset32) orelse return null;
-        const layer_list_offset = s.read(NonZeroOffset32) orelse return null;
-        const clip_list_offset = s.read(NonZeroOffset32) orelse return null;
+        table.base_glyph_paints_offset = try s.read(Offset32);
+        const layer_list_offset = try s.read(NonZeroOffset32);
+        const clip_list_offset = try s.read(NonZeroOffset32);
 
         const var_index_map_offset = if (cfg.variable_fonts)
-            s.read(NonZeroOffset32) orelse return null
+            try s.read(NonZeroOffset32)
         else {};
 
         const item_variation_offset = if (cfg.variable_fonts)
-            s.read(NonZeroOffset32) orelse return null
+            try s.read(NonZeroOffset32)
         else {};
 
         table.base_glyph_paints = bgp: {
-            var sbg = parser.Stream.new_at(data, table.base_glyph_paints_offset[0]) orelse return null;
-            const count = sbg.read(u32) orelse return null;
-            break :bgp sbg.read_array(BaseGlyphPaintRecord, count) orelse return null;
+            var sbg = try parser.Stream.new_at(data, table.base_glyph_paints_offset[0]);
+            const count = try sbg.read(u32);
+            break :bgp try sbg.read_array(BaseGlyphPaintRecord, count);
         };
 
         if (layer_list_offset[0] != 0) {
             const offset = layer_list_offset[0];
             table.layer_paint_offsets_offset = .{offset};
 
-            var sll = parser.Stream.new_at(data, offset) orelse return null;
-            const count = sll.read(u32) orelse return null;
+            var sll = try parser.Stream.new_at(data, offset);
+            const count = try sll.read(u32);
 
-            table.layer_paint_offsets = sll.read_array(Offset32, count) orelse
-                return null;
+            table.layer_paint_offsets = try sll.read_array(Offset32, count);
         }
 
         if (clip_list_offset[0] != 0) {
             const offset = clip_list_offset[0];
             table.clip_list_offsets_offset = .{offset};
 
-            if (offset > data.len) return null;
+            if (offset > data.len) return error.ParseFail;
             const clip_data = data[offset..];
 
             var scl = parser.Stream.new(clip_data);
             scl.skip(u8); // Format
-            const count = scl.read(u32) orelse return null;
+            const count = try scl.read(u32);
             table.clip_list = .{
                 .data = clip_data,
-                .records = scl.read_array(ClipRecord, count) orelse return null,
+                .records = try scl.read_array(ClipRecord, count),
             };
         }
 
@@ -136,18 +132,18 @@ pub const Table = struct {
             if (item_variation_offset[0] != 0) {
                 const offset = item_variation_offset[0];
 
-                if (offset > data.len) return null;
+                if (offset > data.len) return error.ParseFail;
                 const item_var_data = data[offset..];
 
                 var siv = parser.Stream.new(item_var_data);
-                table.variable_fonts.item_variation_store = var_store.ItemVariationStore.parse(&siv) orelse
-                    return null;
+                table.variable_fonts.item_variation_store =
+                    try var_store.ItemVariationStore.parse(&siv);
             }
 
             if (var_index_map_offset[0] != 0) {
                 const offset = var_index_map_offset[0];
 
-                if (offset > data.len) return null;
+                if (offset > data.len) return error.ParseFail;
                 const var_index_map_data = data[offset..];
 
                 table.variable_fonts.var_index_map = .{
@@ -172,12 +168,14 @@ const BaseGlyphRecord = struct {
         // [ARS] impl of FromData trait
         pub const SIZE: usize = 6;
 
-        pub fn parse(data: *const [SIZE]u8) ?Self {
+        pub fn parse(
+            data: *const [SIZE]u8,
+        ) parser.Error!Self {
             var s = parser.Stream.new(data);
             return .{
-                .glyph_id = s.read(GlyphId) orelse return null,
-                .first_layer_index = s.read(u16) orelse return null,
-                .num_layers = s.read(u16) orelse return null,
+                .glyph_id = try s.read(GlyphId),
+                .first_layer_index = try s.read(u16),
+                .num_layers = try s.read(u16),
             };
         }
     };
@@ -194,11 +192,11 @@ const LayerRecord = struct {
         // [ARS] impl of FromData trait
         pub const SIZE: usize = 4;
 
-        pub fn parse(data: *const [SIZE]u8) ?Self {
+        pub fn parse(data: *const [SIZE]u8) parser.Error!Self {
             var s = parser.Stream.new(data);
             return .{
-                .glyph_id = s.read(GlyphId) orelse return null,
-                .palette_index = s.read(u16) orelse return null,
+                .glyph_id = try s.read(GlyphId),
+                .palette_index = try s.read(u16),
             };
         }
     };
@@ -215,11 +213,13 @@ const BaseGlyphPaintRecord = struct {
         // [ARS] impl of FromData trait
         pub const SIZE: usize = 6;
 
-        pub fn parse(data: *const [SIZE]u8) ?Self {
+        pub fn parse(
+            data: *const [SIZE]u8,
+        ) parser.Error!Self {
             var s = parser.Stream.new(data);
             return .{
-                .glyph_id = s.read(GlyphId) orelse return null,
-                .paint_table_offset = s.read(Offset32) orelse return null,
+                .glyph_id = try s.read(GlyphId) ,
+                .paint_table_offset = try s.read(Offset32) ,
             };
         }
     };
@@ -247,12 +247,12 @@ const ClipRecord = struct {
         // [ARS] impl of FromData trait
         pub const SIZE: usize = 7;
 
-        pub fn parse(data: *const [SIZE]u8) ?Self {
+        pub fn parse(data: *const [SIZE]u8) parser.Error!Self {
             var s = parser.Stream.new(data);
             return .{
-                .start_glyph_id = s.read(GlyphId) orelse return null,
-                .end_glyph_id = s.read(GlyphId) orelse return null,
-                .clip_box_offset = s.read(Offset24) orelse return null,
+                .start_glyph_id = try s.read(GlyphId) ,
+                .end_glyph_id = try s.read(GlyphId) ,
+                .clip_box_offset = try s.read(Offset24) ,
             };
         }
     };

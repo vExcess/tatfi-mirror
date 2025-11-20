@@ -21,11 +21,11 @@ pub const Table = struct {
     /// Parses a table from raw data.
     pub fn parse(
         data: []const u8,
-    ) ?Table {
+    ) parser.Error!Table {
         // Do not check the exact length, because some fonts include
         // padding in table's length in table records, which is incorrect.
         if (data.len < 54)
-            return null;
+            return error.ParseFail;
 
         var s = parser.Stream.new(data);
         s.skip(u32); // version
@@ -33,23 +33,23 @@ pub const Table = struct {
         s.skip(u32); // checksum adjustment
         s.skip(u32); // magic number
         s.skip(u16); // flags
-        const units_per_em = s.read(u16) orelse return null;
-        if (units_per_em < 16 or units_per_em > 16248) return null;
+        const units_per_em = try s.read(u16) ;
+        if (units_per_em < 16 or units_per_em > 16248) return error.ParseFail;
 
         s.skip(u64); // created time
         s.skip(u64); // modified time
-        const x_min = s.read(i16) orelse return null;
-        const y_min = s.read(i16) orelse return null;
-        const x_max = s.read(i16) orelse return null;
-        const y_max = s.read(i16) orelse return null;
+        const x_min = try s.read(i16) ;
+        const y_min = try s.read(i16) ;
+        const x_max = try s.read(i16) ;
+        const y_max = try s.read(i16) ;
         s.skip(u16); // mac style
         s.skip(u16); // lowest PPEM
         s.skip(i16); // font direction hint
         const index_to_location_format: IndexToLocationFormat =
-            switch (s.read(u16) orelse return null) {
+            switch (try s.read(u16) ) {
                 0 => .short,
                 1 => .long,
-                else => return null,
+                else => return error.ParseFail,
             };
 
         return .{

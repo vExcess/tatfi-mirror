@@ -42,14 +42,17 @@ pub fn LazyArray(I: type, T: type) type {
                 .impl => T.FromData.SIZE,
             };
 
-            if (index < self.len()) {
-                const bytes = self.data[index * size ..][0..size];
-                return switch (has_trait(T, "FromData")) {
-                    .int => std.mem.readInt(T, bytes, .big),
-                    .wrapper => |F| .{std.mem.readInt(F, bytes, .big)},
-                    .impl => T.FromData.parse(bytes),
-                };
-            } else return null;
+            if (index >= self.len()) return null;
+            const start: usize = index * size;
+            if (start > self.data.len) return null;
+            if (start + size > self.data.len) return null;
+
+            const bytes: *const [size]u8 = self.data[start..][0..size];
+            return switch (has_trait(T, "FromData")) {
+                .int => std.mem.readInt(T, bytes, .big),
+                .wrapper => |F| .{std.mem.readInt(F, bytes, .big)},
+                .impl => T.FromData.parse(bytes) catch return null,
+            };
         }
 
         /// Returns array's length.
@@ -143,11 +146,11 @@ pub const Stream = struct {
     pub fn new_at(
         data: []const u8,
         offset: usize,
-    ) ?Stream {
+    ) Error!Stream {
         return if (offset <= data.len)
             .{ .data = data, .offset = offset }
         else
-            null;
+            error.ParseFail;
     }
 
     /// Parses the type from the steam.
@@ -157,40 +160,39 @@ pub const Stream = struct {
     pub fn read(
         self: *Stream,
         T: type,
-    ) ?T {
+    ) Error!T {
         const size: usize = switch (has_trait(T, "FromData")) {
             .int => @typeInfo(T).int.bits / 8,
             .wrapper => |F| @typeInfo(F).int.bits / 8,
             .impl => T.FromData.SIZE,
         };
 
-        return if (self.read_bytes(size)) |bytes|
-            switch (has_trait(T, "FromData")) {
-                .int => std.mem.readInt(T, bytes[0..size], .big),
-                .wrapper => |F| .{std.mem.readInt(F, bytes[0..size], .big)},
-                .impl => T.FromData.parse(bytes[0..size]),
-            }
-        else
-            null;
+        const bytes = try self.read_bytes(size);
+
+        return switch (has_trait(T, "FromData")) {
+            .int => std.mem.readInt(T, bytes[0..size], .big),
+            .wrapper => |F| .{std.mem.readInt(F, bytes[0..size], .big)},
+            .impl => try T.FromData.parse(bytes[0..size]),
+        };
     }
 
     /// Reads N bytes from the stream.
     pub fn read_bytes(
         self: *Stream,
         len: usize,
-    ) ?[]const u8 {
+    ) Error![]const u8 {
         // An integer overflow here on 32bit systems is almost guarantee to be caused
         // by an incorrect parsing logic from the caller side.
         // Simply using `checked_add` here would silently swallow errors, which is not what we want.
         std.debug.assert(self.offset + len <= std.math.maxInt(u32));
 
-        const v = if (self.offset + len > self.data.len)
-            return null
-        else
-            self.data[self.offset..][0..len];
+        const start = self.offset + len;
+        if (start > self.data.len) return error.ParseFail;
+        const end = start + len;
+        if (end > self.data.len) return error.ParseFail;
 
-        self.advance(len);
-        return v;
+        defer self.advance(len);
+        return self.data[start..end];
     }
 
     /// Reads the next `count` types as a slice.
@@ -199,7 +201,7 @@ pub const Stream = struct {
         T: type,
         // u16 or u32
         count: anytype,
-    ) ?LazyArray(@TypeOf(count), T) {
+    ) Error!LazyArray(@TypeOf(count), T) {
         const size: usize = switch (has_trait(T, "FromData")) {
             .int => @typeInfo(T).int.bits / 8,
             .wrapper => |F| @typeInfo(F).int.bits / 8,
@@ -207,10 +209,10 @@ pub const Stream = struct {
         };
 
         const len = count * size;
-        return if (self.read_bytes(len)) |b|
-            LazyArray(@TypeOf(count), T).new(b)
-        else
-            null;
+
+        const bytes = try self.read_bytes(len);
+
+        return LazyArray(@TypeOf(count), T).new(bytes);
     }
 
     /// Advances by `FromData::SIZE`.
@@ -245,10 +247,10 @@ pub const Stream = struct {
         self: *Stream,
         len: usize,
     ) bool {
-        if (self.offset + len <= self.data.len) {
-            self.advance(len);
-            return true;
-        } else return false;
+        if (self.offset + len > self.data.len) return false;
+
+        self.advance(len);
+        return true;
     }
 
     /// Returns the trailing data.
@@ -256,10 +258,15 @@ pub const Stream = struct {
     /// Returns an error when `Stream` is reached the end.
     pub fn tail(
         self: *Stream,
-    ) ?[]const u8 {
-        if (self.offset > self.data.len) return null;
+    ) Error![]const u8 {
+        if (self.offset > self.data.len) return error.ParseFail;
         return self.data[self.offset..];
     }
+};
+
+pub const Error = error{
+    ParseFail,
+    Overflow,
 };
 
 inline fn has_trait(
