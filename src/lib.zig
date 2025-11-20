@@ -171,76 +171,78 @@ pub const Face = struct {
     fn parse_tables(
         raw_tables: RawFaceTables,
     ) FaceParsingError!FaceTables {
-        const head = tables.head.Table.parse(raw_tables.head) orelse
+        const head = tables.head.Table.parse(raw_tables.head) catch
             return error.NoHeadTable;
-        const hhea = tables.hhea.Table.parse(raw_tables.hhea) orelse
+        const hhea = tables.hhea.Table.parse(raw_tables.hhea) catch
             return error.NoHheaTable;
-        const maxp = tables.maxp.Table.parse(raw_tables.maxp) orelse
+        const maxp = tables.maxp.Table.parse(raw_tables.maxp) catch
             return error.NoMaxpTable;
 
-        const hmtx: ?tables.hmtx.Table = t: {
+        const hmtx = t: {
             const data = raw_tables.hmtx orelse break :t null;
             break :t tables.hmtx.Table.parse(
                 hhea.number_of_metrics,
                 maxp.number_of_glyphs,
                 data,
-            );
+            ) catch null;
         };
 
-        const vhea = tables.vhea.Table.parse(raw_tables.vhea orelse &.{});
-        const vmtx: ?tables.hmtx.Table = t: {
+        const vhea = tables.vhea.Table.parse(raw_tables.vhea orelse &.{}) catch null;
+        const vmtx = t: {
             const data = raw_tables.vmtx orelse break :t null;
             break :t tables.hmtx.Table.parse(
                 (vhea orelse break :t null).number_of_metrics,
                 maxp.number_of_glyphs,
                 data,
-            );
+            ) catch null;
         };
 
-        const loca: ?tables.loca.Table = t: {
+        const loca = t: {
             const data = raw_tables.loca orelse break :t null;
             break :t tables.loca.Table.parse(
                 maxp.number_of_glyphs,
                 head.index_to_location_format,
                 data,
-            );
+            ) catch null;
         };
 
-        const glyf: ?tables.glyf.Table = if (loca) |l| t: {
+        const glyf = t: {
+            const loca_table = loca orelse break :t null;
             const data = raw_tables.glyf orelse break :t null;
-            break :t tables.glyf.Table.parse(l, data);
-        } else null;
+            break :t tables.glyf.Table.parse(loca_table, data);
+        };
 
-        const bdat: ?tables.cbdt.Table = if (raw_tables.bloc) |bloc_data| b: {
+        const bdat = b: {
+            const bloc_data = raw_tables.bloc orelse break :b null;
             const bloc = tables.cblc.Table.parse(bloc_data);
             const data = raw_tables.bdat orelse break :b null;
             break :b tables.cbdt.Table.parse(bloc, data);
-        } else null;
+        };
 
-        const cbdt: ?tables.cbdt.Table = if (raw_tables.cblc) |cblc_data| c: {
+        const cbdt = c: {
+            const cblc_data = raw_tables.cblc orelse break :c null;
             const cblc = tables.cblc.Table.parse(cblc_data);
             const data = raw_tables.cbdt orelse break :c null;
             break :c tables.cbdt.Table.parse(cblc, data);
-        } else null;
+        };
 
-        const ebdt: ?tables.cbdt.Table = if (raw_tables.eblc) |eblc_data| e: {
+        const ebdt = e: {
+            const eblc_data = raw_tables.eblc orelse break :e null;
             const eblc = tables.cblc.Table.parse(eblc_data);
             const data = raw_tables.ebdt orelse break :e null;
             break :e tables.cbdt.Table.parse(eblc, data);
-        } else null;
+        };
 
-        const cpal = if (raw_tables.cpal) |data|
-            tables.cpal.Table.parse(data)
-        else
-            null;
+        const cpal = c: {
+            const data = raw_tables.cpal orelse break :c null;
+            break :c tables.cpal.Table.parse(data) catch null;
+        };
 
-        const colr = if (cpal) |cpal_table|
-            if (raw_tables.colr) |data|
-                tables.colr.Table.parse(cpal_table, data)
-            else
-                null
-        else
-            null;
+        const colr = c: {
+            const cpal_table = cpal orelse break :c null;
+            const data = raw_tables.colr orelse break :c null;
+            break :c tables.colr.Table.parse(cpal_table, data) catch null;
+        };
 
         return .{
             .head = head,
@@ -319,14 +321,14 @@ pub const RawFace = struct {
         index: u32,
     ) FaceParsingError!Self {
         var s = parser.Stream.new(data);
-        const magic = s.read(Magic) orelse return error.UnknownMagic;
+        const magic = s.read(Magic) catch return error.UnknownMagic;
         switch (magic) {
             .font_collection => {
                 s.skip(u32); // version
-                const number_of_faces = s.read(u32) orelse
+                const number_of_faces = s.read(u32) catch
                     return error.MalformedFont;
 
-                const offsets = s.read_array(parser.Offset32, number_of_faces) orelse
+                const offsets = s.read_array(parser.Offset32, number_of_faces) catch
                     return error.MalformedFont;
 
                 const face_offset = offsets.get(index) orelse
@@ -341,7 +343,7 @@ pub const RawFace = struct {
 
                 // Read **face** magic.
                 // Each face in a font collection also starts with a magic.
-                const face_magic = s.read(Magic) orelse return error.UnknownMagic;
+                const face_magic = s.read(Magic) catch return error.UnknownMagic;
                 // And face in a font collection can't be another collection.
                 if (face_magic == .font_collection) return error.UnknownMagic;
             },
@@ -350,11 +352,10 @@ pub const RawFace = struct {
             else => if (index != 0) return error.FaceIndexOutOfBounds,
         }
 
-        const num_tables = s.read(u16) orelse
-            return error.MalformedFont;
+        const num_tables = s.read(u16) catch return error.MalformedFont;
         s.advance(6); // searchRange (u16) + entrySelector (u16) + rangeShift (u16)
 
-        const table_records = s.read_array(TableRecord, num_tables) orelse
+        const table_records = s.read_array(TableRecord, num_tables) catch
             return error.MalformedFont;
 
         return .{
@@ -539,14 +540,14 @@ pub const TableRecord = struct {
         // [ARS] impl of FromData trait
         pub const SIZE: usize = 16;
 
-        pub fn parse(data: *const [SIZE]u8) ?Self {
+        pub fn parse(data: *const [SIZE]u8) parser.Error!Self {
             var s = parser.Stream.new(data);
 
             return .{
-                .tag = s.read(Tag) orelse return null,
-                .check_sum = s.read(u32) orelse return null,
-                .offset = s.read(u32) orelse return null,
-                .length = s.read(u32) orelse return null,
+                .tag = try s.read(Tag),
+                .check_sum = try s.read(u32),
+                .offset = try s.read(u32),
+                .length = try s.read(u32),
             };
         }
     };
@@ -561,7 +562,7 @@ pub const Tag = struct {
         // [ARS] impl of FromData trait
         pub const SIZE: usize = 4;
 
-        pub fn parse(data: *const [SIZE]u8) ?Self {
+        pub fn parse(data: *const [SIZE]u8) parser.Error!Self {
             const u = std.mem.readInt(u32, data, .big);
             return .{ .inner = u };
         }
@@ -644,13 +645,13 @@ pub const Magic = enum {
         // [ARS] impl of FromData trait
         pub const SIZE: usize = 4;
 
-        pub fn parse(data: *const [SIZE]u8) ?Self {
+        pub fn parse(data: *const [SIZE]u8) parser.Error!Self {
             const u = std.mem.readInt(u32, data, .big);
             switch (u) {
                 0x00010000, 0x74727565 => return .true_type,
                 0x4F54544F => return .open_type,
                 0x74746366 => return .font_collection,
-                else => return null,
+                else => return error.ParseFail,
             }
         }
     };

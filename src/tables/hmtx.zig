@@ -26,14 +26,13 @@ pub const Table = struct {
         number_of_metrics_immutable: u16,
         number_of_glyphs: u16, // nonzero
         data: []const u8,
-    ) ?Table {
+    ) parser.Error!Table {
         var number_of_metrics = number_of_metrics_immutable;
         if (number_of_metrics == 0 or
-            number_of_glyphs == 0) return null;
+            number_of_glyphs == 0) return error.ParseFail;
 
         var s = parser.Stream.new(data);
-        const metrics = s.read_array(Metrics, number_of_metrics) orelse
-            return null;
+        const metrics = try s.read_array(Metrics, number_of_metrics);
 
         // 'If the number_of_metrics is less than the total number of glyphs,
         // then that array is followed by an array for the left side bearing values
@@ -46,7 +45,7 @@ pub const Table = struct {
             // even when they are expected.
             // Therefore if we weren't able to parser them, simply fallback to an empty array.
             // No need to mark the whole table as malformed.
-            break :b s.read_array(i16, count) orelse .{};
+            break :b s.read_array(i16, count) catch .{};
         } else |_| .{};
 
         return .{
@@ -69,12 +68,12 @@ pub const Metrics = struct {
         // [ARS] impl of FromData trait
         pub const SIZE: usize = 4;
 
-        pub fn parse(data: *const [SIZE]u8) ?Self {
+        pub fn parse(data: *const [SIZE]u8) parser.Error!Self {
             var s = parser.Stream.new(data);
 
             return .{
-                .advance = s.read(u16) orelse return null,
-                .side_bearing = s.read(i16) orelse return null,
+                .advance = try s.read(u16),
+                .side_bearing = try s.read(i16),
             };
         }
     };

@@ -21,7 +21,7 @@ pub const Table = union(enum) {
         number_of_glyphs: u16, // non zero
         format: @import("head.zig").IndexToLocationFormat,
         data: []const u8,
-    ) ?Table {
+    ) parser.Error!Table {
         // The number of ranges is `maxp.numGlyphs + 1`.
         //
         // [ARs] Consider overflow first.
@@ -37,14 +37,14 @@ pub const Table = union(enum) {
         const actual_total = std.math.cast(u16, switch (format) {
             .short => data.len / 2,
             .long => data.len / 4,
-        }) orelse return null;
+        }) orelse return error.ParseFail;
 
         total = @min(actual_total, total);
         var s = parser.Stream.new(data);
 
         return switch (format) {
-            .short => .{ .short = s.read_array(u16, total) orelse return null },
-            .long => .{ .long = s.read_array(u32, total) orelse return null },
+            .short => .{ .short = try s.read_array(u16, total) },
+            .long => .{ .long = try s.read_array(u32, total) },
         };
     }
 };

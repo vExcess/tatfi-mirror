@@ -15,24 +15,23 @@ pub const Table = struct {
     /// Parses a table from raw data.
     pub fn parse(
         data: []const u8,
-    ) ?Table {
+    ) parser.Error!Table {
         var s = parser.Stream.new(data);
 
-        const version = s.read(u16) orelse return null;
-        if (version > 1) return null;
+        const version = try s.read(u16);
+        if (version > 1) return error.ParseFail;
 
         s.skip(u16); // number of palette entries
 
-        const num_palettes = s.read(u16) orelse return null;
-        if (num_palettes == 0) return null; // zero palettes is an error
+        const num_palettes = try s.read(u16);
+        if (num_palettes == 0) return error.ParseFail; // zero palettes is an error
 
-        const num_colors = s.read(u16) orelse return null;
-        const color_records_offset = s.read(Offset32) orelse return null;
-        const color_indices = s.read_array(u16, num_palettes) orelse return null;
+        const num_colors = try s.read(u16);
+        const color_records_offset = try s.read(Offset32);
+        const color_indices = try s.read_array(u16, num_palettes);
 
-        var colors_stream = parser.Stream.new_at(data, color_records_offset[0]) orelse
-            return null;
-        const colors = colors_stream.read_array(BgraColor, num_colors) orelse return null;
+        var colors_stream = try parser.Stream.new_at(data, color_records_offset[0]);
+        const colors = try colors_stream.read_array(BgraColor, num_colors);
 
         return .{
             .color_indices = color_indices,
@@ -52,13 +51,13 @@ const BgraColor = struct {
         // [ARS] impl of FromData trait
         pub const SIZE: usize = 4;
 
-        pub fn parse(data: *const [SIZE]u8) ?Self {
+        pub fn parse(data: *const [SIZE]u8) parser.Error!Self {
             var s = parser.Stream.new(data);
             return .{
-                .blue = s.read(u8) orelse return null,
-                .green = s.read(u8) orelse return null,
-                .red = s.read(u8) orelse return null,
-                .alpha = s.read(u8) orelse return null,
+                .blue = try s.read(u8),
+                .green = try s.read(u8),
+                .red = try s.read(u8),
+                .alpha = try s.read(u8),
             };
         }
     };

@@ -14,31 +14,31 @@ pub const ItemVariationStore = struct {
 
     pub fn parse(
         s: *parser.Stream,
-    ) ?ItemVariationStore {
-        const data = s.tail() orelse return null;
+    ) parser.Error!ItemVariationStore {
+        const data = try s.tail();
 
         var regions_s: parser.Stream = .{
             .data = s.data,
             .offset = s.offset,
         };
-        const format = s.read(u16) orelse return null;
-        if (format != 1) return null;
+        const format = try s.read(u16);
+        if (format != 1) return error.ParseFail;
 
-        const region_list_offset = s.read(u32) orelse return null;
-        const count = s.read(u16) orelse return null;
-        const offsets = s.read_array(u32, count) orelse return null;
+        const region_list_offset = try s.read(u32);
+        const count = try s.read(u16);
+        const offsets = try s.read_array(u32, count);
 
         const regions: VariationRegionList = r: {
             regions_s.advance(region_list_offset);
             // [RazrFalcon] TODO: should be the same as in `fvar`
-            const axis_count = regions_s.read(u16) orelse return null;
-            const regions_count = regions_s.read(u16) orelse return null;
+            const axis_count = try regions_s.read(u16);
+            const regions_count = try regions_s.read(u16);
             const total = std.math.mul(u16, regions_count, axis_count) catch
-                return null;
+                return error.ParseFail;
 
             break :r .{
                 .axis_count = axis_count,
-                .regions = regions_s.read_array(RegionAxisCoordinatesRecord, total) orelse return null,
+                .regions = try regions_s.read_array(RegionAxisCoordinatesRecord, total),
             };
         };
 
@@ -65,12 +65,12 @@ const RegionAxisCoordinatesRecord = struct {
         // [ARS] impl of FromData trait
         pub const SIZE: usize = 6;
 
-        pub fn parse(data: *const [SIZE]u8) ?Self {
+        pub fn parse(data: *const [SIZE]u8) parser.Error!Self {
             var s = parser.Stream.new(data);
             return .{
-                .start_coord = s.read(i16) orelse return null,
-                .peak_coord = s.read(i16) orelse return null,
-                .end_coord = s.read(i16) orelse return null,
+                .start_coord = try s.read(i16),
+                .peak_coord = try s.read(i16),
+                .end_coord = try s.read(i16),
             };
         }
     };
