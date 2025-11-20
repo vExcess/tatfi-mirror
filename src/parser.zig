@@ -262,6 +262,13 @@ pub const Stream = struct {
         if (self.offset > self.data.len) return error.ParseFail;
         return self.data[self.offset..];
     }
+
+    /// Checks that stream reached the end of the data.
+    pub fn at_end(
+        self: Stream,
+    ) bool {
+        return self.offset >= self.data.len;
+    }
 };
 
 pub const Error = error{

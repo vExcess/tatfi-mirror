@@ -251,7 +251,13 @@ pub const Face = struct {
 
             .bdat = bdat,
             .cbdt = cbdt,
-            .cff = null, // [ARS} TODO
+            .cff = c: {
+                const data = raw_tables.cff orelse break :c null;
+                break :c tables.cff1.Table.parse_with_upem(
+                    data,
+                    head.units_per_em,
+                ) catch null;
+            },
             .cmap = null, // [ARS} TODO
             .colr = colr,
             .ebdt = ebdt,
@@ -540,7 +546,9 @@ pub const TableRecord = struct {
         // [ARS] impl of FromData trait
         pub const SIZE: usize = 16;
 
-        pub fn parse(data: *const [SIZE]u8) parser.Error!Self {
+        pub fn parse(
+            data: *const [SIZE]u8,
+        ) parser.Error!Self {
             var s = parser.Stream.new(data);
 
             return .{
@@ -562,7 +570,9 @@ pub const Tag = struct {
         // [ARS] impl of FromData trait
         pub const SIZE: usize = 4;
 
-        pub fn parse(data: *const [SIZE]u8) parser.Error!Self {
+        pub fn parse(
+            data: *const [SIZE]u8,
+        ) parser.Error!Self {
             const u = std.mem.readInt(u32, data, .big);
             return .{ .inner = u };
         }
@@ -645,7 +655,9 @@ pub const Magic = enum {
         // [ARS] impl of FromData trait
         pub const SIZE: usize = 4;
 
-        pub fn parse(data: *const [SIZE]u8) parser.Error!Self {
+        pub fn parse(
+            data: *const [SIZE]u8,
+        ) parser.Error!Self {
             const u = std.mem.readInt(u32, data, .big);
             switch (u) {
                 0x00010000, 0x74727565 => return .true_type,

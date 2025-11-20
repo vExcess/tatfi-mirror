@@ -192,7 +192,9 @@ const LayerRecord = struct {
         // [ARS] impl of FromData trait
         pub const SIZE: usize = 4;
 
-        pub fn parse(data: *const [SIZE]u8) parser.Error!Self {
+        pub fn parse(
+            data: *const [SIZE]u8,
+        ) parser.Error!Self {
             var s = parser.Stream.new(data);
             return .{
                 .glyph_id = try s.read(GlyphId),
@@ -218,8 +220,8 @@ const BaseGlyphPaintRecord = struct {
         ) parser.Error!Self {
             var s = parser.Stream.new(data);
             return .{
-                .glyph_id = try s.read(GlyphId) ,
-                .paint_table_offset = try s.read(Offset32) ,
+                .glyph_id = try s.read(GlyphId),
+                .paint_table_offset = try s.read(Offset32),
             };
         }
     };
@@ -247,12 +249,14 @@ const ClipRecord = struct {
         // [ARS] impl of FromData trait
         pub const SIZE: usize = 7;
 
-        pub fn parse(data: *const [SIZE]u8) parser.Error!Self {
+        pub fn parse(
+            data: *const [SIZE]u8,
+        ) parser.Error!Self {
             var s = parser.Stream.new(data);
             return .{
-                .start_glyph_id = try s.read(GlyphId) ,
-                .end_glyph_id = try s.read(GlyphId) ,
-                .clip_box_offset = try s.read(Offset24) ,
+                .start_glyph_id = try s.read(GlyphId),
+                .end_glyph_id = try s.read(GlyphId),
+                .clip_box_offset = try s.read(Offset24),
             };
         }
     };

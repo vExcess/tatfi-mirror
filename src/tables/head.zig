@@ -33,20 +33,20 @@ pub const Table = struct {
         s.skip(u32); // checksum adjustment
         s.skip(u32); // magic number
         s.skip(u16); // flags
-        const units_per_em = try s.read(u16) ;
+        const units_per_em = try s.read(u16);
         if (units_per_em < 16 or units_per_em > 16248) return error.ParseFail;
 
         s.skip(u64); // created time
         s.skip(u64); // modified time
-        const x_min = try s.read(i16) ;
-        const y_min = try s.read(i16) ;
-        const x_max = try s.read(i16) ;
-        const y_max = try s.read(i16) ;
+        const x_min = try s.read(i16);
+        const y_min = try s.read(i16);
+        const x_max = try s.read(i16);
+        const y_max = try s.read(i16);
         s.skip(u16); // mac style
         s.skip(u16); // lowest PPEM
         s.skip(i16); // font direction hint
         const index_to_location_format: IndexToLocationFormat =
-            switch (try s.read(u16) ) {
+            switch (try s.read(u16)) {
                 0 => .short,
                 1 => .long,
                 else => return error.ParseFail,
