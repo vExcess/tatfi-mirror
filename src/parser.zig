@@ -126,7 +126,23 @@ pub const NonZeroOffset16 = struct { u16 };
 pub const F2DOT14 = struct { i16 };
 
 /// A 32-bit signed fixed-point number (16.16).
-pub const Fixed = struct { f32 };
+pub const Fixed = struct {
+    value: f32,
+
+    const Self = @This();
+    pub const FromData = struct {
+        // [ARS] impl of FromData trait
+        pub const SIZE: usize = 4;
+
+        pub fn parse(
+            data: *const [SIZE]u8,
+        ) Error!Self {
+            const i = std.mem.readInt(i32, data, .big);
+            const f: f32 = @floatFromInt(i);
+            return .{ .value = f / (1 << 16) };
+        }
+    };
+};
 
 /// A streaming binary parser.
 pub const Stream = struct {
@@ -176,6 +192,17 @@ pub const Stream = struct {
         };
     }
 
+    /// Parses the type from the steam at offset.
+    pub fn read_at(
+        self: *Stream,
+        T: type,
+        offset: usize,
+    ) Error!T {
+        // [ARS] different impl from Rust's
+        self.offset = offset;
+        return try self.read(T);
+    }
+
     /// Reads N bytes from the stream.
     pub fn read_bytes(
         self: *Stream,
@@ -213,6 +240,17 @@ pub const Stream = struct {
         const bytes = try self.read_bytes(len);
 
         return LazyArray(@TypeOf(count), T).new(bytes);
+    }
+
+    /// Parses the `count` types as a slice from the steam at offset.
+    pub fn read_array_at(
+        self: *Stream,
+        T: type,
+        count: anytype,
+        offset: usize,
+    ) Error!LazyArray(@TypeOf(count), T) {
+        self.offset = offset;
+        return try self.read_array(T, count);
     }
 
     /// Advances by `FromData::SIZE`.
