@@ -187,7 +187,10 @@ pub const Face = struct {
             ) catch null;
         };
 
-        const vhea = tables.vhea.Table.parse(raw_tables.vhea orelse &.{}) catch null;
+        const vhea = v: {
+            const data = raw_tables.vhea orelse break :v null;
+            break :v tables.vhea.Table.parse(data) catch null;
+        };
         const vmtx = t: {
             const data = raw_tables.vmtx orelse break :t null;
             break :t tables.hmtx.Table.parse(
@@ -258,21 +261,51 @@ pub const Face = struct {
                     head.units_per_em,
                 ) catch null;
             },
-            .cmap = null, // [ARS} TODO
+            .cmap = c: {
+                const data = raw_tables.cmap orelse break :c null;
+                break :c tables.cmap.Table.parse(data) catch null;
+            },
             .colr = colr,
             .ebdt = ebdt,
             .glyf = glyf,
             .hmtx = hmtx,
-            .kern = null, // [ARS} TODO
-            .name = null, // [ARS} TODO
-            .os2 = null, // [ARS} TODO
-            .post = null, // [ARS} TODO
-            .sbix = null, // [ARS} TODO
-            .stat = null, // [ARS} TODO
-            .svg = null, // [ARS} TODO
-            .vhea = null, // [ARS} TODO
+            .kern = k: {
+                const data = raw_tables.kern orelse break :k null;
+                break :k tables.kern.Table.parse(data) catch null;
+            },
+            .name = n: {
+                const data = raw_tables.name orelse break :n null;
+                break :n tables.name.Table.parse(data) catch null;
+            },
+            .os2 = o: {
+                const data = raw_tables.os2 orelse break :o null;
+                break :o tables.os2.Table.parse(data) catch null;
+            },
+            .post = p: {
+                const data = raw_tables.post orelse break :p null;
+                break :p tables.post.Table.parse(data) catch null;
+            },
+            .sbix = s: {
+                const data = raw_tables.sbix orelse break :s null;
+                break :s tables.sbix.Table.parse(
+                    maxp.number_of_glyphs,
+                    data,
+                ) catch null;
+            },
+            .stat = s: {
+                const data = raw_tables.stat orelse break :s null;
+                break :s tables.stat.Table.parse(data) catch null;
+            },
+            .svg = s: {
+                const data = raw_tables.svg orelse break :s null;
+                break :s tables.svg.Table.parse(data) catch null;
+            },
+            .vhea = vhea,
             .vmtx = vmtx,
-            .vorg = null, // [ARS} TODO
+            .vorg = v: {
+                const data = raw_tables.vorg orelse break :v null;
+                break :v tables.vorg.Table.parse(data) catch null;
+            },
             .opentype_layout = if (cfg.opentype_layout) .{
                 .gdef = null, // [ARS} TODO
                 .gpos = null, // [ARS} TODO
