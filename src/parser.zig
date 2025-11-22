@@ -36,6 +36,7 @@ pub fn LazyArray(I: type, T: type) type {
             self: Self,
             index: I,
         ) ?T {
+            if (@typeInfo(T) == .optional) @compileError("use get_optional");
             const size: usize = switch (has_trait(T, "FromData")) {
                 .int => @typeInfo(T).int.bits / 8,
                 .wrapper => |F| @typeInfo(F).int.bits / 8,
@@ -53,6 +54,34 @@ pub fn LazyArray(I: type, T: type) type {
                 .wrapper => |F| .{std.mem.readInt(F, bytes, .big)},
                 .impl => T.FromData.parse(bytes) catch return null,
             };
+        }
+
+        // [ARS] To work LazyArray16(?Offset32) and co
+        pub fn get_optional(
+            self: Self,
+            index: I,
+        ) T {
+            if (@typeInfo(T) != .optional) @compileError("use get");
+            const P = @typeInfo(T).optional.child;
+
+            const size: usize = switch (has_trait(P, "FromData")) {
+                .wrapper => |F| @typeInfo(F).int.bits / 8,
+                else => @compileError("get_optional can only be used on wrappers"),
+            };
+
+            if (index >= self.len()) return null;
+            const start = index * size;
+            if (start > self.data.len) return null;
+            const end = start + size;
+            if (end > self.data.len) return null;
+
+            const bytes = self.data[start..end];
+            const ret = switch (has_trait(P, "FromData")) {
+                .wrapper => |F| .{std.mem.readInt(F, bytes, .big)},
+                else => unreachable,
+            };
+            if (ret[0] == 0) return null;
+            return ret;
         }
 
         /// Returns array's length.
@@ -98,29 +127,47 @@ pub fn LazyOffsetArray16(T: type) type {
     // [ARS] T implements trait FromSlice
     return struct {
         data: []const u8,
-        // Zero offsets must be ignored, therefore we're using `NonZeroOffset16`.
-        offsets: LazyArray16(NonZeroOffset16),
-        data_type: T, // core::marker::PhantomData<T>,
+        // Zero offsets must be ignored, therefore we're using optionals
+        offsets: LazyArray16(?Offset16),
+        comptime {
+            _ = T;
+        }
+
+        const Self = @This();
+
+        pub fn new(
+            data: []const u8,
+            offsets: LazyArray16(?Offset16),
+        ) Self {
+            return .{
+                .data = data,
+                .offsets = offsets,
+            };
+        }
+
+        pub fn parse(
+            data: []const u8,
+        ) Error!Self {
+            var s = Stream.new(data);
+            const count = try s.read(u16);
+            const offsets = try s.read_array_optional(Offset16, count);
+
+            return .{
+                .data = data,
+                .offsets = offsets,
+            };
+        }
     };
 }
 
 /// A type-safe u32 offset.
 pub const Offset32 = struct { u32 };
 
-/// A type-safe u32 optional offset. Replacement for Option<Offset32> in Rust.
-pub const NonZeroOffset32 = struct { u32 };
-
 /// A type-safe u24 offset.
 pub const Offset24 = struct { u24 };
 
-/// A type-safe u24 optional offset. Replacement for Option<Offset24> in Rust.
-pub const NonZeroOffset24 = struct { u24 };
-
 /// A type-safe u16 offset.
 pub const Offset16 = struct { u16 };
-
-/// A type-safe u16 optional offset. Replacement for Option<Offset16> in Rust.
-pub const NonZeroOffset16 = struct { u16 };
 
 /// A 16-bit signed fixed number with the low 14 bits of fraction (2.14).
 pub const F2DOT14 = struct { i16 };
@@ -192,6 +239,28 @@ pub const Stream = struct {
         };
     }
 
+    /// [ARS] Parses the type from the steam.
+    ///
+    /// [ARS] Only to be used for Optional Offsets (nonzero)
+    pub fn read_optional(
+        self: *Stream,
+        T: type,
+    ) Error!?T {
+        const size: usize = switch (has_trait(T, "FromData")) {
+            .wrapper => |F| @typeInfo(F).int.bits / 8,
+            else => @compileError("read_optional only to be used for wrappers"),
+        };
+
+        const bytes = try self.read_bytes(size);
+
+        const ret = switch (has_trait(T, "FromData")) {
+            .wrapper => |F| .{std.mem.readInt(F, bytes[0..size], .big)},
+            else => unreachable,
+        };
+        if (ret[0] == 0) return null;
+        return ret;
+    }
+
     /// Parses the type from the steam at offset.
     pub fn read_at(
         self: *Stream,
@@ -240,6 +309,25 @@ pub const Stream = struct {
         const bytes = try self.read_bytes(len);
 
         return LazyArray(@TypeOf(count), T).new(bytes);
+    }
+
+    /// Reads the next `count` types as a slice.
+    pub fn read_array_optional(
+        self: *Stream,
+        T: type,
+        // u16 or u32
+        count: anytype,
+    ) Error!LazyArray(@TypeOf(count), ?T) {
+        const size: usize = switch (has_trait(T, "FromData")) {
+            .wrapper => |F| @typeInfo(F).int.bits / 8,
+            else => @compileError("read_array_optional only to be used for wrappers"),
+        };
+
+        const len = count * size;
+
+        const bytes = try self.read_bytes(len);
+
+        return LazyArray(@TypeOf(count), ?T).new(bytes);
     }
 
     /// Parses the `count` types as a slice from the steam at offset.

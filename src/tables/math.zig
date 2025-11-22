@@ -18,11 +18,37 @@ pub const Table = struct {
     glyph_info: ?GlyphInfo,
     /// Variants and assembly recipes for growable glyphs.
     variants: ?Variants,
+
+    /// Parses a table from raw data.
+    pub fn parse(
+        data: []const u8,
+    ) parser.Error!Table {
+        var s = parser.Stream.new(data);
+
+        if (try s.read(u16) != 1) return error.ParseFail; // major version
+        s.skip(u16); // minor version
+
+        const constants = parse_at_offset(Constants, &s, data) catch null;
+        const glyph_info = parse_at_offset(GlyphInfo, &s, data) catch null;
+        const variants = parse_at_offset(Variants, &s, data) catch null;
+
+        return .{
+            .constants = constants,
+            .glyph_info = glyph_info,
+            .variants = variants,
+        };
+    }
 };
 
 /// A [Math Constants Table](https://learn.microsoft.com/en-us/typography/opentype/spec/math#mathconstants-table).
 pub const Constants = struct {
     data: []const u8,
+
+    fn parse(
+        data: []const u8,
+    ) parser.Error!Constants {
+        return .{ .data = data };
+    }
 };
 
 /// A [Math Glyph Info Table](https://learn.microsoft.com/en-us/typography/opentype/spec/math#mathglyphinfo-table).
@@ -35,6 +61,24 @@ pub const GlyphInfo = struct {
     extended_shapes: ?Coverage,
     /// Per-glyph information for mathematical kerning.
     kern_infos: ?KernInfos,
+
+    fn parse(
+        data: []const u8,
+    ) parser.Error!GlyphInfo {
+        var s = parser.Stream.new(data);
+
+        const italic_corrections = parse_at_offset(MathValues, &s, data) catch null;
+        const top_accent_attachments = parse_at_offset(MathValues, &s, data) catch null;
+        const extended_shapes = parse_at_offset(Coverage, &s, data) catch null;
+        const kern_infos = parse_at_offset(KernInfos, &s, data) catch null;
+
+        return .{
+            .italic_corrections = italic_corrections,
+            .top_accent_attachments = top_accent_attachments,
+            .extended_shapes = extended_shapes,
+            .kern_infos = kern_infos,
+        };
+    }
 };
 
 /// A [Math Variants Table](
@@ -46,6 +90,35 @@ pub const Variants = struct {
     vertical_constructions: GlyphConstructions,
     /// Constructions for shapes growing in the horizontal direction.
     horizontal_constructions: GlyphConstructions,
+
+    fn parse(
+        data: []const u8,
+    ) parser.Error!Variants {
+        var s = parser.Stream.new(data);
+
+        const min_connector_overlap = try s.read(u16);
+        const vertical_coverage = parse_at_offset(Coverage, &s, data) catch null;
+        const horizontal_coverage = parse_at_offset(Coverage, &s, data) catch null;
+
+        const vertical_count = try s.read(u16);
+        const horizontal_count = try s.read(u16);
+        const vertical_offsets = try s.read_array_optional(Offset16, vertical_count);
+        const horizontal_offsets = try s.read_array_optional(Offset16, horizontal_count);
+
+        return .{
+            .min_connector_overlap = min_connector_overlap,
+            .vertical_constructions = .new(
+                data,
+                vertical_coverage,
+                vertical_offsets,
+            ),
+            .horizontal_constructions = .new(
+                data,
+                horizontal_coverage,
+                horizontal_offsets,
+            ),
+        };
+    }
 };
 
 /// A mapping from glyphs to
@@ -54,12 +127,42 @@ pub const MathValues = struct {
     data: []const u8,
     coverage: Coverage,
     records: LazyArray16(MathValueRecord),
+
+    fn parse(
+        data: []const u8,
+    ) parser.Error!MathValues {
+        var s = parser.Stream.new(data);
+        const coverage = try parse_at_offset(Coverage, &s, data);
+        const count = try s.read(u16);
+        const records = try s.read_array(MathValueRecord, count);
+        return .{
+            .data = data,
+            .coverage = coverage,
+            .records = records,
+        };
+    }
 };
 
 /// A math value record with unresolved offset.
 const MathValueRecord = struct {
     value: i16,
     device_offset: ?Offset16,
+
+    const Self = @This();
+    pub const FromData = struct {
+        // [ARS] impl of FromData trait
+        pub const SIZE: usize = 4;
+
+        pub fn parse(
+            data: *const [SIZE]u8,
+        ) parser.Error!Self {
+            var s = parser.Stream.new(data);
+            return .{
+                .value = try s.read(i16),
+                .device_offset = try s.read_optional(Offset16),
+            };
+        }
+    };
 };
 
 /// A [Math Kern Info Table](https://docs.microsoft.com/en-us/typography/opentype/spec/math#mathkerninfo-table).
@@ -67,6 +170,19 @@ pub const KernInfos = struct {
     data: []const u8,
     coverage: Coverage,
     records: LazyArray16(KernInfoRecord),
+
+    fn parse(data: []const u8) parser.Error!KernInfos {
+        var s = parser.Stream.new(data);
+        const coverage = try parse_at_offset(Coverage, &s, data);
+        const count = try s.read(u16);
+        const records = try s.read_array(KernInfoRecord, count);
+
+        return .{
+            .data = data,
+            .coverage = coverage,
+            .records = records,
+        };
+    }
 };
 
 const KernInfoRecord = struct {
@@ -74,6 +190,24 @@ const KernInfoRecord = struct {
     top_left: ?Offset16,
     bottom_right: ?Offset16,
     bottom_left: ?Offset16,
+
+    const Self = @This();
+    pub const FromData = struct {
+        // [ARS] impl of FromData trait
+        pub const SIZE: usize = 8;
+
+        pub fn parse(
+            data: *const [SIZE]u8,
+        ) parser.Error!Self {
+            var s = parser.Stream.new(data);
+            return .{
+                .top_right = try s.read_optional(Offset16),
+                .top_left = try s.read_optional(Offset16),
+                .bottom_right = try s.read_optional(Offset16),
+                .bottom_left = try s.read_optional(Offset16),
+            };
+        }
+    };
 };
 
 /// A mapping from glyphs to
@@ -82,6 +216,17 @@ const KernInfoRecord = struct {
 pub const GlyphConstructions = struct {
     coverage: Coverage,
     constructions: LazyOffsetArray16(GlyphConstruction),
+
+    fn new(
+        data: []const u8,
+        coverage: ?Coverage,
+        offsets: LazyArray16(?Offset16),
+    ) GlyphConstructions {
+        return .{
+            .coverage = coverage orelse .{ .format1 = .{ .glyphs = .{} } },
+            .constructions = .new(data, offsets),
+        };
+    }
 };
 
 /// A [Math Glyph Construction Table](
@@ -134,3 +279,14 @@ pub const GlyphPart = struct {
 
 /// Glyph part flags.
 pub const PartFlags = struct { u16 };
+
+fn parse_at_offset(
+    T: type,
+    s: *parser.Stream,
+    data: []const u8,
+) parser.Error!T {
+    const offset = try s.read_optional(Offset16) orelse return error.ParseFail;
+    if (offset[0] > data.len) return error.ParseFail;
+
+    return try T.parse(data[offset[0]..]);
+}

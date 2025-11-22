@@ -7,6 +7,7 @@ const Tag = @import("../lib.zig").Tag;
 
 const LazyArray16 = parser.LazyArray16;
 const Offset16 = parser.Offset16;
+const Offset32 = parser.Offset32;
 
 /// A [Layout Table](https://docs.microsoft.com/en-us/typography/opentype/spec/chapter2#table-organization).
 pub const LayoutTable = struct {
@@ -19,6 +20,51 @@ pub const LayoutTable = struct {
     /// Used to substitute an alternate set of lookup tables
     /// to use for any given feature under specified conditions.
     variations: if (cfg.variable_fonts) ?FeatureVariations else void,
+
+    pub fn parse(
+        data: []const u8,
+    ) parser.Error!LayoutTable {
+        var s = parser.Stream.new(data);
+
+        if (try s.read(u16) != 1) return error.ParseFail; // major_version
+        const minor_version = try s.read(u16);
+
+        const scripts = s: {
+            const offset = try s.read(Offset16);
+            if (offset[0] > data.len) return error.ParseFail;
+
+            break :s try ScriptList.parse(data[offset[0]..]);
+        };
+        const features = f: {
+            const offset = try s.read(Offset16);
+            if (offset[0] > data.len) return error.ParseFail;
+
+            break :f try FeatureList.parse(data[offset[0]..]);
+        };
+        const lookups = l: {
+            const offset = try s.read(Offset16);
+            if (offset[0] > data.len) return error.ParseFail;
+
+            break :l try LookupList.parse(data[offset[0]..]);
+        };
+
+        const variations = if (cfg.variable_fonts) v: {
+            const variations_offset =
+                if (minor_version >= 1) try s.read_optional(Offset32) else null;
+
+            const offset = variations_offset orelse break :v null;
+            if (offset[0] > data.len) break :v null;
+
+            break :v FeatureVariations.parse(data[offset[0]..]) catch null;
+        } else {};
+
+        return .{
+            .scripts = scripts,
+            .features = features,
+            .lookups = lookups,
+            .variations = variations,
+        };
+    }
 };
 
 /// A list of [`Script`] records.
@@ -35,7 +81,23 @@ pub fn RecordList(T: type) type {
     return struct {
         data: []const u8,
         records: LazyArray16(TagRecord),
-        data_type: T, // core::marker::PhantomData<T>,
+        comptime {
+            _ = T;
+        }
+
+        const Self = @This();
+
+        fn parse(
+            data: []const u8,
+        ) parser.Error!Self {
+            var s = parser.Stream.new(data);
+            const count = try s.read(u16);
+            const records = try s.read_array(TagRecord, count);
+            return .{
+                .data = data,
+                .records = records,
+            };
+        }
     };
 }
 
@@ -68,6 +130,22 @@ pub const Feature = struct {
 const TagRecord = struct {
     tag: Tag,
     offset: Offset16,
+
+    const Self = @This();
+    pub const FromData = struct {
+        // [ARS] impl of FromData trait
+        pub const SIZE: usize = 6;
+
+        pub fn parse(
+            data: *const [SIZE]u8,
+        ) parser.Error!Self {
+            var s = parser.Stream.new(data);
+            return .{
+                .tag = try s.read(Tag),
+                .offset = try s.read(Offset16),
+            };
+        }
+    };
 };
 
 /// An index in [`ScriptList`].
