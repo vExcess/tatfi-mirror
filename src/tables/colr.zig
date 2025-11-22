@@ -15,7 +15,6 @@ const GlyphId = @import("../lib.zig").GlyphId;
 const LazyArray16 = parser.LazyArray16;
 const LazyArray32 = parser.LazyArray32;
 const Offset32 = parser.Offset32;
-const NonZeroOffset32 = parser.NonZeroOffset32;
 const Offset24 = parser.Offset24;
 
 /// A [Color Table](
@@ -85,15 +84,15 @@ pub const Table = struct {
         if (version == 0) return table;
 
         table.base_glyph_paints_offset = try s.read(Offset32);
-        const layer_list_offset = try s.read(NonZeroOffset32);
-        const clip_list_offset = try s.read(NonZeroOffset32);
+        const layer_list_offset = try s.read_optional(Offset32);
+        const clip_list_offset = try s.read_optional(Offset32);
 
         const var_index_map_offset = if (cfg.variable_fonts)
-            try s.read(NonZeroOffset32)
+            try s.read_optional(Offset32)
         else {};
 
         const item_variation_offset = if (cfg.variable_fonts)
-            try s.read(NonZeroOffset32)
+            try s.read_optional(Offset32)
         else {};
 
         table.base_glyph_paints = bgp: {
@@ -102,22 +101,20 @@ pub const Table = struct {
             break :bgp try sbg.read_array(BaseGlyphPaintRecord, count);
         };
 
-        if (layer_list_offset[0] != 0) {
-            const offset = layer_list_offset[0];
-            table.layer_paint_offsets_offset = .{offset};
+        if (layer_list_offset) |offset| {
+            table.layer_paint_offsets_offset = offset;
 
-            var sll = try parser.Stream.new_at(data, offset);
+            var sll = try parser.Stream.new_at(data, offset[0]);
             const count = try sll.read(u32);
 
             table.layer_paint_offsets = try sll.read_array(Offset32, count);
         }
 
-        if (clip_list_offset[0] != 0) {
-            const offset = clip_list_offset[0];
-            table.clip_list_offsets_offset = .{offset};
+        if (clip_list_offset) |offset| {
+            table.clip_list_offsets_offset = offset;
 
-            if (offset > data.len) return error.ParseFail;
-            const clip_data = data[offset..];
+            if (offset[0] > data.len) return error.ParseFail;
+            const clip_data = data[offset[0]..];
 
             var scl = parser.Stream.new(clip_data);
             scl.skip(u8); // Format
@@ -129,22 +126,18 @@ pub const Table = struct {
         }
 
         if (cfg.variable_fonts) {
-            if (item_variation_offset[0] != 0) {
-                const offset = item_variation_offset[0];
-
-                if (offset > data.len) return error.ParseFail;
-                const item_var_data = data[offset..];
+            if (item_variation_offset) |offset| {
+                if (offset[0] > data.len) return error.ParseFail;
+                const item_var_data = data[offset[0]..];
 
                 var siv = parser.Stream.new(item_var_data);
                 table.variable_fonts.item_variation_store =
                     try var_store.ItemVariationStore.parse(&siv);
             }
 
-            if (var_index_map_offset[0] != 0) {
-                const offset = var_index_map_offset[0];
-
-                if (offset > data.len) return error.ParseFail;
-                const var_index_map_data = data[offset..];
+            if (var_index_map_offset) |offset| {
+                if (offset[0] > data.len) return error.ParseFail;
+                const var_index_map_data = data[offset[0]..];
 
                 table.variable_fonts.var_index_map = .{
                     .data = var_index_map_data,

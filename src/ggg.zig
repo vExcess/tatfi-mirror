@@ -22,6 +22,31 @@ pub const ClassDefinition = union(enum) {
     format1: struct { start: GlyphId, classes: LazyArray16(Class) },
     format2: struct { records: LazyArray16(RangeRecord) },
     empty,
+
+    pub fn parse(
+        data: []const u8,
+    ) parser.Error!ClassDefinition {
+        var s = parser.Stream.new(data);
+        const v = try s.read(u16);
+
+        switch (v) {
+            1 => {
+                const start = try s.read(GlyphId);
+                const count = try s.read(u16);
+                const classes = try s.read_array(Class, count);
+                return .{ .format1 = .{
+                    .start = start,
+                    .classes = classes,
+                } };
+            },
+            2 => {
+                const count = try s.read(u16);
+                const records = try s.read_array(RangeRecord, count);
+                return .{ .format2 = .{ .records = records } };
+            },
+            else => return error.ParseFail,
+        }
+    }
 };
 
 /// A value of [Class Definition Table](
@@ -36,6 +61,23 @@ pub const RangeRecord = struct {
     end: GlyphId,
     /// Coverage Index of first glyph ID in range.
     value: u16,
+
+    const Self = @This();
+    pub const FromData = struct {
+        // [ARS] impl of FromData trait
+        pub const SIZE: usize = 6;
+
+        pub fn parse(
+            data: *const [SIZE]u8,
+        ) parser.Error!Self {
+            var s = parser.Stream.new(data);
+            return .{
+                .start = try s.read(GlyphId),
+                .end = try s.read(GlyphId),
+                .value = try s.read(u16),
+            };
+        }
+    };
 };
 
 /// A [Coverage Table](
@@ -49,4 +91,23 @@ pub const Coverage = union(enum) {
         /// Array of glyph ranges. Ordered by `RangeRecord.start`.
         records: LazyArray16(RangeRecord),
     },
+
+    pub fn parse(
+        data: []const u8,
+    ) parser.Error!Coverage {
+        var s = parser.Stream.new(data);
+        switch (try s.read(u16)) {
+            1 => {
+                const count = try s.read(u16);
+                const glyphs = try s.read_array(GlyphId, count);
+                return .{ .format1 = .{ .glyphs = glyphs } };
+            },
+            2 => {
+                const count = try s.read(u16);
+                const records = try s.read_array(RangeRecord, count);
+                return .{ .format2 = .{ .records = records } };
+            },
+            else => return error.ParseFail,
+        }
+    }
 };

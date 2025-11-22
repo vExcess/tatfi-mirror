@@ -9,9 +9,41 @@ const Offset32 = parser.Offset32;
 pub const FeatureVariations = struct {
     data: []const u8,
     records: LazyArray32(FeatureVariationRecord),
+
+    pub fn parse(
+        data: []const u8,
+    ) parser.Error!FeatureVariations {
+        var s = parser.Stream.new(data);
+        if (try s.read(u16) != 1) return error.ParseFail; // major version
+        s.skip(u16); // minor version
+
+        const count = try s.read(u32);
+        const records = try s.read_array(FeatureVariationRecord, count);
+
+        return .{
+            .data = data,
+            .records = records,
+        };
+    }
 };
 
 const FeatureVariationRecord = struct {
     conditions: Offset32,
     substitutions: Offset32,
+
+    const Self = @This();
+    pub const FromData = struct {
+        // [ARS] impl of FromData trait
+        pub const SIZE: usize = 8;
+
+        pub fn parse(
+            data: *const [SIZE]u8,
+        ) parser.Error!Self {
+            var s = parser.Stream.new(data);
+            return .{
+                .conditions = try s.read(Offset32),
+                .substitutions = try s.read(Offset32),
+            };
+        }
+    };
 };

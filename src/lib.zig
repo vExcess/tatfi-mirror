@@ -307,10 +307,22 @@ pub const Face = struct {
                 break :v tables.vorg.Table.parse(data) catch null;
             },
             .opentype_layout = if (cfg.opentype_layout) .{
-                .gdef = null, // [ARS} TODO
-                .gpos = null, // [ARS} TODO
-                .gsub = null, // [ARS} TODO
-                .math = null, // [ARS} TODO
+                .gdef = g: {
+                    const data = raw_tables.opentype_layout.gdef orelse break :g null;
+                    break :g tables.gdef.Table.parse(data) catch null;
+                },
+                .gpos = g: {
+                    const data = raw_tables.opentype_layout.gpos orelse break :g null;
+                    break :g opentype_layout.LayoutTable.parse(data) catch null;
+                },
+                .gsub = g: {
+                    const data = raw_tables.opentype_layout.gsub orelse break :g null;
+                    break :g opentype_layout.LayoutTable.parse(data) catch null;
+                },
+                .math = m: {
+                    const data = raw_tables.opentype_layout.math orelse break :m null;
+                    break :m tables.math.Table.parse(data) catch null;
+                },
             },
             .apple_layout = if (cfg.apple_layout) .{
                 .ankr = null, // [ARS} TODO
