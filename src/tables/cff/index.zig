@@ -33,6 +33,29 @@ pub const Index = struct {
         if (end > self.data.len) return null;
         return self.data[start..end];
     }
+
+    pub fn iterator(
+        data: *const Index,
+    ) Iterator {
+        return .{
+            .data = data,
+            .offset_index = 0,
+        };
+    }
+
+    pub const Iterator = struct {
+        data: *const Index,
+        offset_index: u32,
+
+        pub fn next(
+            self: *Iterator,
+        ) ?[]const u8 {
+            if (self.offset_index == self.data.len()) return null;
+
+            defer self.offset_index += 1;
+            return self.data.get(self.offset_index);
+        }
+    };
 };
 
 pub const VarOffsets = struct {
