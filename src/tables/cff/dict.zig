@@ -99,7 +99,7 @@ pub const DictionaryParser = struct {
         F: type,
     ) parser.Error!F {
         try self.parse_operands();
-        if (self.operands.len == 0) return error.ParseFail;
+        if (self.operands_slice().len == 0) return error.ParseFail;
 
         return @floatCast(self.operands[0]);
     }
@@ -109,7 +109,7 @@ pub const DictionaryParser = struct {
     ) parser.Error!usize {
         try self.parse_operands();
 
-        const operands = self.operands[0..self.operands_len];
+        const operands = self.operands_slice();
         if (operands.len != 1) return error.ParseFail;
 
         return std.math.cast(usize, std.math.lossyCast(i32, operands[0])) orelse
@@ -120,7 +120,7 @@ pub const DictionaryParser = struct {
         self: *DictionaryParser,
     ) parser.Error!struct { usize, usize } {
         try self.parse_operands();
-        const operands = self.operands[0..self.operands_len];
+        const operands = self.operands_slice();
         if (operands.len != 2) return error.ParseFail;
 
         const len = std.math.cast(usize, std.math.lossyCast(i32, operands[0])) orelse
@@ -130,6 +130,12 @@ pub const DictionaryParser = struct {
         const end = try std.math.add(usize, start, len);
 
         return .{ start, end };
+    }
+
+    pub fn operands_slice(
+        self: DictionaryParser,
+    ) []f64 {
+        return self.operands[0..self.operands_len];
     }
 };
 

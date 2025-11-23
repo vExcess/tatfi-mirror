@@ -356,13 +356,34 @@ pub const Face = struct {
                 },
             },
             .variable_fonts = if (cfg.variable_fonts) .{
-                .avar = null, // [ARS} TODO
-                .cff2 = null, // [ARS} TODO
-                .fvar = null, // [ARS} TODO
-                .gvar = null, // [ARS} TODO
-                .hvar = null, // [ARS} TODO
-                .mvar = null, // [ARS} TODO
-                .vvar = null, // [ARS} TODO
+                .avar = a: {
+                    const data = raw_tables.variable_fonts.avar orelse break :a null;
+                    break :a tables.avar.Table.parse(data) catch null;
+                },
+                .cff2 = c: {
+                    const data = raw_tables.variable_fonts.cff2 orelse break :c null;
+                    break :c tables.cff2.Table.parse(data) catch null;
+                },
+                .fvar = f: {
+                    const data = raw_tables.variable_fonts.fvar orelse break :f null;
+                    break :f tables.fvar.Table.parse(data) catch null;
+                },
+                .gvar = g: {
+                    const data = raw_tables.variable_fonts.gvar orelse break :g null;
+                    break :g tables.gvar.Table.parse(data) catch null;
+                },
+                .hvar = h: {
+                    const data = raw_tables.variable_fonts.hvar orelse break :h null;
+                    break :h tables.hvar.Table.parse(data) catch null;
+                },
+                .mvar = m: {
+                    const data = raw_tables.variable_fonts.mvar orelse break :m null;
+                    break :m tables.mvar.Table.parse(data) catch null;
+                },
+                .vvar = v: {
+                    const data = raw_tables.variable_fonts.vvar orelse break :v null;
+                    break :v tables.vvar.Table.parse(data) catch null;
+                },
             },
         };
     }

@@ -257,7 +257,7 @@ fn parse_top_dict(
             },
             top_dict_operator.FONT_MATRIX => {
                 try dict_parser.parse_operands();
-                const operands = dict_parser.operands[0..dict_parser.operands_len];
+                const operands = dict_parser.operands_slice();
                 if (operands.len == 6) top_dict.matrix = .{
                     .sx = @floatCast(operands[0]),
                     .ky = @floatCast(operands[1]),
