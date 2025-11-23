@@ -382,6 +382,25 @@ pub const Face = struct {
             },
         };
     }
+
+    /// Creates a new [`Face`] from provided [`RawFaceTables`].
+    ///
+    /// Does not create a `['RawFace']
+    pub fn from_raw_tables(
+        raw_tables: RawFaceTables,
+    ) FaceParsingError!Face {
+        var face: Face = .{
+            .raw_face = .{ .data = &.{}, .table_records = .{} },
+            .coordinates = if (cfg.variable_fonts) .{},
+            .tables = try Face.parse_tables(raw_tables),
+        };
+
+        if (cfg.variable_fonts) if (face.tables.variable_fonts.fvar) |fvar| {
+            face.coordinates.len = @min(fvar.axes.len(), MAX_VAR_COORDS);
+        };
+
+        return face;
+    }
 };
 
 /// A raw font face.
