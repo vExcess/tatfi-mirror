@@ -11,7 +11,7 @@ const Offset16 = parser.Offset16;
 /// https://docs.microsoft.com/en-us/typography/opentype/spec/name).
 pub const Table = struct {
     /// A list of names.
-    names: Names,
+    names: Names = .{},
 
     /// Parses a table from raw data.
     pub fn parse(
@@ -53,8 +53,8 @@ pub const Table = struct {
 
 /// A list of face names.
 pub const Names = struct {
-    records: LazyArray16(NameRecord),
-    storage: []const u8,
+    records: LazyArray16(NameRecord) = .{} ,
+    storage: []const u8 = &.{},
 };
 
 const NameRecord = struct {
