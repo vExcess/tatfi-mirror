@@ -11,7 +11,7 @@
 // Therefore after applying any changes to this table,
 // you have to check that all rustybuzz tests are still passing.
 
-const cfg = @import("config");
+const parser = @import("../parser.zig");
 
 /// An [Extended Glyph Metamorphosis Table](
 /// https://developer.apple.com/fonts/TrueType-Reference-Manual/RM06/Chap6morx.html).
@@ -20,6 +20,16 @@ const cfg = @import("config");
 pub const Table = struct {
     /// A list of metamorphosis chains.
     chains: Chains,
+
+    /// Parses a table from raw data.
+    ///
+    /// `number_of_glyphs` is from the `maxp` table.
+    pub fn parse(
+        number_of_glyphs: u16,
+        data: []const u8,
+    ) parser.Error!Table {
+        return .{ .chains = try .parse(number_of_glyphs, data) };
+    }
 };
 
 /// A list of metamorphosis chains.
@@ -30,4 +40,21 @@ pub const Chains = struct {
     data: []const u8,
     count: u32,
     number_of_glyphs: u16, // nonzero
+
+    fn parse(
+        number_of_glyphs: u16,
+        data: []const u8,
+    ) parser.Error!Chains {
+        var s = parser.Stream.new(data);
+
+        s.skip(u16); // version
+        s.skip(u16); // reserved
+        const count = try s.read(u32);
+
+        return .{
+            .count = count,
+            .data = try s.tail(),
+            .number_of_glyphs = number_of_glyphs,
+        };
+    }
 };

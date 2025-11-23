@@ -97,6 +97,16 @@ pub fn LazyArray(I: type, T: type) type {
             return @truncate(self.data.len / size);
         }
 
+        /// Returns the last value.
+        pub fn last(
+            self: Self,
+        ) ?T {
+            return if (self.len() > 0)
+                self.get(self.len() - 1)
+            else
+                null;
+        }
+
         pub fn iterator(
             data: *const Self,
         ) Self.Iterator {
@@ -372,11 +382,9 @@ pub const Stream = struct {
     pub fn advance_checked(
         self: *Stream,
         len: usize,
-    ) bool {
-        if (self.offset + len > self.data.len) return false;
-
+    ) Error!void {
+        if (self.offset + len > self.data.len) return error.ParseFail;
         self.advance(len);
-        return true;
     }
 
     /// Returns the trailing data.
