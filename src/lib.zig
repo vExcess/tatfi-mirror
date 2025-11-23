@@ -508,6 +508,247 @@ pub const Face = struct {
         const t = self.tables.os2 orelse return .normal;
         return t.width();
     }
+
+    // Read https://github.com/freetype/freetype/blob/49270c17011491227ec7bd3fb73ede4f674aa065/src/sfnt/sfobjs.c#L1279
+    // to learn more about the logic behind the following functions.
+
+    /// Returns a horizontal face ascender.
+    ///
+    /// This method is affected by variation axes.
+    pub fn ascender(
+        self: Face,
+    ) i16 {
+        if (self.tables.os2) |os2| if (os2.use_typographic_metrics()) {
+            const value = os2.typographic_ascender();
+            return self.apply_metrics_variation(Tag.from_bytes("hasc"), value);
+        };
+
+        var value = self.tables.hhea.ascender;
+
+        if (value == 0) if (self.tables.os2) |os2| {
+            value = os2.typographic_ascender();
+            if (value == 0) {
+                value = os2.windows_ascender();
+                value = self.apply_metrics_variation(Tag.from_bytes("hcla"), value);
+            } else {
+                value = self.apply_metrics_variation(Tag.from_bytes("hasc"), value);
+            }
+        };
+
+        return value;
+    }
+
+    /// Returns a horizontal face descender.
+    ///
+    /// This method is affected by variation axes.
+    pub fn descender(
+        self: Face,
+    ) i16 {
+        if (self.tables.os2) |os2| if (os2.use_typographic_metrics()) {
+            const value = os2.typographic_descender();
+            return self.apply_metrics_variation(Tag.from_bytes("hdsc"), value);
+        };
+
+        var value = self.tables.hhea.descender;
+
+        if (value == 0) if (self.tables.os2) |os2| {
+            value = os2.typographic_descender();
+            if (value == 0) {
+                value = os2.windows_descender();
+                value = self.apply_metrics_variation(Tag.from_bytes("hcld"), value);
+            } else {
+                value = self.apply_metrics_variation(Tag.from_bytes("hdsc"), value);
+            }
+        };
+
+        return value;
+    }
+
+    /// Returns face's height.
+    ///
+    /// This method is affected by variation axes.
+    pub fn height(
+        self: Face,
+    ) i16 {
+        return self.ascender() - self.descender();
+    }
+
+    /// Returns a horizontal face line gap.
+    ///
+    /// This method is affected by variation axes.
+    pub fn line_gap(
+        self: Face,
+    ) i16 {
+        if (self.tables.os2) |os2| if (os2.use_typographic_metrics()) {
+            const value = os2.typographic_line_gap();
+            return self.apply_metrics_variation(Tag.from_bytes("hlgp"), value);
+        };
+
+        var value = self.tables.hhea.line_gap;
+
+        // For line gap, we have to check that ascender or descender are 0, not line gap itself.
+        if (self.tables.hhea.ascender == 0 or self.tables.hhea.descender == 0)
+            if (self.tables.os2) |os2| {
+                if (os2.typographic_ascender() != 0 or os2.typographic_descender() != 0) {
+                    value = os2.typographic_line_gap();
+                    value = self.apply_metrics_variation(Tag.from_bytes("hlgp"), value);
+                } else value = 0;
+            };
+
+        return value;
+    }
+
+    /// Returns a horizontal typographic face ascender.
+    ///
+    /// Prefer `Face.ascender` unless you explicitly want this. This is a more
+    /// low-level alternative.
+    ///
+    /// This method is affected by variation axes.
+    ///
+    /// Returns `null` when OS/2 table is not present.
+    pub fn typographic_ascender(
+        self: Face,
+    ) ?i16 {
+        const os2 = self.tables.os2 orelse return null;
+        const v = os2.typographic_ascender();
+        return self.apply_metrics_variation(Tag.from_bytes("hasc"), v);
+    }
+
+    /// Returns a horizontal typographic face descender.
+    ///
+    /// Prefer `Face.descender` unless you explicitly want this. This is a more
+    /// low-level alternative.
+    ///
+    /// This method is affected by variation axes.
+    ///
+    /// Returns `null` when OS/2 table is not present.
+    pub fn typographic_descender(
+        self: Face,
+    ) ?i16 {
+        const os2 = self.tables.os2 orelse return null;
+        const v = os2.typographic_descender();
+        return self.apply_metrics_variation(Tag.from_bytes("hdsc"), v);
+    }
+
+    /// Returns a horizontal typographic face line gap.
+    ///
+    /// Prefer `Face.line_gap` unless you explicitly want this. This is a more
+    /// low-level alternative.
+    ///
+    /// This method is affected by variation axes.
+    ///
+    /// Returns `null` when OS/2 table is not present.
+    pub fn typographic_line_gap(
+        self: Face,
+    ) ?i16 {
+        const os2 = self.tables.os2 orelse return null;
+        const v = os2.typographic_line_gap();
+        return self.apply_metrics_variation(Tag.from_bytes("hlgp"), v);
+    }
+
+    /// Returns a vertical face ascender.
+    ///
+    /// This method is affected by variation axes.
+    pub fn vertical_ascender(
+        self: Face,
+    ) ?i16 {
+        const vhea = self.tables.vhea orelse return null;
+        const v = vhea.ascender;
+        return self.apply_metrics_variation(Tag.from_bytes("vasc"), v);
+    }
+
+    /// Returns a vertical face descender.
+    ///
+    /// This method is affected by variation axes.
+    pub fn vertical_descender(
+        self: Face,
+    ) ?i16 {
+        const vhea = self.tables.vhea orelse return null;
+        const v = vhea.descender;
+        return self.apply_metrics_variation(Tag.from_bytes("vdsc"), v);
+    }
+
+    /// Returns a vertical face height.
+    ///
+    /// This method is affected by variation axes.
+    pub fn vertical_height(
+        self: Face,
+    ) ?i16 {
+        const a = self.vertical_ascender() orelse return null;
+        const d = self.vertical_descender() orelse return null;
+        return a + d;
+    }
+
+    /// Returns a vertical face line gap.
+    ///
+    /// This method is affected by variation axes.
+    pub fn vertical_line_gap(
+        self: Face,
+    ) ?i16 {
+        const vhea = self.tables.vhea orelse return null;
+        const v = vhea.line_gap;
+        return self.apply_metrics_variation(Tag.from_bytes("vlgp"), v);
+    }
+
+    /// Returns face's units per EM.
+    ///
+    /// Guarantee to be in a 16..=16384 range.
+    pub fn units_per_em(
+        self: Face,
+    ) u16 {
+        return self.tables.head.units_per_em;
+    }
+
+    /// Returns face's x height.
+    ///
+    /// This method is affected by variation axes.
+    ///
+    /// Returns `null` when OS/2 table is not present or when its version is < 2.
+    pub fn x_height(
+        self: Face,
+    ) ?i16 {
+        const os2 = self.tables.os2 orelse return null;
+        const v = os2.x_height() orelse return null;
+        return self.apply_metrics_variation(Tag.from_bytes("xhgt"), v);
+    }
+
+    /// Returns face's capital height.
+    ///
+    /// This method is affected by variation axes.
+    ///
+    /// Returns `null` when OS/2 table is not present or when its version is < 2.
+    pub fn capital_height(
+        self: Face,
+    ) ?i16 {
+        const os2 = self.tables.os2 orelse return null;
+        const v = os2.capital_height() orelse return null;
+        return self.apply_metrics_variation(Tag.from_bytes("cpht"), v);
+    }
+
+    fn apply_metrics_variation(
+        self: Face,
+        tag: u32,
+        value_immutable: i16,
+    ) i16 {
+        var value = value_immutable;
+        if (cfg.variable_fonts) if (self.is_variable()) {
+            const metrics: f32 = m: {
+                const mvar = self.tables.variable_fonts.mvar orelse break :m 0.0;
+                break :m mvar.metric_offset(tag, self.coords()) orelse 0.0;
+            };
+            const v: f32 = @as(f32, @floatFromInt(value)) + metrics;
+            // TODO: Should probably round it, but f32::round is not available in core.
+            value = f32_to_i16(v) orelse value;
+        };
+
+        return value;
+    }
+
+    fn coords(
+        self: Face,
+    ) []const NormalizedCoordinate {
+        return self.coordinates.data[0..self.coordinates.len];
+    }
 };
 
 /// A raw font face.
@@ -919,3 +1160,22 @@ const VarCoords = struct {
 ///
 /// The number is stored as f2.16
 pub const NormalizedCoordinate = struct { inner: i16 };
+
+// [ARS] NUMERICAL STUFF
+fn f32_to_i32(v: f32) ?i32 {
+    // [ARS] this method is a bastardization of the of source
+    const MIN: f32 = @floatFromInt(std.math.minInt(i32));
+
+    // [ARs] https://ziggit.dev/t/determining-lower-upper-bound-for-safe-conversion-from-f32-to-i32/3764/3?u=asibahi
+    const MAX_P1: f32 = @floatFromInt(2147483520);
+
+    if (v >= MIN and v <= MAX_P1)
+        return @intFromFloat(v)
+    else
+        return null;
+}
+
+fn f32_to_i16(v: f32) ?i16 {
+    const i = f32_to_i32(v) orelse return null;
+    return std.math.cast(i16, i);
+}

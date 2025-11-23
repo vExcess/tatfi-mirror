@@ -53,7 +53,7 @@ pub const Table = struct {
 
 /// A list of face names.
 pub const Names = struct {
-    records: LazyArray16(NameRecord) = .{} ,
+    records: LazyArray16(NameRecord) = .{},
     storage: []const u8 = &.{},
 };
 

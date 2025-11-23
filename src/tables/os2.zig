@@ -123,6 +123,81 @@ pub const Table = struct {
             else => .normal,
         };
     }
+
+    /// Checks if typographic metrics should be used.
+    pub fn use_typographic_metrics(
+        self: Table,
+    ) bool {
+        return self.version >= 4 and self.fs_selection().use_typo_metrics;
+    }
+
+    /// Returns typographic ascender.
+    pub fn typographic_ascender(
+        self: Table,
+    ) i16 {
+        var s = parser.Stream.new_at(self.data, TYPO_ASCENDER_OFFSET) catch return 0;
+        return s.read(i16) catch 0;
+    }
+
+    /// Returns Windows ascender.
+    pub fn windows_ascender(
+        self: Table,
+    ) i16 {
+        var s = parser.Stream.new_at(self.data, WIN_ASCENT) catch return 0;
+        return s.read(i16) catch 0;
+    }
+
+    /// Returns typographic descender.
+    pub fn typographic_descender(
+        self: Table,
+    ) i16 {
+        var s = parser.Stream.new_at(self.data, TYPO_DESCENDER_OFFSET) catch return 0;
+        return s.read(i16) catch 0;
+    }
+
+    /// Returns Windows descender
+    pub fn windows_descender(
+        self: Table,
+    ) i16 {
+        var s = parser.Stream.new_at(self.data, WIN_DESCENT) catch return 0;
+        return -(s.read(i16) catch 0);
+    }
+
+    /// Returns typographic line gap.
+    pub fn typographic_line_gap(
+        self: Table,
+    ) i16 {
+        var s = parser.Stream.new_at(self.data, TYPO_LINE_GAP_OFFSET) catch return 0;
+        return s.read(i16) catch 0;
+    }
+
+    /// Returns x height.
+    ///
+    /// Returns `null` version is < 2.
+    pub fn x_height(
+        self: Table,
+    ) ?i16 {
+        if (self.version < 2) {
+            return null;
+        } else {
+            var s = parser.Stream.new_at(self.data, X_HEIGHT_OFFSET) catch return null;
+            return s.read(i16) catch null;
+        }
+    }
+
+    /// Returns capital height.
+    ///
+    /// Returns `null` version is < 2.
+    pub fn capital_height(
+        self: Table,
+    ) ?i16 {
+        if (self.version < 2) {
+            return null;
+        } else {
+            var s = parser.Stream.new_at(self.data, CAP_HEIGHT_OFFSET) catch return null;
+            return s.read(i16) catch null;
+        }
+    }
 };
 
 /// A face style.
