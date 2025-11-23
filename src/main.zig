@@ -7,7 +7,8 @@ pub fn main() !void {
         \\
     , .{});
 
-    _ = tetfy.Face.parse("true", 0) catch {};
+    const face = tetfy.Face.parse("true", 0) catch return;
+    _ = face.raw_face.table(.{ .inner = 53 }) orelse {};
 
     const raw_tables: tetfy.RawFaceTables = .{};
     _ = tetfy.Face.from_raw_tables(raw_tables) catch {};
