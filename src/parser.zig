@@ -124,6 +124,38 @@ pub fn LazyArray(I: type, T: type) type {
                 return self.data.get(self.index);
             }
         };
+
+        /// Performs a binary search using specified closure.
+        pub fn binary_search_by(
+            self: Self,
+            ctx: anytype,
+            F: fn (T, @TypeOf(ctx)) std.math.Order,
+        ) ?struct { I, T } {
+            // Based on Rust std implementation.
+
+            var size = self.len();
+            if (size == 0) return null;
+
+            var base: I = 0;
+            while (size > 1) {
+                const half = size / 2;
+                const mid = base + half;
+                // mid is always in [0, size), that means mid is >= 0 and < size.
+                // mid >= 0: by definition
+                // mid < size: mid = size / 2 + size / 4 + size / 8 ...
+                const cmp = F(
+                    self.get(mid) orelse return null,
+                    ctx,
+                );
+                if (cmp != .gt) base = mid;
+                size -= half;
+            }
+
+            const value = self.get(base) orelse return null;
+            if (F(value, ctx) == .eq) {
+                return .{ base, value };
+            } else return null;
+        }
     };
 }
 

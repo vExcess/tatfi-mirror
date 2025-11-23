@@ -473,6 +473,33 @@ pub const RawFace = struct {
             .table_records = table_records,
         };
     }
+
+    /// Returns the raw data of a selected table.
+    pub fn table(
+        self: Self,
+        tag: Tag,
+    ) ?[]const u8 {
+        const func = struct {
+            fn func(record: TableRecord, t: Tag) std.math.Order {
+                const lhs = record.tag.inner;
+                const rhs = t.inner;
+
+                return std.math.order(lhs, rhs);
+            }
+        }.func;
+
+        _, const table_v = self.table_records.binary_search_by(
+            tag,
+            func
+        ) orelse return null;
+
+        const offset = table_v.offset;
+        const length = table_v.length;
+        const end = std.math.add(usize, offset, length) catch return null;
+
+        if (offset > self.data.len or end > self.data.len) return null;
+        return self.data[offset..end];
+    }
 };
 
 /// Parsed face tables.
