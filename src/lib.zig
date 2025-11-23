@@ -401,6 +401,113 @@ pub const Face = struct {
 
         return face;
     }
+
+    /// Returns a list of names.
+    ///
+    /// Contains face name and other strings.
+    pub fn names(
+        self: Face,
+    ) tables.name.Names {
+        const t: tables.name.Table = self.tables.name orelse .{};
+        return t.names;
+    }
+
+    /// Returns face style.
+    pub fn style(
+        self: Face,
+    ) tables.os2.Style {
+        const t = self.tables.os2 orelse return .normal;
+        return t.style();
+    }
+
+    /// Checks that face is marked as *Regular*.
+    ///
+    /// Returns `true` when OS/2 table is not present.
+    pub fn is_regular(
+        self: Face,
+    ) bool {
+        return self.style() == .normal;
+    }
+
+    /// Checks that face is marked as *Italic*.
+    pub fn is_italic(
+        self: Face,
+    ) bool {
+        // A face can have a Normal style and a non-zero italic angle, which also makes it italic.
+        return self.style() == .italic or self.italic_angle() != 0.0;
+    }
+
+    /// Returns face's italic angle.
+    ///
+    /// Returns `0.0` when `post` table is not present.
+    pub fn italic_angle(
+        self: Face,
+    ) f32 {
+        const t = self.tables.post orelse return 0.0;
+        return t.italic_angle;
+    }
+
+    /// Checks that face is marked as *Bold*.
+    ///
+    /// Returns `false` when OS/2 table is not present.
+    pub fn is_bold(
+        self: Face,
+    ) bool {
+        const t = self.tables.os2 orelse return false;
+        return t.is_bold();
+    }
+
+    /// Checks that face is marked as *Oblique*.
+    ///
+    /// Returns `false` when OS/2 table is not present or when its version is < 4.
+    pub fn is_oblique(
+        self: Face,
+    ) bool {
+        return self.style() == .oblique;
+    }
+
+    /// Checks that face is marked as *Monospaced*.
+    ///
+    /// Returns `false` when `post` table is not present.
+    pub fn is_monospaced(
+        self: Face,
+    ) bool {
+        const t = self.tables.post orelse return false;
+        return t.is_monospaced;
+    }
+
+    /// Checks that face is variable.
+    ///
+    /// Simply checks the presence of a `fvar` table.
+    /// returns 'false' if variable_fonts is not enabled
+    pub fn is_variable(
+        self: Face,
+    ) bool {
+        if (cfg.variable_fonts) {
+            // `fvar::Table::parse` already checked that `axisCount` is non-zero.
+            return self.tables.variable_fonts.fvar != null;
+        } else return false;
+    }
+
+    /// Returns face's weight.
+    ///
+    /// Returns `Weight::Normal` when OS/2 table is not present.
+    pub fn weight(
+        self: Face,
+    ) tables.os2.Weight {
+        const t = self.tables.os2 orelse return .normal;
+        return t.weight();
+    }
+
+    /// Returns face's width.
+    ///
+    /// Returns `Width::Normal` when OS/2 table is not present or when value is invalid.
+    pub fn width(
+        self: Face,
+    ) tables.os2.Width {
+        const t = self.tables.os2 orelse return .normal;
+        return t.width();
+    }
 };
 
 /// A raw font face.
@@ -488,10 +595,7 @@ pub const RawFace = struct {
             }
         }.func;
 
-        _, const table_v = self.table_records.binary_search_by(
-            tag,
-            func
-        ) orelse return null;
+        _, const table_v = self.table_records.binary_search_by(tag, func) orelse return null;
 
         const offset = table_v.offset;
         const length = table_v.length;
