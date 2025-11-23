@@ -325,11 +325,35 @@ pub const Face = struct {
                 },
             },
             .apple_layout = if (cfg.apple_layout) .{
-                .ankr = null, // [ARS} TODO
-                .feat = null, // [ARS} TODO
-                .kerx = null, // [ARS} TODO
-                .morx = null, // [ARS} TODO
-                .trak = null, // [ARS} TODO
+                .ankr = a: {
+                    const data = raw_tables.apple_layout.ankr orelse break :a null;
+                    break :a tables.ankr.Table.parse(
+                        maxp.number_of_glyphs,
+                        data,
+                    ) catch null;
+                },
+                .feat = f: {
+                    const data = raw_tables.apple_layout.feat orelse break :f null;
+                    break :f tables.feat.Table.parse(data) catch null;
+                },
+                .kerx = k: {
+                    const data = raw_tables.apple_layout.kerx orelse break :k null;
+                    break :k tables.kerx.Table.parse(
+                        maxp.number_of_glyphs,
+                        data,
+                    ) catch null;
+                },
+                .morx = m: {
+                    const data = raw_tables.apple_layout.morx orelse break :m null;
+                    break :m tables.morx.Table.parse(
+                        maxp.number_of_glyphs,
+                        data,
+                    ) catch null;
+                },
+                .trak = t: {
+                    const data = raw_tables.apple_layout.trak orelse break :t null;
+                    break :t tables.trak.Table.parse(data) catch null;
+                },
             },
             .variable_fonts = if (cfg.variable_fonts) .{
                 .avar = null, // [ARS} TODO
@@ -390,7 +414,7 @@ pub const RawFace = struct {
                 const offset = std.math.sub(usize, face_offset[0], s.offset) catch
                     return error.MalformedFont;
 
-                if (!s.advance_checked(offset)) return error.MalformedFont;
+                s.advance_checked(offset) catch return error.MalformedFont;
 
                 // Read **face** magic.
                 // Each face in a font collection also starts with a magic.
