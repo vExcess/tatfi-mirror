@@ -55,18 +55,13 @@ pub const Face = struct {
 
         var face: Self = .{
             .raw_face = raw_face,
-            .tables = try Self.parse_tables(raw_tables),
             .coordinates = if (cfg.variable_fonts) VarCoords{},
+            .tables = try Self.parse_tables(raw_tables),
         };
 
-        if (cfg.variable_fonts) {
-            if (face.tables.variable_fonts.fvar) |fvar| {
-                // TODO
-                _ = fvar;
-                _ = &face;
-                // face.coordinates.len = fvar.axes.len().min(MAX_VAR_COORDS as u16) as u8;
-            }
-        }
+        if (cfg.variable_fonts) if (face.tables.variable_fonts.fvar) |fvar| {
+            face.coordinates.len = @min(fvar.axes.len(), MAX_VAR_COORDS);
+        };
 
         return face;
     }
