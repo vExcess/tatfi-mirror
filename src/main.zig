@@ -20,6 +20,17 @@ pub fn main() !void {
     _ = face.is_regular();
     _ = face.weight();
     _ = face.width();
+    _ = face.ascender();
+    _ = face.descender();
+    _ = face.line_gap();
+    _ = face.vertical_height();
+    _ = face.vertical_line_gap();
+    _ = face.typographic_ascender();
+    _ = face.typographic_descender();
+    _ = face.typographic_line_gap();
+    _ = face.units_per_em();
+    _ = face.x_height();
+    _ = face.capital_height();
 
     const raw_tables: tetfy.RawFaceTables = .{};
     _ = tetfy.Face.from_raw_tables(raw_tables) catch {};

@@ -1,10 +1,12 @@
 //! A [Metrics Variations Table](
 //! https://docs.microsoft.com/en-us/typography/opentype/spec/mvar) implementation.
 
+const std = @import("std");
 const parser = @import("../parser.zig");
 const ItemVariationStore = @import("../var_store.zig").ItemVariationStore;
 
 const Tag = @import("../lib.zig").Tag;
+const NormalizedCoordinate = @import("../lib.zig").NormalizedCoordinate;
 
 const LazyArray16 = parser.LazyArray16;
 const Offset16 = parser.Offset16;
@@ -42,6 +44,33 @@ pub const Table = struct {
             .records = records,
             .variation_store = variation_store,
         };
+    }
+
+    /// Returns a metric offset by tag.
+    pub fn metric_offset(
+        self: Table,
+        tag: u32,
+        coordinates: []const NormalizedCoordinate,
+    ) ?f32 {
+        const func = struct {
+            fn func(record: ValueRecord, t: u32) std.math.Order {
+                const lhs = record.value_tag.inner;
+                const rhs = t;
+
+                return std.math.order(lhs, rhs);
+            }
+        }.func;
+
+        _, const record = self.records.binary_search_by(
+            tag,
+            func,
+        ) orelse return null;
+
+        return self.variation_store.parse_delta(
+            record.delta_set_outer_index,
+            record.delta_set_inner_index,
+            coordinates,
+        ) catch null;
     }
 };
 
