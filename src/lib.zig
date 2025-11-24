@@ -879,6 +879,40 @@ pub const Face = struct {
         return t.unicode_ranges();
     }
 
+    /// Returns a total number of glyphs in the face.
+    ///
+    /// Never zero.
+    ///
+    /// The value was already parsed, so this function doesn't involve any parsing.
+    pub fn number_of_glyphs(
+        self: Face,
+    ) u16 {
+        return self.tables.maxp.number_of_glyphs;
+    }
+
+    /// Resolves a Glyph ID for a code point.
+    ///
+    /// Returns `null` instead of `0` when glyph is not found.
+    ///
+    /// All subtable formats except Mixed Coverage (8) are supported.
+    ///
+    /// If you need a more low-level control, prefer `Face.tables.cmap`.
+    pub fn glyph_index(
+        self: Face,
+        code_point: u21,
+    ) ?GlyphId {
+        const t = self.tables.cmap orelse return null;
+        const subtables = t.subtables;
+
+        var iterator = subtables.iterator();
+        while (iterator.next()) |subtable|
+            if (subtable.is_unicode())
+                if (subtable.glyph_index(code_point)) |id|
+                    return id;
+
+        return null;
+    }
+
     fn apply_metrics_variation(
         self: Face,
         tag: u32,

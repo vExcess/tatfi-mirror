@@ -40,6 +40,8 @@ pub fn main() !void {
     _ = face.is_outline_embedding_allowed();
     const ur = face.unicode_ranges();
     _ = ur.contains_char('a');
+    _ = face.number_of_glyphs();
+    _ = face.glyph_index(4);
 
     const raw_tables: tetfy.RawFaceTables = .{};
     _ = tetfy.Face.from_raw_tables(raw_tables) catch {};
