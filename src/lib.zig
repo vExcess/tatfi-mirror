@@ -725,6 +725,160 @@ pub const Face = struct {
         return self.apply_metrics_variation(Tag.from_bytes("cpht"), v);
     }
 
+    /// Returns face's underline metrics.
+    ///
+    /// This method is affected by variation axes.
+    ///
+    /// Returns `null` when `post` table is not present.
+    pub fn underline_metrics(
+        self: Face,
+    ) ?LineMetrics {
+        const t = self.tables.post orelse return null;
+        var metrics = t.underline_metrics;
+
+        if (self.is_variable()) {
+            metrics.position = self.apply_metrics_variation(
+                Tag.from_bytes("undo"),
+                metrics.position,
+            );
+            metrics.thickness = self.apply_metrics_variation(
+                Tag.from_bytes("unds"),
+                metrics.thickness,
+            );
+        }
+
+        return metrics;
+    }
+
+    /// Returns face's strikeout metrics.
+    ///
+    /// This method is affected by variation axes.
+    ///
+    /// Returns `null` when OS/2 table is not present.
+    pub fn strikeout_metrics(
+        self: Face,
+    ) ?LineMetrics {
+        const t = self.tables.os2 orelse return null;
+        var metrics = t.strikeout_metrics();
+
+        if (self.is_variable()) {
+            metrics.position = self.apply_metrics_variation(
+                Tag.from_bytes("stro"),
+                metrics.position,
+            );
+            metrics.thickness = self.apply_metrics_variation(
+                Tag.from_bytes("strs"),
+                metrics.thickness,
+            );
+        }
+
+        return metrics;
+    }
+
+    /// Returns face's subscript metrics.
+    ///
+    /// This method is affected by variation axes.
+    ///
+    /// Returns `null` when OS/2 table is not present.
+    pub fn subscript_metrics(
+        self: Face,
+    ) ?tables.os2.ScriptMetrics {
+        const t = self.tables.os2 orelse return null;
+        var metrics = t.subscript_metrics();
+
+        if (self.is_variable()) {
+            metrics.x_size = self.apply_metrics_variation(
+                Tag.from_bytes("sbxs"),
+                metrics.x_size,
+            );
+            metrics.y_size = self.apply_metrics_variation(
+                Tag.from_bytes("sbys"),
+                metrics.y_size,
+            );
+            metrics.x_offset = self.apply_metrics_variation(
+                Tag.from_bytes("sbxo"),
+                metrics.x_offset,
+            );
+            metrics.y_offset = self.apply_metrics_variation(
+                Tag.from_bytes("sbyo"),
+                metrics.y_offset,
+            );
+        }
+
+        return metrics;
+    }
+
+    /// Returns face's superscript metrics.
+    ///
+    /// This method is affected by variation axes.
+    ///
+    /// Returns `null` when OS/2 table is not present.
+    pub fn superscript_metrics(
+        self: Face,
+    ) ?tables.os2.ScriptMetrics {
+        const t = self.tables.os2 orelse return null;
+        var metrics = t.superscript_metrics();
+
+        if (self.is_variable()) {
+            metrics.x_size = self.apply_metrics_variation(
+                Tag.from_bytes("spxs"),
+                metrics.x_size,
+            );
+            metrics.y_size = self.apply_metrics_variation(
+                Tag.from_bytes("spys"),
+                metrics.y_size,
+            );
+            metrics.x_offset = self.apply_metrics_variation(
+                Tag.from_bytes("spxo"),
+                metrics.x_offset,
+            );
+            metrics.y_offset = self.apply_metrics_variation(
+                Tag.from_bytes("spyo"),
+                metrics.y_offset,
+            );
+        }
+
+        return metrics;
+    }
+
+    /// Returns face permissions.
+    ///
+    /// Returns `null` in case of a malformed value.
+    pub fn permissions(
+        self: Face,
+    ) ?tables.os2.Permissions {
+        const t = self.tables.os2 orelse return null;
+        return t.permissions();
+    }
+
+    /// Checks if the face allows embedding a subset, further restricted by [`Self::permissions`].
+    pub fn is_subsetting_allowed(
+        self: Face,
+    ) bool {
+        const t = self.tables.os2 orelse return false;
+        return t.is_subsetting_allowed();
+    }
+
+    /// Checks if the face allows outline data to be embedded.
+    ///
+    /// If false, only bitmaps may be embedded in accordance with [`Self::permissions`].
+    ///
+    /// If the font contains no bitmaps and this flag is not set, it implies no embedding is allowed.
+    pub fn is_outline_embedding_allowed(
+        self: Face,
+    ) bool {
+        const t = self.tables.os2 orelse return false;
+        return t.is_outline_embedding_allowed();
+    }
+
+    /// Returns [Unicode Ranges](https://docs.microsoft.com/en-us/typography/opentype/spec/os2#ur).
+    pub fn unicode_ranges(
+        self: Face,
+    ) tables.os2.UnicodeRanges {
+        const t = self.tables.os2 orelse return .{};
+        return t.unicode_ranges();
+    }
+
     fn apply_metrics_variation(
         self: Face,
         tag: u32,

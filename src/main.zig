@@ -31,6 +31,15 @@ pub fn main() !void {
     _ = face.units_per_em();
     _ = face.x_height();
     _ = face.capital_height();
+    _ = face.underline_metrics();
+    _ = face.strikeout_metrics();
+    _ = face.subscript_metrics();
+    _ = face.superscript_metrics();
+    _ = face.permissions();
+    _ = face.is_subsetting_allowed();
+    _ = face.is_outline_embedding_allowed();
+    const ur = face.unicode_ranges();
+    _ = ur.contains_char('a');
 
     const raw_tables: tetfy.RawFaceTables = .{};
     _ = tetfy.Face.from_raw_tables(raw_tables) catch {};
