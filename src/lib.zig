@@ -913,6 +913,180 @@ pub const Face = struct {
         return null;
     }
 
+    /// Resolves a Glyph ID for a glyph name.
+    ///
+    /// Uses the `post` and `CFF` tables as sources.
+    ///
+    /// Returns `null` when no name is associated with a `glyph`.
+    pub fn glyph_index_by_name(
+        self: Face,
+        name: []const u8,
+    ) ?GlyphId {
+        if (self.tables.post) |post|
+            if (post.glyph_index_by_name(name)) |ret|
+                return ret;
+
+        if (self.tables.cff) |cff|
+            if (cff.glyph_index_by_name(name)) |ret|
+                return ret;
+
+        return null;
+    }
+
+    /// Resolves a variation of a Glyph ID from two code points.
+    ///
+    /// Implemented according to
+    /// [Unicode Variation Sequences](
+    /// https://docs.microsoft.com/en-us/typography/opentype/spec/cmap#format-14-unicode-variation-sequences).
+    ///
+    /// Returns `null` instead of `0` when glyph is not found.
+    pub fn glyph_variation_index(
+        self: Face,
+        code_point: u21,
+        variation: u21,
+    ) ?GlyphId {
+        const t = self.tables.cmap orelse return null;
+
+        var iter = t.subtables.iterator();
+
+        while (iter.next()) |subtable| {
+            if (subtable.format != .unicode_variation_sequences) continue;
+            const table = subtable.format.unicode_variation_sequences;
+            const match = table.glyph_index(code_point, variation) orelse return null;
+            switch (match) {
+                .found => |x| return x,
+                .use_default => return self.glyph_index(code_point),
+            }
+        }
+
+        return null;
+    }
+
+    /// Returns glyph's horizontal advance.
+    ///
+    /// This method is affected by variation axes.
+    ///
+    /// [ARS] A working allocator is not strictly needed.
+    pub fn glyph_hor_advance(
+        self: Face,
+        gpa: if (cfg.variable_fonts) std.mem.Allocator else void,
+        glyph_id: GlyphId,
+    ) ?u16 {
+        const t = self.tables.hmtx orelse return null;
+        const advance_maybe = t.advance(glyph_id);
+
+        if (cfg.variable_fonts) if (self.is_variable()) {
+            var advance = advance_maybe orelse return null;
+
+            // Ignore variation offset when `hvar` is not set.
+            if (self.tables.variable_fonts.hvar) |hvar| {
+                if (hvar.advance_offset(glyph_id, self.coords())) |offset| {
+                    // [ARS] bit of a hack re the TDOO in ttf_parser
+                    const offset_rounded = f32_to_u16(@round(offset)) orelse
+                        return null;
+                    advance += offset_rounded;
+                }
+            } else if (self.glyph_phantom_points(gpa, glyph_id)) |points| {
+                // [ARS] bit of a hack re the TDOO in ttf_parser
+                const points_rounded = f32_to_u16(@round(points.right.x)) orelse
+                    return null;
+                advance += points_rounded;
+            }
+
+            return advance;
+        };
+
+        return advance_maybe;
+    }
+
+    /// Returns glyph's vertical advance.
+    ///
+    /// This method is affected by variation axes.
+    ///
+    /// [ARS] A working allocator is not strictly needed.
+    pub fn glyph_ver_advance(
+        self: Face,
+        gpa: if (cfg.variable_fonts) std.mem.Allocator else void,
+        glyph_id: GlyphId,
+    ) ?u16 {
+        const t = self.tables.vmtx orelse return null;
+        const advance_maybe = t.advance(glyph_id);
+
+        if (cfg.variable_fonts) if (self.is_variable()) {
+            var advance = advance_maybe orelse return null;
+
+            // Ignore variation offset when `vvar` is not set.
+            if (self.tables.variable_fonts.vvar) |vvar| {
+                if (vvar.advance_offset(glyph_id, self.coords())) |offset| {
+                    // [ARS] bit of a hack re the TDOO in ttf_parser
+                    const offset_rounded = f32_to_u16(@round(offset)) orelse
+                        return null;
+                    advance += offset_rounded;
+                }
+            } else if (self.glyph_phantom_points(gpa, glyph_id)) |points| {
+                // [ARS] bit of a hack re the TDOO in ttf_parser
+                const points_rounded = f32_to_u16(@round(points.bottom.x)) orelse
+                    return null;
+                advance += points_rounded;
+            }
+
+            return advance;
+        };
+
+        return advance_maybe;
+    }
+
+    /// Returns glyph's horizontal side bearing.
+    ///
+    /// This method is affected by variation axes.
+    pub fn glyph_hor_side_bearing(
+        self: Face,
+        glyph_id: GlyphId,
+    ) ?i16 {
+        _ = self;
+        _ = glyph_id;
+
+        if (cfg.variable_fonts) {
+            //
+        } else {
+            // self.tables.hmtx?.side_bearing(glyph_id)
+        }
+        return null;
+    }
+
+    /// Returns glyph's vertical side bearing.
+    ///
+    /// This method is affected by variation axes.
+    pub fn glyph_ver_side_bearing(
+        self: Face,
+        glyph_id: GlyphId,
+    ) ?i16 {
+        _ = self;
+        _ = glyph_id;
+
+        if (cfg.variable_fonts) {
+            //
+        } else {
+            // self.tables.vmtx?.side_bearing(glyph_id)
+        }
+        return null;
+    }
+
+    /// Parses glyph's phantom points.
+    ///
+    /// Available only for variable fonts with the `gvar` table.
+    ///
+    /// [ARS] A working allocator is not strictly needed.
+    pub fn glyph_phantom_points(
+        self: Face,
+        gpa: if (cfg.variable_fonts) std.mem.Allocator else void,
+        glyph_id: GlyphId,
+    ) ?PhantomPoints {
+        const glyf = self.tables.glyf orelse return null;
+        const gvar = self.tables.variable_fonts.gvar orelse return null;
+        return gvar.phantom_points(gpa, glyf, self.coords(), glyph_id);
+    }
+
     fn apply_metrics_variation(
         self: Face,
         tag: u32,
@@ -1367,3 +1541,46 @@ fn f32_to_i16(v: f32) ?i16 {
     const i = f32_to_i32(v) orelse return null;
     return std.math.cast(i16, i);
 }
+
+fn f32_to_u16(v: f32) ?u16 {
+    const i = f32_to_i32(v) orelse return null;
+    return std.math.cast(u16, i);
+}
+
+/// Phantom points.
+///
+/// Available only for variable fonts with the `gvar` table.
+pub const PhantomPoints = struct {
+    /// Left side bearing point.
+    left: PointF,
+    /// Right side bearing point.
+    right: PointF,
+    /// Top side bearing point.
+    top: PointF,
+    /// Bottom side bearing point.
+    bottom: PointF,
+
+    /// A float point.
+    pub const PointF = struct {
+        /// The X-axis coordinate.
+        x: f32,
+        /// The Y-axis coordinate.
+        y: f32,
+    };
+};
+
+/// An affine transform.
+pub const Transform = struct {
+    /// The 'a' component of the transform.
+    a: f32 = 0.0,
+    /// The 'b' component of the transform.
+    b: f32 = 0.0,
+    /// The 'c' component of the transform.
+    c: f32 = 0.0,
+    /// The 'd' component of the transform.
+    d: f32 = 0.0,
+    /// The 'e' component of the transform.
+    e: f32 = 0.0,
+    /// The 'f' component of the transform.
+    f: f32 = 0.0,
+};

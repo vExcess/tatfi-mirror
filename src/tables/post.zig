@@ -1,9 +1,11 @@
 //! A [PostScript Table](
 //! https://docs.microsoft.com/en-us/typography/opentype/spec/post) implementation.
 
+const std = @import("std");
 const parser = @import("../parser.zig");
 
 const LineMetrics = @import("../lib.zig").LineMetrics;
+const GlyphId = @import("../lib.zig").GlyphId;
 
 const Fixed = parser.Fixed;
 const LazyArray16 = parser.LazyArray16;
@@ -68,5 +70,151 @@ pub const Table = struct {
             .names_data = names_data,
             .glyph_indices = glyph_indices,
         };
+    }
+
+    /// Returns a glyph ID by a name.
+    pub fn glyph_index_by_name(
+        self: Table,
+        name: []const u8,
+    ) ?GlyphId {
+        const id = id: for (MACINTOSH_NAMES, 0..) |n, index| {
+            if (!std.mem.eql(u8, name, n)) continue;
+            var iter = self.glyph_indices.iterator();
+            var pos: usize = 0;
+            while (iter.next()) |glyph_idx| : (pos += 1) {
+                if (glyph_idx == index)
+                    break :id pos;
+            } else return null;
+        } else {
+            const index = i: {
+                var iter = self.names();
+                var pos: usize = 0;
+                const index = while (iter.next()) |n| : (pos += 1) {
+                    if (std.mem.eql(u8, name, n)) break pos;
+                } else return null;
+                break :i index + MACINTOSH_NAMES.len;
+            };
+
+            var iter = self.glyph_indices.iterator();
+            var pos: usize = 0;
+            while (iter.next()) |glyph_idx| : (pos += 1) {
+                if (glyph_idx == index)
+                    break :id pos;
+            } else return null;
+        };
+
+        return .{@truncate(id)};
+    }
+
+    /// Returns an iterator over glyph names.
+    ///
+    /// Default/predefined names are not included. Just the one in the font file.
+    pub fn names(
+        self: Table,
+    ) Names {
+        return .{
+            .data = self.names_data,
+            .offset = 0,
+        };
+    }
+};
+
+// https://developer.apple.com/fonts/TrueType-Reference-Manual/RM06/Chap6post.html
+/// A list of Macintosh glyph names.
+const MACINTOSH_NAMES: []const []const u8 = &.{
+    ".notdef",          ".null",         "nonmarkingreturn", "space",
+    "exclam",           "quotedbl",      "numbersign",       "dollar",
+    "percent",          "ampersand",     "quotesingle",      "parenleft",
+    "parenright",       "asterisk",      "plus",             "comma",
+    "hyphen",           "period",        "slash",            "zero",
+    "one",              "two",           "three",            "four",
+    "five",             "six",           "seven",            "eight",
+    "nine",             "colon",         "semicolon",        "less",
+    "equal",            "greater",       "question",         "at",
+    "A",                "B",             "C",                "D",
+    "E",                "F",             "G",                "H",
+    "I",                "J",             "K",                "L",
+    "M",                "N",             "O",                "P",
+    "Q",                "R",             "S",                "T",
+    "U",                "V",             "W",                "X",
+    "Y",                "Z",             "bracketleft",      "backslash",
+    "bracketright",     "asciicircum",   "underscore",       "grave",
+    "a",                "b",             "c",                "d",
+    "e",                "f",             "g",                "h",
+    "i",                "j",             "k",                "l",
+    "m",                "n",             "o",                "p",
+    "q",                "r",             "s",                "t",
+    "u",                "v",             "w",                "x",
+    "y",                "z",             "braceleft",        "bar",
+    "braceright",       "asciitilde",    "Adieresis",        "Aring",
+    "Ccedilla",         "Eacute",        "Ntilde",           "Odieresis",
+    "Udieresis",        "aacute",        "agrave",           "acircumflex",
+    "adieresis",        "atilde",        "aring",            "ccedilla",
+    "eacute",           "egrave",        "ecircumflex",      "edieresis",
+    "iacute",           "igrave",        "icircumflex",      "idieresis",
+    "ntilde",           "oacute",        "ograve",           "ocircumflex",
+    "odieresis",        "otilde",        "uacute",           "ugrave",
+    "ucircumflex",      "udieresis",     "dagger",           "degree",
+    "cent",             "sterling",      "section",          "bullet",
+    "paragraph",        "germandbls",    "registered",       "copyright",
+    "trademark",        "acute",         "dieresis",         "notequal",
+    "AE",               "Oslash",        "infinity",         "plusminus",
+    "lessequal",        "greaterequal",  "yen",              "mu",
+    "partialdiff",      "summation",     "product",          "pi",
+    "integral",         "ordfeminine",   "ordmasculine",     "Omega",
+    "ae",               "oslash",        "questiondown",     "exclamdown",
+    "logicalnot",       "radical",       "florin",           "approxequal",
+    "Delta",            "guillemotleft", "guillemotright",   "ellipsis",
+    "nonbreakingspace", "Agrave",        "Atilde",           "Otilde",
+    "OE",               "oe",            "endash",           "emdash",
+    "quotedblleft",     "quotedblright", "quoteleft",        "quoteright",
+    "divide",           "lozenge",       "ydieresis",        "Ydieresis",
+    "fraction",         "currency",      "guilsinglleft",    "guilsinglright",
+    "fi",               "fl",            "daggerdbl",        "periodcentered",
+    "quotesinglbase",   "quotedblbase",  "perthousand",      "Acircumflex",
+    "Ecircumflex",      "Aacute",        "Edieresis",        "Egrave",
+    "Iacute",           "Icircumflex",   "Idieresis",        "Igrave",
+    "Oacute",           "Ocircumflex",   "apple",            "Ograve",
+    "Uacute",           "Ucircumflex",   "Ugrave",           "dotlessi",
+    "circumflex",       "tilde",         "macron",           "breve",
+    "dotaccent",        "ring",          "cedilla",          "hungarumlaut",
+    "ogonek",           "caron",         "Lslash",           "lslash",
+    "Scaron",           "scaron",        "Zcaron",           "zcaron",
+    "brokenbar",        "Eth",           "eth",              "Yacute",
+    "yacute",           "Thorn",         "thorn",            "minus",
+    "multiply",         "onesuperior",   "twosuperior",      "threesuperior",
+    "onehalf",          "onequarter",    "threequarters",    "franc",
+    "Gbreve",           "gbreve",        "Idotaccent",       "Scedilla",
+    "scedilla",         "Cacute",        "cacute",           "Ccaron",
+    "ccaron",           "dcroat",
+};
+
+/// An iterator over glyph names.
+///
+/// The `post` table doesn't provide the glyph names count,
+/// so we have to simply iterate over all of them to find it out.
+///
+/// [ARS] Does not verify it is valid utf8
+pub const Names = struct {
+    data: []const u8,
+    offset: usize,
+
+    fn next(
+        self: *Names,
+    ) ?[]const u8 {
+        // Glyph names are stored as Pascal Strings.
+        // Meaning u8 (len) + [u8] (data).
+
+        if (self.offset >= self.data.len) return null;
+
+        const len = self.data[self.offset];
+        self.offset += 1;
+
+        // An empty name is an error.
+        if (len == 0) return null;
+
+        if (self.offset > self.data.len or self.offset + len > self.data.len) return null;
+        self.offset += len;
+        return self.data[self.offset..][0..len];
     }
 };

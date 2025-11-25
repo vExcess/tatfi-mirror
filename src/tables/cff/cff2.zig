@@ -8,7 +8,7 @@ const parser = @import("../../parser.zig");
 const idx = @import("index.zig");
 
 const Index = idx.Index;
-const ItemVariationStore = @import("../../var_store.zig").ItemVariationStore;
+const ItemVariationStore = @import("../../var_store.zig");
 const DictionaryParser = @import("dict.zig").DictionaryParser;
 
 // https://docs.microsoft.com/en-us/typography/opentype/spec/cff2#7-top-dict-data

@@ -3,8 +3,8 @@
 
 const cfg = @import("config");
 const parser = @import("../parser.zig");
-const var_store = @import("../var_store.zig");
 
+const ItemVariationStore = @import("../var_store.zig");
 const GlyphId = @import("../lib.zig").GlyphId;
 const ClassDefinition = @import("../ggg.zig").ClassDefinition;
 
@@ -17,7 +17,7 @@ pub const Table = struct {
     glyph_classes: ?ClassDefinition,
     mark_attach_classes: ?ClassDefinition,
     mark_glyph_coverage_offsets: ?struct { []const u8, LazyArray16(Offset32) },
-    variation_store: if (cfg.variable_fonts) ?var_store.ItemVariationStore else void,
+    variation_store: if (cfg.variable_fonts) ?ItemVariationStore else void,
 
     /// Parses a table from raw data.
     pub fn parse(
@@ -75,7 +75,7 @@ pub const Table = struct {
                 const subdata = data[offset[0]..];
                 var sub_s = parser.Stream.new(subdata);
 
-                break :o var_store.ItemVariationStore.parse(&sub_s) catch null;
+                break :o ItemVariationStore.parse(&sub_s) catch null;
             },
         };
     }

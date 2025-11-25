@@ -4,6 +4,8 @@
 const std = @import("std");
 const parser = @import("../parser.zig");
 
+const GlyphId = @import("../lib.zig").GlyphId;
+
 const LazyArray16 = parser.LazyArray16;
 
 /// An [Index to Location Table](https://docs.microsoft.com/en-us/typography/opentype/spec/loca).
@@ -46,5 +48,45 @@ pub const Table = union(enum) {
             .short => .{ .short = try s.read_array(u16, total) },
             .long => .{ .long = try s.read_array(u32, total) },
         };
+    }
+
+    /// Returns the number of offsets.
+    pub fn len(
+        self: Table,
+    ) u16 {
+        return switch (self) {
+            inline else => |array| array.len(),
+        };
+    }
+
+    /// Returns glyph's range in the `glyf` table.
+    pub fn glyph_range(
+        self: Table,
+        glyph_id: GlyphId,
+    ) ?struct { usize, usize } {
+        const id = glyph_id[0];
+        if (id == std.math.maxInt(u16)) return null;
+
+        // Glyph ID must be smaller than total number of values in a `loca` array.
+        if (id + 1 >= self.len()) return null;
+
+        const start: usize, const end: usize = switch (self) {
+            .short => |array| .{
+                // 'The actual local offset divided by 2 is stored.'
+                (array.get(id) orelse return null) * 2,
+                (array.get(id + 1) orelse return null) * 2,
+            },
+            .long => |array| .{
+                (array.get(id) orelse return null),
+                (array.get(id + 1) orelse return null),
+            },
+        };
+
+        return if (start >= end)
+            // 'The offsets must be in ascending order.'
+            // And range cannot be empty.
+            null
+        else
+            .{ start, end };
     }
 };

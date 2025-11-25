@@ -39,8 +39,8 @@ pub fn LazyArray(I: type, T: type) type {
             if (@typeInfo(T) == .optional) @compileError("use get_optional");
             const size: usize = switch (has_trait(T, "FromData")) {
                 .int => @typeInfo(T).int.bits / 8,
-                .wrapper => |F| @typeInfo(F).int.bits / 8,
                 .impl => T.FromData.SIZE,
+                inline else => |F| @typeInfo(F).int.bits / 8,
             };
 
             if (index >= self.len()) return null;
@@ -52,6 +52,8 @@ pub fn LazyArray(I: type, T: type) type {
             return switch (has_trait(T, "FromData")) {
                 .int => std.mem.readInt(T, bytes, .big),
                 .wrapper => |F| .{std.mem.readInt(F, bytes, .big)},
+                .fancy_wrapper => |F| .{ .inner = std.mem.readInt(F, bytes, .big) },
+                .flags => |F| @bitCast(std.mem.readInt(F, bytes[0..size], .big)),
                 .impl => T.FromData.parse(bytes) catch return null,
             };
         }
@@ -90,8 +92,8 @@ pub fn LazyArray(I: type, T: type) type {
         ) I {
             const size: usize = switch (has_trait(T, "FromData")) {
                 .int => @typeInfo(T).int.bits / 8,
-                .wrapper => |F| @typeInfo(F).int.bits / 8,
                 .impl => T.FromData.SIZE,
+                inline else => |F| @typeInfo(F).int.bits / 8,
             };
 
             return @truncate(self.data.len / size);
@@ -156,6 +158,23 @@ pub fn LazyArray(I: type, T: type) type {
                 return .{ base, value };
             } else return null;
         }
+
+        /// Returns sub-array.
+        pub fn slice(
+            self: Self,
+            start: I,
+            end: I,
+        ) ?Self {
+            const size: usize = switch (has_trait(T, "FromData")) {
+                .int => @typeInfo(T).int.bits / 8,
+                .impl => T.FromData.SIZE,
+                inline else => |F| @typeInfo(F).int.bits / 8,
+            };
+
+            const start_t = start * size;
+            const end_t = end * size;
+            return .{ .data = self.data[start_t..end_t] };
+        }
     };
 }
 
@@ -212,7 +231,14 @@ pub const Offset24 = struct { u24 };
 pub const Offset16 = struct { u16 };
 
 /// A 16-bit signed fixed number with the low 14 bits of fraction (2.14).
-pub const F2DOT14 = struct { i16 };
+pub const F2DOT14 = struct {
+    inner: i16,
+
+    pub fn to_f32(i: F2DOT14) f32 {
+        const f: f32 = @floatFromInt(i.inner);
+        return f / (1 << 14);
+    }
+};
 
 /// A 32-bit signed fixed-point number (16.16).
 pub const Fixed = struct {
@@ -237,6 +263,8 @@ pub const Fixed = struct {
 pub const Stream = struct {
     data: []const u8,
     offset: usize,
+
+    pub const empty: Stream = .{ .data = &.{}, .offset = 0 };
 
     /// Creates a new `Stream` parser.
     pub fn new(
@@ -268,8 +296,8 @@ pub const Stream = struct {
     ) Error!T {
         const size: usize = switch (has_trait(T, "FromData")) {
             .int => @typeInfo(T).int.bits / 8,
-            .wrapper => |F| @typeInfo(F).int.bits / 8,
             .impl => T.FromData.SIZE,
+            inline else => |F| @typeInfo(F).int.bits / 8,
         };
 
         const bytes = try self.read_bytes(size);
@@ -277,6 +305,8 @@ pub const Stream = struct {
         return switch (has_trait(T, "FromData")) {
             .int => std.mem.readInt(T, bytes[0..size], .big),
             .wrapper => |F| .{std.mem.readInt(F, bytes[0..size], .big)},
+            .fancy_wrapper => |F| .{ .inner = std.mem.readInt(F, bytes[0..size], .big) },
+            .flags => |F| @bitCast(std.mem.readInt(F, bytes[0..size], .big)),
             .impl => try T.FromData.parse(bytes[0..size]),
         };
     }
@@ -342,8 +372,8 @@ pub const Stream = struct {
     ) Error!LazyArray(@TypeOf(count), T) {
         const size: usize = switch (has_trait(T, "FromData")) {
             .int => @typeInfo(T).int.bits / 8,
-            .wrapper => |F| @typeInfo(F).int.bits / 8,
             .impl => T.FromData.SIZE,
+            inline else => |F| @typeInfo(F).int.bits / 8,
         };
 
         const len = count * size;
@@ -392,8 +422,8 @@ pub const Stream = struct {
     ) void {
         const size: usize = switch (has_trait(T, "FromData")) {
             .int => @typeInfo(T).int.bits / 8,
-            .wrapper => |F| @typeInfo(F).int.bits / 8,
             .impl => T.FromData.SIZE,
+            inline else => |F| @typeInfo(F).int.bits / 8,
         };
 
         self.advance(size);
@@ -435,6 +465,15 @@ pub const Stream = struct {
     ) bool {
         return self.offset >= self.data.len;
     }
+
+    /// Jumps to the end of the stream.
+    ///
+    /// Useful to indicate that we parsed all the data.
+    pub fn jump_to_end(
+        self: *Stream,
+    ) void {
+        self.offset = self.data.len;
+    }
 };
 
 pub const Error = error{
@@ -445,24 +484,47 @@ pub const Error = error{
 inline fn has_trait(
     T: type,
     comptime trait: []const u8,
-) union(enum) { int, wrapper: type, impl } {
-    const type_info = @typeInfo(T);
-    switch (type_info) {
+) union(enum) {
+    int,
+    wrapper: type,
+    fancy_wrapper: type,
+    flags: type,
+    impl,
+} {
+    switch (@typeInfo(T)) {
         .int => {
-            if (type_info.int.bits % 8 != 0) @compileError(@typeName(T) ++
-                " must have bitcount divisble by 8");
+            assert_divisible_by_8(T, T);
             return .int;
         },
         .@"struct" => |s| {
             if (@hasDecl(T, trait)) return .impl;
-            if (s.is_tuple and s.fields.len == 1)
-                return .{ .wrapper = s.fields[0].type };
 
-            @compileError(@typeName(T) ++ " does not implement trait " ++ trait);
+            if (s.backing_integer) |F| {
+                assert_divisible_by_8(F, T);
+                return .{ .flags = F };
+            }
+
+            if (s.fields.len == 1) {
+                const F = s.fields[0].type;
+                assert_divisible_by_8(F, T);
+
+                if (s.is_tuple)
+                    return .{ .wrapper = F };
+
+                if (@hasField(T, "inner"))
+                    return .{ .fancy_wrapper = F };
+            }
         },
-        else => if (@hasDecl(T, trait))
-            return .impl
-        else
-            @compileError(@typeName(T) ++ " does not implement trait " ++ trait),
+        else => if (@hasDecl(T, trait)) return .impl,
     }
+
+    @compileError(@typeName(T) ++ " does not implement trait " ++ trait);
+}
+
+fn assert_divisible_by_8(
+    F: type,
+    T: type,
+) void {
+    if (@typeInfo(F).int.bits % 8 != 0)
+        @compileError(@typeName(T) ++ " must have bitcount divisble by 8");
 }

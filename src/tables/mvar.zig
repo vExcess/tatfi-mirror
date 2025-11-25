@@ -3,8 +3,8 @@
 
 const std = @import("std");
 const parser = @import("../parser.zig");
-const ItemVariationStore = @import("../var_store.zig").ItemVariationStore;
 
+const ItemVariationStore = @import("../var_store.zig");
 const Tag = @import("../lib.zig").Tag;
 const NormalizedCoordinate = @import("../lib.zig").NormalizedCoordinate;
 

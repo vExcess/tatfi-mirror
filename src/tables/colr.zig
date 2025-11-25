@@ -6,10 +6,10 @@
 
 const cfg = @import("config");
 const parser = @import("../parser.zig");
-const delta_set = @import("../delta_set.zig");
-const var_store = @import("../var_store.zig");
 const cpal = @import("cpal.zig");
 
+const ItemVariationStore = @import("../var_store.zig");
+const DeltaSetIndexMap = @import("../delta_set.zig");
 const GlyphId = @import("../lib.zig").GlyphId;
 
 const LazyArray16 = parser.LazyArray16;
@@ -36,8 +36,8 @@ pub const Table = struct {
     clip_list_offsets_offset: Offset32,
     clip_list: ClipList,
     variable_fonts: if (cfg.variable_fonts) struct {
-        var_index_map: ?delta_set.DeltaSetIndexMap = null,
-        item_variation_store: ?var_store.ItemVariationStore = null,
+        var_index_map: ?DeltaSetIndexMap = null,
+        item_variation_store: ?ItemVariationStore = null,
     } else void,
 
     /// Parses a table from raw data.
@@ -132,7 +132,7 @@ pub const Table = struct {
 
                 var siv = parser.Stream.new(item_var_data);
                 table.variable_fonts.item_variation_store =
-                    try var_store.ItemVariationStore.parse(&siv);
+                    try ItemVariationStore.parse(&siv);
             }
 
             if (var_index_map_offset) |offset| {

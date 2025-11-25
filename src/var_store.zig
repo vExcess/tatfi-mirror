@@ -9,106 +9,103 @@ const NormalizedCoordinate = @import("lib.zig").NormalizedCoordinate;
 
 const LazyArray16 = parser.LazyArray16;
 
-pub const ItemVariationStore = struct {
-    data: []const u8 = &.{},
-    data_offsets: LazyArray16(u32) = .{},
-    regions: VariationRegionList = .{},
+const ItemVariationStore = @This();
 
-    pub fn parse(
-        s: *parser.Stream,
-    ) parser.Error!ItemVariationStore {
-        const data = try s.tail();
+data: []const u8 = &.{},
+data_offsets: LazyArray16(u32) = .{},
+regions: VariationRegionList = .{},
 
-        var regions_s: parser.Stream = .{
-            .data = s.data,
-            .offset = s.offset,
+pub fn parse(
+    s: *parser.Stream,
+) parser.Error!ItemVariationStore {
+    const data = try s.tail();
+
+    var regions_s: parser.Stream = .{
+        .data = s.data,
+        .offset = s.offset,
+    };
+    const format = try s.read(u16);
+    if (format != 1) return error.ParseFail;
+
+    const region_list_offset = try s.read(u32);
+    const count = try s.read(u16);
+    const offsets = try s.read_array(u32, count);
+
+    const regions: VariationRegionList = r: {
+        regions_s.advance(region_list_offset);
+        // [RazrFalcon] TODO: should be the same as in `fvar`
+        const axis_count = try regions_s.read(u16);
+        const regions_count = try regions_s.read(u16);
+        const total = try std.math.mul(u16, regions_count, axis_count);
+
+        break :r .{
+            .axis_count = axis_count,
+            .regions = try regions_s.read_array(RegionAxisCoordinatesRecord, total),
         };
-        const format = try s.read(u16);
-        if (format != 1) return error.ParseFail;
+    };
 
-        const region_list_offset = try s.read(u32);
-        const count = try s.read(u16);
-        const offsets = try s.read_array(u32, count);
+    return .{
+        .data = data,
+        .data_offsets = offsets,
+        .regions = regions,
+    };
+}
 
-        const regions: VariationRegionList = r: {
-            regions_s.advance(region_list_offset);
-            // [RazrFalcon] TODO: should be the same as in `fvar`
-            const axis_count = try regions_s.read(u16);
-            const regions_count = try regions_s.read(u16);
-            const total = std.math.mul(u16, regions_count, axis_count) catch
-                return error.ParseFail;
+pub fn parse_delta(
+    self: ItemVariationStore,
+    outer_index: u16,
+    inner_index: u16,
+    coordinates: []const NormalizedCoordinate,
+) parser.Error!f32 {
+    const offset = self.data_offsets.get(outer_index) orelse return error.ParseFail;
 
-            break :r .{
-                .axis_count = axis_count,
-                .regions = try regions_s.read_array(RegionAxisCoordinatesRecord, total),
-            };
-        };
+    var s = try parser.Stream.new_at(self.data, offset);
+    const item_count = try s.read(u16);
+    const word_delta_count_raw = try s.read(u16);
+    const region_index_count = try s.read(u16);
+    const region_indices = try s.read_array(u16, region_index_count);
 
-        return .{
-            .data = data,
-            .data_offsets = offsets,
-            .regions = regions,
-        };
+    if (inner_index >= item_count) return error.ParseFail;
+
+    const has_long_words = (word_delta_count_raw & 0x8000) != 0;
+    const word_delta_count = word_delta_count_raw & 0x7FFF;
+
+    // From the spec: The length of the data for each row, in bytes, is
+    // regionIndexCount + (wordDeltaCount & WORD_DELTA_COUNT_MASK)
+    // if the LONG_WORDS flag is not set, or 2 x that amount if the flag is set.
+    var delta_set_len = word_delta_count + region_index_count;
+    if (has_long_words) delta_set_len *= 2;
+
+    const advnacement = try std.math.mul(usize, inner_index, delta_set_len);
+    s.advance(advnacement);
+
+    var delta: f32 = 0.0;
+    var i: u16 = 0;
+    while (i < word_delta_count) {
+        const idx = region_indices.get(i) orelse return error.ParseFail;
+        const num: f32 = if (has_long_words)
+            // TODO: use f64?
+            @floatFromInt(try s.read(i32))
+        else
+            @floatFromInt(try s.read(i16));
+
+        delta += num * self.regions.evaluate_region(idx, coordinates);
+        i += 1;
     }
 
-    pub fn parse_delta(
-        self: ItemVariationStore,
-        outer_index: u16,
-        inner_index: u16,
-        coordinates: []const NormalizedCoordinate,
-    ) parser.Error!f32 {
-        const offset = self.data_offsets.get(outer_index) orelse
-            return error.ParseFail;
+    while (i < region_index_count) {
+        const idx = region_indices.get(i) orelse return error.ParseFail;
+        const num: f32 = if (has_long_words)
+            @floatFromInt(try s.read(i16))
+        else
+            @floatFromInt(try s.read(i8));
 
-        var s = try parser.Stream.new_at(self.data, offset);
-        const item_count = try s.read(u16);
-        const word_delta_count_raw = try s.read(u16);
-        const region_index_count = try s.read(u16);
-        const region_indices = try s.read_array(u16, region_index_count);
-
-        if (inner_index >= item_count) return error.ParseFail;
-
-        const has_long_words = (word_delta_count_raw & 0x8000) != 0;
-        const word_delta_count = word_delta_count_raw & 0x7FFF;
-
-        // From the spec: The length of the data for each row, in bytes, is
-        // regionIndexCount + (wordDeltaCount & WORD_DELTA_COUNT_MASK)
-        // if the LONG_WORDS flag is not set, or 2 x that amount if the flag is set.
-        var delta_set_len = word_delta_count + region_index_count;
-        if (has_long_words) delta_set_len *= 2;
-
-        const advnacement = std.math.mul(usize, inner_index, delta_set_len) catch
-            return error.ParseFail;
-        s.advance(advnacement);
-
-        var delta: f32 = 0.0;
-        var i: u16 = 0;
-        while (i < word_delta_count) {
-            const idx = region_indices.get(i) orelse return error.ParseFail;
-            const num: f32 = if (has_long_words)
-                // TODO: use f64?
-                @floatFromInt(try s.read(i32))
-            else
-                @floatFromInt(try s.read(i16));
-
-            delta += num * self.regions.evaluate_region(idx, coordinates);
-            i += 1;
-        }
-
-        while (i < region_index_count) {
-            const idx = region_indices.get(i) orelse return error.ParseFail;
-            const num: f32 = if (has_long_words)
-                @floatFromInt(try s.read(i16))
-            else
-                @floatFromInt(try s.read(i8));
-
-            delta += num * self.regions.evaluate_region(idx, coordinates);
-            i += 1;
-        }
-
-        return delta;
+        delta += num * self.regions.evaluate_region(idx, coordinates);
+        i += 1;
     }
-};
+
+    return delta;
+}
 
 pub const VariationRegionList = struct {
     axis_count: u16 = 0,

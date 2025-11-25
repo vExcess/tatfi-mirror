@@ -2,6 +2,7 @@ const std = @import("std");
 const parser = @import("../../parser.zig");
 
 const StringId = @import("../cff.zig").StringId;
+const GlyphId = @import("../../lib.zig").GlyphId;
 
 const LazyArray16 = parser.LazyArray16;
 
@@ -60,6 +61,55 @@ pub const Charset = union(enum) {
                 return .{ .format2 = try s.read_array(Format2Range, count) };
             },
             else => return error.ParseFail,
+        }
+    }
+
+    pub fn sid_to_gid(
+        self: Charset,
+        sid: StringId,
+    ) ?GlyphId {
+        if (sid[0] == 0) return .{0};
+
+        switch (self) {
+            .iso_adobe,
+            .expert,
+            .expert_subset,
+            => return null,
+            .format0 => |array| {
+                // First glyph is omitted, so we have to add 1.
+                var iter = array.iterator();
+                var pos: usize = 0;
+                while (iter.next()) |n| : (pos += 1) {
+                    if (n[0] == sid[0]) return .{@truncate(pos + 1)};
+                } else return null;
+            },
+            .format1 => |array| {
+                var id: u16 = 1;
+                var iter = array.iterator();
+                while (iter.next()) |range| {
+                    const last = @as(u32, range.first[0]) + range.left;
+                    if (range.first[0] <= sid[0] and sid[0] <= last) {
+                        id += sid[0] - range.first[0];
+                        return .{id};
+                    }
+
+                    id += range.left + 1;
+                } else return null;
+            },
+            .format2 => |array| {
+                // The same as format 1, but Range::left is u16.
+                var id: u16 = 1;
+                var iter = array.iterator();
+                while (iter.next()) |range| {
+                    const last = @as(u32, range.first[0]) + range.left;
+                    if (range.first[0] <= sid[0] and sid[0] <= last) {
+                        id += sid[0] - range.first[0];
+                        return .{id};
+                    }
+
+                    id += range.left + 1;
+                } else return null;
+            },
         }
     }
 };
