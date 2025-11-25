@@ -2,7 +2,11 @@
 //! https://docs.microsoft.com/en-us/typography/opentype/spec/hvar) implementation.
 
 const parser = @import("../parser.zig");
-const ItemVariationStore = @import("../var_store.zig").ItemVariationStore;
+
+const DeltaSetIndexMap = @import("../delta_set.zig");
+const ItemVariationStore = @import("../var_store.zig");
+const GlyphId = @import("../lib.zig").GlyphId;
+const NormalizedCoordinate = @import("../lib.zig").NormalizedCoordinate;
 
 const Offset32 = parser.Offset32;
 
@@ -35,5 +39,27 @@ pub const Table = struct {
             .lsb_mapping_offset = try s.read_optional(Offset32),
             .rsb_mapping_offset = try s.read_optional(Offset32),
         };
+    }
+
+    /// Returns the advance width offset for a glyph.
+    pub fn advance_offset(
+        self: Table,
+        glyph_id: GlyphId,
+        coordinates: []const NormalizedCoordinate,
+    ) ?f32 {
+        const outer_idx, const inner_idx =
+            if (self.advance_width_mapping_offset) |offset| o: {
+                if (offset[0] > self.data.len) return null;
+                const data = self.data[offset[0]..];
+
+                break :o DeltaSetIndexMap.new(data).map(glyph_id[0]) orelse return null;
+            } else
+            // 'If there is no delta-set index mapping table for advance widths,
+            // then glyph IDs implicitly provide the indices:
+            // for a given glyph ID, the delta-set outer-level index is zero,
+            // and the glyph ID is the delta-set inner-level index.'
+            .{ 0, glyph_id[0] };
+
+        return self.variation_store.parse_delta(outer_idx, inner_idx, coordinates) catch null;
     }
 };

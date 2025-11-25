@@ -4,6 +4,7 @@
 const std = @import("std");
 const parser = @import("../parser.zig");
 
+const GlyphId = @import("../lib.zig").GlyphId;
 const LazyArray16 = parser.LazyArray16;
 
 /// A [Horizontal/Vertical Metrics Table](
@@ -53,6 +54,24 @@ pub const Table = struct {
             .bearings = bearings,
             .number_of_metrics = number_of_metrics,
         };
+    }
+
+    /// Returns advance for a glyph.
+    pub fn advance(
+        self: Table,
+        glyph_id: GlyphId,
+    ) ?u16 {
+        if (glyph_id[0] >= self.number_of_metrics) return null;
+
+        if (self.metrics.get(glyph_id[0])) |metrics|
+            return metrics.advance
+        else {
+            // 'As an optimization, the number of records can be less than the number of glyphs,
+            // in which case the advance value of the last record applies
+            // to all remaining glyph IDs.'
+            const last = self.metrics.last() orelse return null;
+            return last.advance;
+        }
     }
 };
 

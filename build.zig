@@ -5,7 +5,7 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("src/lib.zig"),
     });
 
-    _ = add_config(b, mod, &.{
+    const options = add_config(b, mod, &.{
         .{
             .name = "variable_fonts",
             .desc =
@@ -22,6 +22,17 @@ pub fn build(b: *std.Build) void {
             .desc = "Enables ankr, feat, format1 subtable in kern, kerx, morx and trak tables",
         },
     });
+
+    // In the `gvar` table it is impossibe to avoid allocations. This determines the
+    // amount of variable tuples allocated on the stack. 32 is enough for most fonts
+    // (which use 10-20 tuples), although the spec allows up to 4095.
+    //
+    // Functions going that route take an allocator parameter.
+    const gvar = b.option(u7, "gvar_max_stack_tuples_len",
+        \\Amount of stack allocation for the gvar table's variation tuples, before spilling to heap.
+        \\Most fonts are in the 10-20 range.
+    ) orelse 32;
+    options.addOption(usize, "gvar_max_stack_tuples_len", gvar);
 
     if (b.pkg_hash.len == 0)
         set_up_testing_exe(b, mod);

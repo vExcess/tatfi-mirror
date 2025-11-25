@@ -43,6 +43,30 @@ pub fn main() !void {
     _ = face.number_of_glyphs();
     _ = face.glyph_index(4);
 
+    _ = face.glyph_index_by_name("boo");
+    _ = face.glyph_variation_index(5, 0);
+
+    _ = face.glyph_hor_advance(failing_allocator, .{9});
+    _ = face.glyph_ver_advance(failing_allocator, .{9});
+
+    _ = face.glyph_hor_side_bearing(.{3});
+    _ = face.glyph_ver_side_bearing(.{3});
+
     const raw_tables: tetfy.RawFaceTables = .{};
     _ = tetfy.Face.from_raw_tables(raw_tables) catch {};
+}
+
+// [ARS] To be replaced by std.mem.Allocator.failing should zig upgrade to 0.16.*
+pub const failing_allocator: std.mem.Allocator = .{
+    .ptr = undefined,
+    .vtable = &vtable,
+};
+const vtable: std.mem.Allocator.VTable = .{
+    .alloc = noAlloc,
+    .resize = std.mem.Allocator.noResize,
+    .remap = std.mem.Allocator.noRemap,
+    .free = std.mem.Allocator.noFree,
+};
+fn noAlloc(_: *anyopaque, _: usize, _: std.mem.Alignment, _: usize) ?[*]u8 {
+    return null;
 }
