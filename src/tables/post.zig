@@ -117,6 +117,30 @@ pub const Table = struct {
             .offset = 0,
         };
     }
+
+    /// Returns a glyph name by ID.
+    pub fn glyph_name(
+        self: Table,
+        glyph_id: GlyphId,
+    ) ?[]const u8 {
+        const index = self.glyph_indices.get(glyph_id[0]) orelse return null;
+
+        // 'If the name index is between 0 and 257, treat the name index
+        // as a glyph index in the Macintosh standard order.'
+        if (index < MACINTOSH_NAMES.len)
+            return MACINTOSH_NAMES[index]
+        else {
+            // 'If the name index is between 258 and 65535, then subtract 258 and use that
+            // to index into the list of Pascal strings at the end of the table.'
+            const pascal_idx = index - MACINTOSH_NAMES.len;
+            var iter = self.names();
+            var counter: usize = 0;
+            while (iter.next()) |n| : (counter += 1)
+                if (counter == pascal_idx) return n;
+
+            return null;
+        }
+    }
 };
 
 // https://developer.apple.com/fonts/TrueType-Reference-Manual/RM06/Chap6post.html

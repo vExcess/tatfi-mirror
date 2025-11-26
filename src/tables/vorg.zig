@@ -1,6 +1,7 @@
 //! A [Vertical Origin Table](
 //! https://docs.microsoft.com/en-us/typography/opentype/spec/vorg) implementation.
 
+const std = @import("std");
 const parser = @import("../parser.zig");
 
 const GlyphId = @import("../lib.zig").GlyphId;
@@ -33,6 +34,22 @@ pub const Table = struct {
             .default_y = default_y,
             .metrics = metrics,
         };
+    }
+
+    /// Returns glyph's Y origin.
+    pub fn glyph_y_origin(
+        self: Table,
+        glyph_id: GlyphId,
+    ) i16 {
+        const func = struct {
+            fn func(m: VerticalOriginMetrics, gi: GlyphId) std.math.Order {
+                return std.math.order(m.glyph_id[0], gi[0]);
+            }
+        }.func;
+
+        _, const vom = self.metrics.binary_search_by(glyph_id, func) orelse
+            return self.default_y;
+        return vom.y;
     }
 };
 

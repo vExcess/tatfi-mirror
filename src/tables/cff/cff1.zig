@@ -186,6 +186,21 @@ pub const Table = struct {
 
         return self.charset.sid_to_gid(sid);
     }
+
+    /// Returns a glyph name.
+    pub fn glyph_name(
+        self: Table,
+        glyph_id: GlyphId,
+    ) ?[]const u8 {
+        if (self.kind == .cid) return null;
+
+        const sid = self.charset.gid_to_sid(glyph_id) orelse return null;
+
+        if (sid[0] < STANDARD_NAMES.len) return STANDARD_NAMES[sid[0]];
+
+        const index = std.math.cast(u32, sid[0] - STANDARD_NAMES.len) orelse return null;
+        return self.strings.get(index);
+    }
 };
 
 /// An affine transformation matrix.
