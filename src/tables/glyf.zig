@@ -2,11 +2,9 @@
 //! https://docs.microsoft.com/en-us/typography/opentype/spec/glyf) implementation.
 
 const std = @import("std");
+const lib = @import("../lib.zig");
 const parser = @import("../parser.zig");
 const loca = @import("loca.zig");
-
-const GlyphId = @import("../lib.zig").GlyphId;
-const Transform = @import("../lib.zig").Transform;
 
 const F2DOT14 = parser.F2DOT14;
 
@@ -29,7 +27,7 @@ pub const Table = struct {
 
     pub fn get(
         self: Table,
-        glyph_id: GlyphId,
+        glyph_id: lib.GlyphId,
     ) ?[]const u8 {
         const start, const end = self.loca_table.glyph_range(glyph_id) orelse return null;
         if (start > self.data.len or end > self.data.len) return null;
@@ -39,14 +37,14 @@ pub const Table = struct {
     /// Returns the number of points in this outline.
     pub fn outline_points(
         self: Table,
-        glyph_id: GlyphId,
+        glyph_id: lib.GlyphId,
     ) u16 {
         return self.outline_points_impl(glyph_id) catch 0;
     }
 
     fn outline_points_impl(
         self: Table,
-        glyph_id: GlyphId,
+        glyph_id: lib.GlyphId,
     ) parser.Error!u16 {
         const data = self.get(glyph_id) orelse return error.ParseFail;
         var s = parser.Stream.new(data);
@@ -72,6 +70,17 @@ pub const Table = struct {
             // An empty glyph.
             return error.ParseFail;
         }
+    }
+
+    /// Outlines a glyph.
+    pub fn outline(
+        self: Table,
+        glyph_id: lib.GlyphId,
+        builder: lib.OutlineBuilder,
+    ) ?lib.Rect {
+        var b = Builder.new(.{}, .{}, builder);
+        const glyph_data = self.get(glyph_id) orelse return null;
+        return outline_impl(self.loca_table, self.data, glyph_data, 0, &b) catch return null;
     }
 };
 
@@ -132,6 +141,45 @@ pub const GlyphPointsIter = struct {
         .y_coords = .{},
         .points_left = 0,
     };
+
+    // [RazrFalcom]
+    // Due to some optimization magic, using f32 instead of i16
+    // makes the code ~10% slower. At least on my machine.
+    // I guess it's due to the fact that with i16 the struct
+    // fits into the machine word.
+    pub const GlyphPoint = struct {
+        x: i16,
+        y: i16,
+        /// Indicates that a point is a point on curve
+        /// and not a control point.
+        on_curve_point: bool,
+        last_point: bool,
+    };
+
+    pub fn next(
+        self: *GlyphPointsIter,
+    ) ?GlyphPoint {
+        if (self.points_left == 0) return null;
+        self.points_left -= 1;
+
+        // TODO: skip empty contours
+
+        const last_point = self.endpoints.next();
+        const flags = self.flags.next();
+
+        return .{
+            .x = self.x_coords.next(flags.x_short, flags.x_is_same_or_positive_short),
+            .y = self.y_coords.next(flags.y_short, flags.y_is_same_or_positive_short),
+            .on_curve_point = flags.on_curve_point,
+            .last_point = last_point,
+        };
+    }
+
+    pub fn current_contour(
+        self: GlyphPointsIter,
+    ) u16 {
+        return self.endpoints.index - 1;
+    }
 };
 
 /// A simple flattening iterator for glyph's endpoints.
@@ -152,6 +200,27 @@ const EndpointsIter = struct {
             .left = endpoints.get(0) orelse return null,
         };
     }
+
+    fn next(self: *EndpointsIter) bool {
+        if (self.left == 0) {
+            if (self.endpoints.get(self.index)) |end| {
+                const prev = self.endpoints.get(self.index - 1) orelse 0;
+
+                // Malformed font can have endpoints not in increasing order,
+                // so we have to use checked_sub.
+                self.left = end -| prev;
+                self.left -|= 1;
+            }
+
+            // Always advance the index, so we can check the current contour number.
+            self.index +|= 1;
+
+            return true;
+        } else {
+            self.left -= 1;
+            return false;
+        }
+    }
 };
 
 const FlagsIter = struct {
@@ -169,6 +238,18 @@ const FlagsIter = struct {
             .repeats = 0,
             .flags = .{},
         };
+    }
+
+    fn next(self: *FlagsIter) SimpleGlyphFlags {
+        if (self.repeats == 0) {
+            self.flags = self.stream.read(SimpleGlyphFlags) catch .{};
+            if (self.flags.repeat_flag)
+                self.repeats = self.stream.read(u8) catch 0;
+        } else {
+            self.repeats -= 1;
+        }
+
+        return self.flags;
     }
 };
 
@@ -195,6 +276,28 @@ const CoordsIter = struct {
             .prev = 0,
         };
     }
+
+    fn next(
+        self: *CoordsIter,
+        is_short: bool,
+        is_same_or_short: bool,
+    ) i16 {
+        // See https://docs.microsoft.com/en-us/typography/opentype/spec/glyf#simple-glyph-description
+        // for details about Simple Glyph Flags processing.
+
+        // We've already checked the coords data, so it's safe to fallback to 0.
+
+        var n: i16 = 0;
+        if (is_short) {
+            n = self.stream.read(u8) catch 0;
+            if (!is_same_or_short)
+                n = -n;
+        } else if (!is_same_or_short)
+            n = self.stream.read(i16) catch 0;
+
+        self.prev +%= n;
+        return self.prev;
+    }
 };
 
 pub const CompositeGlyphIter = struct {
@@ -212,9 +315,9 @@ pub const CompositeGlyphIter = struct {
         self: *CompositeGlyphIter,
     ) ?CompositeGlyphInfo {
         const flags = self.stream.read(CompositeGlyphFlags) catch return null;
-        const glyph_id = self.stream.read(GlyphId) catch return null;
+        const glyph_id = self.stream.read(lib.GlyphId) catch return null;
 
-        var ts: Transform = .{};
+        var ts: lib.Transform = .{};
 
         if (flags.args_are_xy_values) {
             if (flags.arg_1_and_2_are_words) {
@@ -252,8 +355,8 @@ pub const CompositeGlyphIter = struct {
 };
 
 pub const CompositeGlyphInfo = struct {
-    glyph_id: GlyphId,
-    transform: Transform,
+    glyph_id: lib.GlyphId,
+    transform: lib.Transform,
     flags: CompositeGlyphFlags,
 };
 
@@ -320,4 +423,110 @@ fn resolve_coords_len(
     }
 
     return .{ x_coords_len, y_coords_len };
+}
+
+pub const Builder = struct {
+    builder: lib.OutlineBuilder,
+    transform: lib.Transform,
+    is_default_ts: bool, // `bool` is faster than `Option` or `is_default`.
+    // We have to always calculate the bbox, because `gvar` doesn't store one
+    // and in case of a malformed bbox in `glyf`.
+    bbox: lib.RectF,
+    first_on_curve: ?Point,
+    first_off_curve: ?Point,
+    last_off_curve: ?Point,
+
+    const Point = struct {
+        x: f32,
+        y: f32,
+    };
+
+    pub fn new(
+        transform: lib.Transform,
+        bbox: lib.RectF,
+        builder: lib.OutlineBuilder,
+    ) Builder {
+        return .{
+            .builder = builder,
+            .transform = transform,
+            .is_default_ts = transform.is_default(),
+            .bbox = bbox,
+            .first_on_curve = null,
+            .first_off_curve = null,
+            .last_off_curve = null,
+        };
+    }
+
+    // Useful links:
+    //
+    // - https://developer.apple.com/fonts/TrueType-Reference-Manual/RM01/Chap1.html
+    // - https://stackoverflow.com/a/20772557
+    pub fn push_point(
+        self: *Builder,
+        x: f32,
+        y: f32,
+        on_curve_point: bool,
+        last_point: bool,
+    ) void {
+        _ = self;
+        _ = x;
+        _ = y;
+        _ = on_curve_point;
+        _ = last_point;
+    }
+};
+
+// It's not defined in the spec, so we are using our own value.
+pub const MAX_COMPONENTS: u8 = 32;
+
+fn outline_impl(
+    loca_table: loca.Table,
+    glyf_table: []const u8,
+    data: []const u8,
+    depth: u8,
+    builder: *Builder,
+) parser.Error!?lib.Rect {
+    if (depth >= MAX_COMPONENTS) return error.ParseFail;
+
+    var s = parser.Stream.new(data);
+    const number_of_contours = try s.read(i16);
+    s.advance(8); // Skip bbox. We use calculated one.
+
+    if (number_of_contours > 0) {
+        // Simple glyph.
+
+        // u16 casting is safe, since we already checked that the value is positive.
+        var iter = try parse_simple_outline(try s.tail(), @bitCast(number_of_contours));
+        while (iter.next()) |point| builder.push_point(
+            @floatFromInt(point.x),
+            @floatFromInt(point.y),
+            point.on_curve_point,
+            point.last_point,
+        );
+    } else if (number_of_contours < 0) {
+        // Composite glyph.
+
+        var iter = CompositeGlyphIter.new(try s.tail());
+        while (iter.next()) |comp| {
+            const start, const end = loca_table.glyph_range(comp.glyph_id) orelse continue;
+            if (start > glyf_table.len or end > glyf_table.len) continue;
+
+            const glyph_data = glyf_table[start..end];
+            const transform = builder.transform.combine(comp.transform);
+            var b = Builder.new(transform, builder.bbox, builder.builder);
+            _ = try outline_impl(
+                loca_table,
+                glyf_table,
+                glyph_data,
+                depth + 1,
+                &b,
+            );
+
+            // Take updated bbox.
+            builder.bbox = b.bbox;
+        }
+    }
+
+    if (builder.bbox.is_default()) return null;
+    return builder.bbox.to_rect();
 }

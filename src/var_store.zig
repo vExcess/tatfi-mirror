@@ -63,7 +63,7 @@ pub fn parse_delta(
     const item_count = try s.read(u16);
     const word_delta_count_raw = try s.read(u16);
     const region_index_count = try s.read(u16);
-    const region_indices = try s.read_array(u16, region_index_count);
+    const region_indices_array = try s.read_array(u16, region_index_count);
 
     if (inner_index >= item_count) return error.ParseFail;
 
@@ -82,7 +82,7 @@ pub fn parse_delta(
     var delta: f32 = 0.0;
     var i: u16 = 0;
     while (i < word_delta_count) {
-        const idx = region_indices.get(i) orelse return error.ParseFail;
+        const idx = region_indices_array.get(i) orelse return error.ParseFail;
         const num: f32 = if (has_long_words)
             // TODO: use f64?
             @floatFromInt(try s.read(i32))
@@ -94,7 +94,7 @@ pub fn parse_delta(
     }
 
     while (i < region_index_count) {
-        const idx = region_indices.get(i) orelse return error.ParseFail;
+        const idx = region_indices_array.get(i) orelse return error.ParseFail;
         const num: f32 = if (has_long_words)
             @floatFromInt(try s.read(i16))
         else
@@ -185,3 +185,17 @@ const RegionAxisCoordinatesRecord = struct {
         }
     };
 };
+
+pub fn region_indices(
+    self: ItemVariationStore,
+    index: u16,
+) ?LazyArray16(u16) {
+    // Offsets in bytes from the start of the item variation store
+    // to each item variation data subtable.
+    const offset = self.data_offsets.get(index) orelse return null;
+    var s = parser.Stream.new_at(self.data, offset) catch return null;
+    s.skip(u16); // item_count
+    s.skip(u16); // short_delta_count
+    const count = s.read(u16) catch return null;
+    return s.read_array(u16, count) catch null;
+}

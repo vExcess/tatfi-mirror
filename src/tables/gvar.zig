@@ -5,13 +5,11 @@
 
 const std = @import("std");
 const cfg = @import("config");
+const lib = @import("../lib.zig");
 const parser = @import("../parser.zig");
+const glyf = @import("glyf.zig");
 
 const log = std.log.scoped(.gvar);
-
-const GlyphId = @import("../lib.zig").GlyphId;
-const NormalizedCoordinate = @import("../lib.zig").NormalizedCoordinate;
-const PhantomPoints = @import("../lib.zig").PhantomPoints;
 
 const LazyArray16 = parser.LazyArray16;
 const Offset16 = parser.Offset16;
@@ -83,10 +81,10 @@ pub const Table = struct {
     pub fn phantom_points(
         self: Table,
         gpa: std.mem.Allocator,
-        glyf_table: @import("glyf.zig").Table,
-        coordinates: []const NormalizedCoordinate,
-        glyph_id: GlyphId,
-    ) ?PhantomPoints {
+        glyf_table: glyf.Table,
+        coordinates: []const lib.NormalizedCoordinate,
+        glyph_id: lib.GlyphId,
+    ) ?lib.PhantomPoints {
         const outline_points = glyf_table.outline_points(glyph_id);
 
         var fba_state = std.heap.stackFallback(VariationTuples.STACK_ALLOCATION_SIZE, gpa);
@@ -116,8 +114,8 @@ pub const Table = struct {
 
     fn parse_variation_data(
         self: Table,
-        glyph_id: GlyphId,
-        coordinates: []const NormalizedCoordinate,
+        glyph_id: lib.GlyphId,
+        coordinates: []const lib.NormalizedCoordinate,
         points_len: u16,
         tuples: *VariationTuples,
     ) parser.Error!void {
@@ -157,6 +155,22 @@ pub const Table = struct {
             data,
             tuples,
         );
+    }
+
+    /// Outlines a glyph.
+    pub fn outline(
+        self: Table,
+        gpa: std.mem.Allocator,
+        glyf_table: glyf.Table,
+        coordinates: []const lib.NormalizedCoordinate,
+        glyph_id: lib.GlyphId,
+        builder: lib.OutlineBuilder,
+    ) ?lib.Rect {
+        var b = glyf.Builder.new(.{}, .{}, builder);
+        const glyph_data = glyf_table.get(glyph_id) orelse return null;
+        outline_var_impl(gpa, glyf_table, self, glyph_id, glyph_data, coordinates, 0, &b) catch {};
+
+        return b.bbox.to_rect();
     }
 };
 
@@ -226,12 +240,60 @@ const VariationTuples = struct {
         self.list.appendAssumeCapacity(header);
     }
 
+    fn apply(
+        self: *VariationTuples,
+        all_points: glyf.GlyphPointsIter,
+        points: glyf.GlyphPointsIter,
+        point: glyf.GlyphPointsIter.GlyphPoint,
+    ) ?lib.PhantomPoints.PointF {
+        var x: f32 = @floatFromInt(point.x);
+        var y: f32 = @floatFromInt(point.y);
+
+        // [ARS] I tunred this into something completely unreadable!
+        for (self.list.items) |*tuple| {
+            const x_delta, const y_delta = d: {
+                var set_points = &(tuple.set_points orelse
+                    break :d tuple.deltas.next() orelse
+                        continue);
+
+                defer if (point.last_point) {
+                    tuple.prev_point = null;
+                };
+
+                if (!set_points.next())
+                    // Point is not referenced, so we have to resolve it.
+                    break :d infer_deltas(tuple, set_points.*, points, all_points, point);
+
+                const deltas = tuple.deltas.next() orelse
+                    // If there are no more deltas, we have to resolve them manually.
+                    break :d infer_deltas(tuple, set_points.*, points, all_points, point);
+
+                const x_delta, const y_delta = deltas;
+
+                // Remember the last set point and delta.
+                tuple.prev_point = .{
+                    .x = point.x,
+                    .y = point.y,
+                    .x_delta = x_delta,
+                    .y_delta = y_delta,
+                };
+
+                break :d deltas;
+            };
+
+            x += x_delta;
+            y += y_delta;
+        }
+
+        return .{ .x = x, .y = y };
+    }
+
     // This is just like `apply()`, but without `infer_deltas`,
     // since we use it only for component points and not a contour.
     // And since there are no contour and no points, `infer_deltas()` will do nothing.
     fn apply_null(
         self: *VariationTuples,
-    ) ?PhantomPoints.PointF {
+    ) ?lib.PhantomPoints.PointF {
         var x: f32 = 0.0;
         var y: f32 = 0.0;
 
@@ -262,7 +324,7 @@ const VariationTuple = struct {
 
 // https://docs.microsoft.com/en-us/typography/opentype/spec/otvarcommonformats#tuple-variation-store-header
 fn parse_variation_data_inner(
-    coordinates: []const NormalizedCoordinate,
+    coordinates: []const lib.NormalizedCoordinate,
     shared_tuple_records: LazyArray16(F2DOT14),
     points_len: u16,
     data: []const u8,
@@ -325,7 +387,7 @@ fn parse_variation_data_inner(
 // https://docs.microsoft.com/en-us/typography/opentype/spec/otvarcommonformats#tuplevariationheader
 fn parse_variation_tuples(
     count: u16,
-    coordinates: []const NormalizedCoordinate,
+    coordinates: []const lib.NormalizedCoordinate,
     shared_tuple_records: LazyArray16(F2DOT14),
     shared_point_numbers: ?PackedPointsIter,
     points_len: u16,
@@ -404,7 +466,7 @@ const TupleVariationHeaderData = struct {
 
 // https://docs.microsoft.com/en-us/typography/opentype/spec/otvarcommonformats#tuplevariationheader
 fn parse_tuple_variation_header(
-    coordinates: []const NormalizedCoordinate,
+    coordinates: []const lib.NormalizedCoordinate,
     shared_tuple_records: LazyArray16(F2DOT14),
     s: *parser.Stream,
 ) parser.Error!TupleVariationHeaderData {
@@ -560,6 +622,21 @@ pub const PackedPointsIter = struct {
             // and the number of glyph points can be larger than the amount of set points.
             // Anyway, this is a non-issue in a well-formed font.
             return true;
+        }
+
+        fn restart(
+            self: SetPointsIter,
+        ) SetPointsIter {
+            var iter = self.iter;
+            iter.offset = 0;
+            iter.state = .control;
+            iter.points_left = 0;
+
+            const unref_count = iter.next() orelse 0;
+            return .{
+                .iter = iter,
+                .unref_count = unref_count,
+            };
         }
     };
 
@@ -766,6 +843,10 @@ pub const PackedDeltasIter = struct {
         const y = self.y_run.next(self.data, self.scalar) orelse return null;
         return .{ x, y };
     }
+
+    pub fn restart(self: PackedDeltasIter) PackedDeltasIter {
+        return .new(self.scalar, self.total_count, self.data);
+    }
 };
 
 const PointAndDelta = struct {
@@ -774,3 +855,296 @@ const PointAndDelta = struct {
     x_delta: f32,
     y_delta: f32,
 };
+
+fn outline_var_impl(
+    gpa: std.mem.Allocator,
+    glyf_table: glyf.Table,
+    gvar_table: Table,
+    glyph_id: lib.GlyphId,
+    data: []const u8,
+    coordinates: []const lib.NormalizedCoordinate,
+    depth: u8,
+    builder: *glyf.Builder,
+) parser.Error!void {
+    if (depth >= glyf.MAX_COMPONENTS) return error.ParseFail;
+
+    var s = parser.Stream.new(data);
+    const number_of_contours = try s.read(i16);
+
+    // Skip bbox.
+    //
+    // In case of a variable font, a bounding box defined in the `glyf` data
+    // refers to the default variation values. Which is not what we want.
+    // Instead, we have to manually calculate outline's bbox.
+    s.advance(8);
+
+    var fba_state = std.heap.stackFallback(VariationTuples.STACK_ALLOCATION_SIZE, gpa);
+    const fba = fba_state.get();
+
+    var tuples = VariationTuples.init(fba) catch return error.ParseFail;
+    defer tuples.deinit();
+
+    if (number_of_contours > 0) {
+        // Simple glyph.
+
+        var glyph_points = try glyf.parse_simple_outline(try s.tail(), @bitCast(number_of_contours));
+        const all_glyph_points = glyph_points; // [ARS} ].clone()
+        const points_len = glyph_points.points_left;
+        try gvar_table.parse_variation_data(glyph_id, coordinates, points_len, &tuples);
+
+        while (glyph_points.next()) |point| {
+            const p = tuples.apply(
+                all_glyph_points,
+                glyph_points,
+                point,
+            ) orelse return error.ParseFail;
+
+            builder.push_point(p.x, p.y, point.on_curve_point, point.last_point);
+        }
+    } else if (number_of_contours < 0) {
+        // Composite glyph.
+
+        // In case of a composite glyph, `gvar` data contains position adjustments
+        // for each component.
+        // Basically, an additional translation used during transformation.
+        // So we have to push zero points manually, instead of parsing the `glyf` data.
+        //
+        // Details:
+        // https://docs.microsoft.com/en-us/typography/opentype/spec/gvar#point-numbers-and-processing-for-composite-glyphs
+        var components = glyf.CompositeGlyphIter.new(try s.tail());
+        const components_count = cc: {
+            var components_iter = components;
+            var count: u16 = 0;
+            while (components_iter.next()) |_| count += 1;
+            break :cc count;
+        };
+
+        try gvar_table.parse_variation_data(
+            glyph_id,
+            coordinates,
+            components_count,
+            &tuples,
+        );
+
+        while (components.next()) |component| {
+            const t = tuples.apply_null() orelse return error.ParseFail;
+            var transform = builder.transform;
+            // Variation component offset should be applied only when
+            // the ARGS_ARE_XY_VALUES flag is set.
+            if (component.flags.args_are_xy_values)
+                transform = transform.combine(
+                    .new_translate(t.x, t.y),
+                );
+
+            transform = transform.combine(component.transform);
+
+            var b = glyf.Builder.new(transform, builder.bbox, builder.builder);
+            if (glyf_table.get(component.glyph_id)) |glyph_data| {
+                try outline_var_impl(
+                    gpa,
+                    glyf_table,
+                    gvar_table,
+                    component.glyph_id,
+                    glyph_data,
+                    coordinates,
+                    depth + 1,
+                    &b,
+                );
+
+                // Take updated bbox.
+                builder.bbox = b.bbox;
+            }
+        }
+    } else
+    // An empty glyph.
+    return error.ParseFail;
+}
+
+/// Infer unreferenced deltas.
+///
+/// A font can define deltas only for specific points, to reduce the file size.
+/// In this case, we have to infer undefined/unreferenced deltas manually,
+/// depending on the context.
+///
+/// This is already a pretty complex task, since deltas should be resolved
+/// only inside the current contour (do not confuse with component).
+/// And during resolving we can actually wrap around the contour.
+/// So if there is no deltas after the current one, we have to use
+/// the first delta of the current contour instead.
+/// Same goes for the previous delta. If there are no deltas
+/// before the current one, we have to use the last one in the current contour.
+///
+/// And in case of `ttf-parser` (`tetfy`'s dad) everything is becoming even more complex,
+/// since we don't actually have a list of points and deltas, only iterators.
+/// Because of `ttf-parser`'s allocation free policy.
+/// Which makes the code even more complicated.
+///
+/// https://docs.microsoft.com/en-us/typography/opentype/spec/gvar#inferred-deltas-for-un-referenced-point-numbers
+fn infer_deltas(
+    tuple: *const VariationTuple,
+    points_set: PackedPointsIter.SetPointsIter,
+    // A points iterator that starts after the current point.
+    points: glyf.GlyphPointsIter,
+    // A points iterator that starts from the first point in the glyph.
+    all_points: glyf.GlyphPointsIter,
+    curr_point: glyf.GlyphPointsIter.GlyphPoint,
+) struct { f32, f32 } {
+    const current_contour = if (curr_point.last_point)
+        // When we parsed the last point of a contour,
+        // an iterator had switched to the next contour.
+        // So we have to move to the previous one.
+        points.current_contour() -| 1
+    else
+        points.current_contour();
+
+    const prev_point = if (tuple.prev_point) |prev_point|
+        // If a contour already had a delta - just use it.
+        prev_point
+    else pp: {
+        // If not, find the last point with delta in the current contour.
+        var last_point: ?PointAndDelta = null;
+        var deltas = tuple.deltas;
+
+        var points_clone = points;
+        var points_set_clone = points_set;
+        while (true) {
+            const point = points_clone.next() orelse break;
+            const is_set = points_set_clone.next();
+
+            if (is_set) if (deltas.next()) |d| {
+                last_point = .{
+                    .x = point.x,
+                    .y = point.y,
+                    .x_delta = d[0],
+                    .y_delta = d[1],
+                };
+            };
+
+            if (point.last_point) break;
+        }
+
+        // If there is no last point, there are no deltas.
+        if (last_point) |p| break :pp p else return .{ 0.0, 0.0 };
+    };
+
+    var next_point_maybe: ?PointAndDelta = null;
+    if (!curr_point.last_point) {
+        // If the current point is not the last one in the contour,
+        // find the first set delta in the current contour.
+        var deltas = tuple.deltas;
+
+        var points_clone = points;
+        var points_set_clone = points_set;
+        while (true) {
+            const point = points_clone.next() orelse break;
+            const is_set = points_set_clone.next();
+            if (is_set) {
+                const x_delta, const y_delta = deltas.next() orelse break;
+
+                next_point_maybe = .{
+                    .x = point.x,
+                    .y = point.y,
+                    .x_delta = x_delta,
+                    .y_delta = y_delta,
+                };
+
+                break;
+            }
+
+            if (point.last_point)
+                break;
+        }
+    }
+
+    if (next_point_maybe == null) {
+        // If there were no deltas after the current point,
+        // restart from the start of the contour.
+        //
+        // This is probably the most expensive branch,
+        // but nothing we can do about it since `glyf`/`gvar` data structure
+        // doesn't allow implementing a reverse iterator.
+        // So we have to parse everything once again.
+
+        var all_points_clone = all_points;
+        var deltas = tuple.deltas.restart();
+        var points_set_clone = points_set.restart();
+
+        var contour: u16 = 0;
+        while (true) {
+            const point = all_points_clone.next() orelse break;
+            const is_set = points_set_clone.next();
+
+            // First, we have to skip already processed contours.
+            if (contour != current_contour) {
+                if (is_set) _ = deltas.next();
+
+                contour = all_points_clone.current_contour();
+                continue;
+            }
+
+            if (is_set) {
+                const x_delta, const y_delta = deltas.next() orelse .{ 0.0, 0.0 };
+                next_point_maybe = .{
+                    .x = point.x,
+                    .y = point.y,
+                    .x_delta = x_delta,
+                    .y_delta = y_delta,
+                };
+
+                break;
+            }
+
+            if (point.last_point) break;
+        }
+    }
+
+    // If there is no next point, there are no deltas.
+    const next_point = next_point_maybe orelse return .{ 0.0, 0.0 };
+
+    const dx = infer_delta(
+        prev_point.x,
+        curr_point.x,
+        next_point.x,
+        prev_point.x_delta,
+        next_point.x_delta,
+    );
+
+    const dy = infer_delta(
+        prev_point.y,
+        curr_point.y,
+        next_point.y,
+        prev_point.y_delta,
+        next_point.y_delta,
+    );
+
+    return .{ dx, dy };
+}
+
+fn infer_delta(
+    prev_point: i16,
+    target_point: i16,
+    next_point: i16,
+    prev_delta: f32,
+    next_delta: f32,
+) f32 {
+    return if (prev_point == next_point)
+        if (prev_delta == next_delta) prev_delta else 0.0
+    else if (target_point <= @min(prev_point, next_point))
+        if (prev_point < next_point) prev_delta else next_delta
+    else if (target_point >= @max(prev_point, next_point))
+        if (prev_point > next_point) prev_delta else next_delta
+    else {
+        // 'Target point coordinate is between adjacent point coordinates.'
+        //
+        // 'Target point delta is derived from the adjacent point deltas
+        // using linear interpolation.'
+        const target_sub: f32 = @floatFromInt(
+            std.math.sub(i16, target_point, prev_point) catch return 0.0,
+        );
+        const next_sub: f32 = @floatFromInt(
+            std.math.sub(i16, next_point, prev_point) catch return 0.0,
+        );
+        const d = target_sub / next_sub;
+        return (1.0 - d) * prev_delta + d * next_delta;
+    };
+}

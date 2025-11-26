@@ -9,6 +9,7 @@ const cfg = @import("config");
 const parser = @import("parser.zig");
 const tables = @import("tables.zig");
 const opentype_layout = @import("ggg.zig");
+const cast = @import("numcasts.zig");
 
 const LazyArray16 = parser.LazyArray16;
 
@@ -982,13 +983,13 @@ pub const Face = struct {
             if (self.tables.variable_fonts.hvar) |hvar| {
                 if (hvar.advance_offset(glyph_id, self.coords())) |offset| {
                     // [ARS] bit of a hack re the TDOO in ttf_parser
-                    const offset_rounded = f32_to_u16(@round(offset)) orelse
+                    const offset_rounded = cast.f32_to_u16(@round(offset)) orelse
                         return null;
                     advance += offset_rounded;
                 }
             } else if (self.glyph_phantom_points(gpa, glyph_id)) |points| {
                 // [ARS] bit of a hack re the TDOO in ttf_parser
-                const points_rounded = f32_to_u16(@round(points.right.x)) orelse
+                const points_rounded = cast.f32_to_u16(@round(points.right.x)) orelse
                     return null;
                 advance += points_rounded;
             }
@@ -1017,12 +1018,12 @@ pub const Face = struct {
             if (self.tables.variable_fonts.vvar) |vvar| {
                 if (vvar.advance_offset(glyph_id, self.coords())) |offset| {
                     // [ARS] bit of a hack re the TDOO in ttf_parser
-                    const offset_rounded = f32_to_u16(@round(offset)) orelse return null;
+                    const offset_rounded = cast.f32_to_u16(@round(offset)) orelse return null;
                     advance += offset_rounded;
                 }
             } else if (self.glyph_phantom_points(gpa, glyph_id)) |points| {
                 // [ARS] bit of a hack re the TDOO in ttf_parser
-                const points_rounded = f32_to_u16(@round(points.bottom.x)) orelse
+                const points_rounded = cast.f32_to_u16(@round(points.bottom.x)) orelse
                     return null;
                 advance += points_rounded;
             }
@@ -1046,7 +1047,7 @@ pub const Face = struct {
                 .left_side_bearing_offset(glyph_id, self.coords())) |offset|
             {
                 // [ARS] bit of a hack re the TDOO in ttf_parser
-                const offset_rounded = f32_to_i16(@round(offset)) orelse return null;
+                const offset_rounded = cast.f32_to_i16(@round(offset)) orelse return null;
                 bearing += offset_rounded;
             };
         };
@@ -1069,7 +1070,7 @@ pub const Face = struct {
                 .top_side_bearing_offset(glyph_id, self.coords())) |offset|
             {
                 // [ARS] bit of a hack re the TDOO in ttf_parser
-                const offset_rounded = f32_to_i16(@round(offset)) orelse return null;
+                const offset_rounded = cast.f32_to_i16(@round(offset)) orelse return null;
                 bearing += offset_rounded;
             };
         };
@@ -1093,7 +1094,7 @@ pub const Face = struct {
                 .vertical_origin_offset(glyph_id, self.coords())) |offset|
             {
                 // [ARS] bit of a hack re the TDOO in ttf_parser
-                const offset_rounded = f32_to_i16(@round(offset)) orelse return null;
+                const offset_rounded = cast.f32_to_i16(@round(offset)) orelse return null;
                 origin += offset_rounded;
             };
         };
@@ -1121,6 +1122,79 @@ pub const Face = struct {
                 return name;
 
         return null;
+    }
+
+    /// Outlines a glyph and returns its tight bounding box.
+    ///
+    /// **Warning**: since `tetfy` is a pull parser,
+    /// `OutlineBuilder` will emit segments even when outline is partially malformed.
+    /// You must check `outline_glyph()` result before using
+    /// `OutlineBuilder`'s output.
+    ///
+    /// `gvar`, `glyf`, `CFF` and `CFF2` tables are supported.
+    /// And they will be accessed in this specific order.
+    ///
+    /// This method is affected by variation axes.
+    ///
+    /// Returns `null` when glyph has no outline or on error.
+    pub fn outline_glyph(
+        self: Face,
+        gpa: if (cfg.variable_fonts) std.mem.Allocator else void,
+        glyph_id: GlyphId,
+        builder: OutlineBuilder,
+    ) ?Rect {
+        if (cfg.variable_fonts)
+            if (self.tables.variable_fonts.gvar) |gvar|
+                return gvar.outline(
+                    gpa,
+                    self.tables.glyf orelse return null,
+                    self.coords(),
+                    glyph_id,
+                    builder,
+                );
+
+        if (self.tables.glyf) |glyf|
+            return glyf.outline(glyph_id, builder);
+
+        if (self.tables.cff) |cff|
+            return cff.outline(glyph_id, builder) catch null;
+
+        if (cfg.variable_fonts)
+            if (self.tables.variable_fonts.cff2) |cff2|
+                return cff2.outline(self.coords(), glyph_id, builder) catch null;
+
+        return null;
+    }
+
+    /// Returns a tight glyph bounding box.
+    ///
+    /// This is just a shorthand for `outline_glyph()` since only the `glyf` table stores
+    /// a bounding box. We ignore `glyf` table bboxes because they can be malformed.
+    /// In case of CFF and variable fonts we have to actually outline
+    /// a glyph to find it's bounding box.
+    ///
+    /// When a glyph is defined by a raster or a vector image,
+    /// that can be obtained via `glyph_image()`,
+    /// the bounding box must be calculated manually and this method will return `None`.
+    ///
+    /// Note: the returned bbox is not validated in any way. A font file can have a glyph bbox
+    /// set to zero/negative width and/or height and this is perfectly ok.
+    /// For calculated bboxes, zero width and/or height is also perfectly fine.
+    ///
+    /// This method is affected by variation axes.
+    pub fn glyph_bounding_box(
+        self: Face,
+        gpa: if (cfg.variable_fonts) std.mem.Allocator else void,
+        glyph_id: GlyphId,
+    ) ?Rect {
+        return self.outline_glyph(gpa, glyph_id, OutlineBuilder.dummy_builder);
+    }
+
+    /// Returns a bounding box that large enough to enclose any glyph from the face.
+    pub fn global_bounding_box(
+        self: Face,
+    ) Rect {
+        return self.tables.head.global_bbox;
     }
 
     /// Parses glyph's phantom points.
@@ -1151,7 +1225,7 @@ pub const Face = struct {
             };
             const v: f32 = @as(f32, @floatFromInt(value)) + metrics;
             // TODO: Should probably round it, but f32::round is not available in core.
-            value = f32_to_i16(v) orelse value;
+            value = cast.f32_to_i16(v) orelse value;
         };
 
         return value;
@@ -1519,6 +1593,53 @@ pub const Rect = struct {
     y_min: i16,
     x_max: i16,
     y_max: i16,
+
+    pub const zero: Rect = .{
+        .x_min = 0,
+        .y_min = 0,
+        .x_max = 0,
+        .y_max = 0,
+    };
+};
+
+/// A rectangle described by the left-lower and upper-right points.
+pub const RectF = struct {
+    /// The horizontal minimum of the rect.
+    x_min: f32 = std.math.floatMax(f32),
+    /// The vertical minimum of the rect.
+    y_min: f32 = std.math.floatMax(f32),
+    /// The horizontal maximum of the rect.
+    x_max: f32 = std.math.floatMin(f32),
+    /// The vertical maximum of the rect.
+    y_max: f32 = std.math.floatMin(f32),
+
+    pub fn is_default(
+        self: RectF,
+    ) bool {
+        return std.meta.eql(self, .{});
+    }
+
+    pub fn to_rect(
+        self: RectF,
+    ) ?Rect {
+        return .{
+            .x_min = cast.f32_to_i16(self.x_min) orelse return null,
+            .y_min = cast.f32_to_i16(self.y_min) orelse return null,
+            .x_max = cast.f32_to_i16(self.x_max) orelse return null,
+            .y_max = cast.f32_to_i16(self.y_max) orelse return null,
+        };
+    }
+
+    pub fn extend_by(
+        self: *RectF,
+        x: f32,
+        y: f32,
+    ) void {
+        self.x_min = @min(self.x_min, x);
+        self.y_min = @min(self.y_min, y);
+        self.x_max = @max(self.x_max, x);
+        self.y_max = @max(self.y_max, y);
+    }
 };
 
 /// A line metrics.
@@ -1574,30 +1695,6 @@ const VarCoords = struct {
 /// The number is stored as f2.16
 pub const NormalizedCoordinate = struct { inner: i16 };
 
-// [ARS] NUMERICAL STUFF
-fn f32_to_i32(v: f32) ?i32 {
-    // [ARS] this method is a bastardization of the of source
-    const MIN: f32 = @floatFromInt(std.math.minInt(i32));
-
-    // [ARs] https://ziggit.dev/t/determining-lower-upper-bound-for-safe-conversion-from-f32-to-i32/3764/3?u=asibahi
-    const MAX_P1: f32 = @floatFromInt(2147483520);
-
-    if (v >= MIN and v <= MAX_P1)
-        return @intFromFloat(v)
-    else
-        return null;
-}
-
-fn f32_to_i16(v: f32) ?i16 {
-    const i = f32_to_i32(v) orelse return null;
-    return std.math.cast(i16, i);
-}
-
-fn f32_to_u16(v: f32) ?u16 {
-    const i = f32_to_i32(v) orelse return null;
-    return std.math.cast(u16, i);
-}
-
 /// Phantom points.
 ///
 /// Available only for variable fonts with the `gvar` table.
@@ -1623,15 +1720,103 @@ pub const PhantomPoints = struct {
 /// An affine transform.
 pub const Transform = struct {
     /// The 'a' component of the transform.
-    a: f32 = 0.0,
+    a: f32 = 1.0,
     /// The 'b' component of the transform.
     b: f32 = 0.0,
     /// The 'c' component of the transform.
     c: f32 = 0.0,
     /// The 'd' component of the transform.
-    d: f32 = 0.0,
+    d: f32 = 1.0,
     /// The 'e' component of the transform.
     e: f32 = 0.0,
     /// The 'f' component of the transform.
     f: f32 = 0.0,
+
+    /// Checks whether a transform is the identity transform.
+    pub fn is_default(
+        self: Transform,
+    ) bool {
+        return std.meta.eql(self, .{});
+    }
+
+    /// Combines two transforms with each other.
+    pub fn combine(
+        ts1: Transform,
+        ts2: Transform,
+    ) Transform {
+        return .{
+            .a = ts1.a * ts2.a + ts1.c * ts2.b,
+            .b = ts1.b * ts2.a + ts1.d * ts2.b,
+            .c = ts1.a * ts2.c + ts1.c * ts2.d,
+            .d = ts1.b * ts2.c + ts1.d * ts2.d,
+            .e = ts1.a * ts2.e + ts1.c * ts2.f + ts1.e,
+            .f = ts1.b * ts2.e + ts1.d * ts2.f + ts1.f,
+        };
+    }
+
+    /// Creates a new translation transform.
+    pub fn new_translate(
+        tx: f32,
+        ty: f32,
+    ) Transform {
+        return .{ .e = tx, .f = ty };
+    }
+};
+
+pub const OutlineBuilder = struct {
+    ptr: *anyopaque,
+    vtable: VTable,
+
+    pub const VTable = struct {
+        /// Appends a MoveTo segment.
+        ///
+        /// Start of a contour.
+        move_to: *const fn (*anyopaque, x: f32, y: f32) void,
+
+        /// Appends a LineTo segment.
+        line_to: *const fn (*anyopaque, x: f32, y: f32) void,
+
+        /// Appends a QuadTo segment.
+        quad_to: *const fn (*anyopaque, x1: f32, y1: f32, x: f32, y: f32) void,
+
+        /// Appends a CurveTo segment.
+        curve_to: *const fn (*anyopaque, x1: f32, y1: f32, x2: f32, y2: f32, x: f32, y: f32) void,
+
+        /// Appends a ClosePath segment.
+        ///
+        /// End of a contour.
+        close: *const fn (*anyopaque) void,
+    };
+
+    pub fn move_to(self: OutlineBuilder, x: f32, y: f32) void {
+        self.vtable.move_to(self.ptr, x, y);
+    }
+    pub fn line_to(self: OutlineBuilder, x: f32, y: f32) void {
+        self.vtable.line_to(self.ptr, x, y);
+    }
+    pub fn quad_to(self: OutlineBuilder, x1: f32, y1: f32, x: f32, y: f32) void {
+        self.vtable.quad_to(self.ptr, x1, y1, x, y);
+    }
+    pub fn curve_to(self: OutlineBuilder, x1: f32, y1: f32, x2: f32, y2: f32, x: f32, y: f32) void {
+        self.vtable.curve_to(self.ptr, x1, y1, x2, y2, x, y);
+    }
+    pub fn close(self: OutlineBuilder) void {
+        self.vtable.close(self.ptr);
+    }
+
+    pub const dummy_builder: OutlineBuilder = .{
+        .ptr = undefined,
+        .vtable = .{
+            .move_to = dummy_move,
+            .line_to = dummy_move,
+            .quad_to = dummy_quad,
+            .curve_to = dummy_curve,
+            .close = dummy_close,
+        },
+    };
+
+    fn dummy_move(_: *anyopaque, _: f32, _: f32) void {}
+    fn dummy_quad(_: *anyopaque, _: f32, _: f32,_: f32, _: f32) void {}
+    fn dummy_curve(_: *anyopaque, _: f32, _: f32,_: f32, _: f32, _: f32, _: f32) void {}
+    fn dummy_close(_: *anyopaque) void {}
 };

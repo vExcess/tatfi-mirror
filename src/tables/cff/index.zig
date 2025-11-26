@@ -1,61 +1,61 @@
 const std = @import("std");
 const parser = @import("../../parser.zig");
 
-pub const Index = struct {
-    data: []const u8,
-    offsets: VarOffsets,
+const Index = @This();
 
-    pub const default: Index = .{
+data: []const u8,
+offsets: VarOffsets,
+
+pub const default: Index = .{
+    .data = &.{},
+    .offsets = .{
         .data = &.{},
-        .offsets = .{
-            .data = &.{},
-            .offset_size = .size1,
-        },
+        .offset_size = .size1,
+    },
+};
+
+pub fn len(
+    self: Index,
+) u32 {
+    // Last offset points to the byte after the `Object data`. We should skip it.
+    return self.offsets.len() -| 1;
+}
+
+pub fn get(
+    self: Index,
+    index: u32,
+) ?[]const u8 {
+    const next_index = std.math.add(u32, index, 1) catch
+        return null; // make sure we do not overflow
+    const start: usize = self.offsets.get(index) orelse return null;
+    const end: usize = self.offsets.get(next_index) orelse return null;
+
+    if (start > self.data.len) return null;
+    if (end > self.data.len) return null;
+    return self.data[start..end];
+}
+
+pub fn iterator(
+    data: *const Index,
+) Iterator {
+    return .{
+        .data = data,
+        .offset_index = 0,
     };
+}
 
-    pub fn len(
-        self: Index,
-    ) u32 {
-        // Last offset points to the byte after the `Object data`. We should skip it.
-        return self.offsets.len() -| 1;
-    }
+pub const Iterator = struct {
+    data: *const Index,
+    offset_index: u32,
 
-    pub fn get(
-        self: Index,
-        index: u32,
+    pub fn next(
+        self: *Iterator,
     ) ?[]const u8 {
-        const next_index = std.math.add(u32, index, 1) catch
-            return null; // make sure we do not overflow
-        const start: usize = self.offsets.get(index) orelse return null;
-        const end: usize = self.offsets.get(next_index) orelse return null;
+        if (self.offset_index == self.data.len()) return null;
 
-        if (start > self.data.len) return null;
-        if (end > self.data.len) return null;
-        return self.data[start..end];
+        defer self.offset_index += 1;
+        return self.data.get(self.offset_index);
     }
-
-    pub fn iterator(
-        data: *const Index,
-    ) Iterator {
-        return .{
-            .data = data,
-            .offset_index = 0,
-        };
-    }
-
-    pub const Iterator = struct {
-        data: *const Index,
-        offset_index: u32,
-
-        pub fn next(
-            self: *Iterator,
-        ) ?[]const u8 {
-            if (self.offset_index == self.data.len()) return null;
-
-            defer self.offset_index += 1;
-            return self.data.get(self.offset_index);
-        }
-    };
 };
 
 pub const VarOffsets = struct {
@@ -123,7 +123,7 @@ pub const OffsetSize = enum(u3) {
     };
 };
 
-pub fn skip_index(
+pub fn skip(
     T: type,
     s: *parser.Stream,
 ) parser.Error!void {
@@ -147,7 +147,7 @@ pub fn skip_index(
         s.advance(last_offset);
 }
 
-pub fn parse_index(
+pub fn parse(
     T: type,
     s: *parser.Stream,
 ) parser.Error!Index {
