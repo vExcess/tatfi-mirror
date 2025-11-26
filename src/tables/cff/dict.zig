@@ -6,138 +6,138 @@ const TWO_BYTE_OPERATOR_MARK: u8 = 12;
 const FLOAT_STACK_LEN: usize = 64;
 const END_OF_FLOAT_FLAG: u8 = 0xf;
 
-pub const DictionaryParser = struct {
+const DictionaryParser = @This();
+
+data: []const u8,
+// The current offset.
+offset: usize,
+// Offset to the last operands start.
+operands_offset: usize,
+// Actual operands.
+//
+// While CFF can contain only i32 and f32 values, we have to store operands as f64
+// since f32 cannot represent the whole i32 range.
+// Meaning we have a choice of storing operands as f64 or as enum of i32/f32.
+// In both cases the type size would be 8 bytes, so it's easier to simply use f64.
+operands: []f64,
+// An amount of operands in the `operands` array.
+operands_len: u16,
+
+pub fn new(
     data: []const u8,
-    // The current offset.
-    offset: usize,
-    // Offset to the last operands start.
-    operands_offset: usize,
-    // Actual operands.
-    //
-    // While CFF can contain only i32 and f32 values, we have to store operands as f64
-    // since f32 cannot represent the whole i32 range.
-    // Meaning we have a choice of storing operands as f64 or as enum of i32/f32.
-    // In both cases the type size would be 8 bytes, so it's easier to simply use f64.
-    operands: []f64,
-    // An amount of operands in the `operands` array.
-    operands_len: u16,
+    operands_buffer: []f64,
+) DictionaryParser {
+    return .{
+        .data = data,
+        .offset = 0,
+        .operands_offset = 0,
+        .operands = operands_buffer,
+        .operands_len = 0,
+    };
+}
 
-    pub fn new(
-        data: []const u8,
-        operands_buffer: []f64,
-    ) DictionaryParser {
-        return .{
-            .data = data,
-            .offset = 0,
-            .operands_offset = 0,
-            .operands = operands_buffer,
-            .operands_len = 0,
-        };
-    }
+pub const Operator = struct { u16 };
 
-    pub const Operator = struct { u16 };
+pub fn parse_next(
+    self: *DictionaryParser,
+) ?Operator {
+    var s = parser.Stream.new_at(self.data, self.offset) catch return null;
+    self.operands_offset = self.offset;
 
-    pub fn parse_next(
-        self: *DictionaryParser,
-    ) ?Operator {
-        var s = parser.Stream.new_at(self.data, self.offset) catch return null;
-        self.operands_offset = self.offset;
+    while (!s.at_end()) {
+        const b = s.read(u8) catch return null;
+        // 0...21 bytes are operators.
+        if (is_dict_one_byte_op(b)) {
+            var operator: u16 = b;
 
-        while (!s.at_end()) {
-            const b = s.read(u8) catch return null;
-            // 0...21 bytes are operators.
-            if (is_dict_one_byte_op(b)) {
-                var operator: u16 = b;
-
-                // Check that operator is two byte long.
-                if (b == TWO_BYTE_OPERATOR_MARK) {
-                    // Use a 1200 'prefix' to make two byte operators more readable.
-                    // 12 3 => 1203
-                    operator = @as(u16, 1200) + (s.read(u8) catch return null);
-                }
-
-                self.offset = s.offset;
-                return .{operator};
-            } else skip_number(b, &s) catch return null;
-        }
-
-        return null;
-    }
-
-    /// Parses operands of the current operator.
-    ///
-    /// In the DICT structure, operands are defined before an operator.
-    /// So we are trying to find an operator first and the we can actually parse the operands.
-    ///
-    /// Since this methods is pretty expensive and we do not care about most of the operators,
-    /// we can speed up parsing by parsing operands only for required operators.
-    ///
-    /// We still have to "skip" operands during operators search (see `skip_number()`),
-    /// but it's still faster that a naive method.
-    pub fn parse_operands(
-        self: *DictionaryParser,
-    ) parser.Error!void {
-        var s = try parser.Stream.new_at(self.data, self.operands_offset);
-        self.operands_len = 0;
-        while (!s.at_end()) {
-            const b = try s.read(u8);
-            // 0...21 bytes are operators.
-            if (is_dict_one_byte_op(b)) {
-                break;
-            } else {
-                const op = try parse_number(b, &s);
-                self.operands[self.operands_len] = op;
-                self.operands_len += 1;
-
-                if (self.operands_len >= self.operands.len) break;
+            // Check that operator is two byte long.
+            if (b == TWO_BYTE_OPERATOR_MARK) {
+                // Use a 1200 'prefix' to make two byte operators more readable.
+                // 12 3 => 1203
+                operator = @as(u16, 1200) + (s.read(u8) catch return null);
             }
+
+            self.offset = s.offset;
+            return .{operator};
+        } else skip_number(b, &s) catch return null;
+    }
+
+    return null;
+}
+
+/// Parses operands of the current operator.
+///
+/// In the DICT structure, operands are defined before an operator.
+/// So we are trying to find an operator first and the we can actually parse the operands.
+///
+/// Since this methods is pretty expensive and we do not care about most of the operators,
+/// we can speed up parsing by parsing operands only for required operators.
+///
+/// We still have to "skip" operands during operators search (see `skip_number()`),
+/// but it's still faster that a naive method.
+pub fn parse_operands(
+    self: *DictionaryParser,
+) parser.Error!void {
+    var s = try parser.Stream.new_at(self.data, self.operands_offset);
+    self.operands_len = 0;
+    while (!s.at_end()) {
+        const b = try s.read(u8);
+        // 0...21 bytes are operators.
+        if (is_dict_one_byte_op(b)) {
+            break;
+        } else {
+            const op = try parse_number(b, &s);
+            self.operands[self.operands_len] = op;
+            self.operands_len += 1;
+
+            if (self.operands_len >= self.operands.len) break;
         }
     }
+}
 
-    pub fn parse_number_method(
-        self: *DictionaryParser,
-        F: type,
-    ) parser.Error!F {
-        try self.parse_operands();
-        if (self.operands_slice().len == 0) return error.ParseFail;
+pub fn parse_number_method(
+    self: *DictionaryParser,
+    F: type,
+) parser.Error!F {
+    try self.parse_operands();
+    if (self.operands_slice().len == 0) return error.ParseFail;
 
-        return @floatCast(self.operands[0]);
-    }
+    return @floatCast(self.operands[0]);
+}
 
-    pub fn parse_offset(
-        self: *DictionaryParser,
-    ) parser.Error!usize {
-        try self.parse_operands();
+pub fn parse_offset(
+    self: *DictionaryParser,
+) parser.Error!usize {
+    try self.parse_operands();
 
-        const operands = self.operands_slice();
-        if (operands.len != 1) return error.ParseFail;
+    const operands = self.operands_slice();
+    if (operands.len != 1) return error.ParseFail;
 
-        return std.math.cast(usize, std.math.lossyCast(i32, operands[0])) orelse
-            return error.ParseFail;
-    }
+    return std.math.cast(usize, std.math.lossyCast(i32, operands[0])) orelse
+        return error.ParseFail;
+}
 
-    pub fn parse_range(
-        self: *DictionaryParser,
-    ) parser.Error!struct { usize, usize } {
-        try self.parse_operands();
-        const operands = self.operands_slice();
-        if (operands.len != 2) return error.ParseFail;
+pub fn parse_range(
+    self: *DictionaryParser,
+) parser.Error!struct { usize, usize } {
+    try self.parse_operands();
+    const operands = self.operands_slice();
+    if (operands.len != 2) return error.ParseFail;
 
-        const len = std.math.cast(usize, std.math.lossyCast(i32, operands[0])) orelse
-            return error.ParseFail;
-        const start = std.math.cast(usize, std.math.lossyCast(i32, operands[1])) orelse
-            return error.ParseFail;
-        const end = try std.math.add(usize, start, len);
+    const len = std.math.cast(usize, std.math.lossyCast(i32, operands[0])) orelse
+        return error.ParseFail;
+    const start = std.math.cast(usize, std.math.lossyCast(i32, operands[1])) orelse
+        return error.ParseFail;
+    const end = try std.math.add(usize, start, len);
 
-        return .{ start, end };
-    }
+    return .{ start, end };
+}
 
-    pub fn operands_slice(
-        self: DictionaryParser,
-    ) []f64 {
-        return self.operands[0..self.operands_len];
-    }
-};
+pub fn operands_slice(
+    self: DictionaryParser,
+) []f64 {
+    return self.operands[0..self.operands_len];
+}
 
 // One-byte CFF DICT Operators according to the
 // Adobe Technical Note #5176, Appendix H CFF DICT Encoding.

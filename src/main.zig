@@ -52,8 +52,11 @@ pub fn main() !void {
     _ = face.glyph_hor_side_bearing(.{3});
     _ = face.glyph_ver_side_bearing(.{3});
     _ = face.glyph_y_origin(.{9});
-
     _ = face.glyph_name(.{6});
+
+    _ = face.outline_glyph(failing_allocator, .{6}, unsafe_builder);
+    _ = face.glyph_bounding_box(failing_allocator, .{53});
+    _ = face.global_bounding_box();
 
     const raw_tables: tetfy.RawFaceTables = .{};
     _ = tetfy.Face.from_raw_tables(raw_tables) catch {};
@@ -73,3 +76,8 @@ const vtable: std.mem.Allocator.VTable = .{
 fn noAlloc(_: *anyopaque, _: usize, _: std.mem.Alignment, _: usize) ?[*]u8 {
     return null;
 }
+
+const unsafe_builder: tetfy.OutlineBuilder = .{
+    .ptr = undefined,
+    .vtable = undefined,
+};
