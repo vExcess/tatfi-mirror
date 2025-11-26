@@ -51,6 +51,9 @@ pub fn main() !void {
 
     _ = face.glyph_hor_side_bearing(.{3});
     _ = face.glyph_ver_side_bearing(.{3});
+    _ = face.glyph_y_origin(.{9});
+
+    _ = face.glyph_name(.{6});
 
     const raw_tables: tetfy.RawFaceTables = .{};
     _ = tetfy.Face.from_raw_tables(raw_tables) catch {};

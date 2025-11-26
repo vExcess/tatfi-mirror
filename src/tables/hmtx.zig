@@ -73,6 +73,23 @@ pub const Table = struct {
             return last.advance;
         }
     }
+
+    /// Returns side bearing for a glyph.
+    pub fn side_bearing(
+        self: Table,
+        glyph_id: GlyphId,
+    ) ?i16 {
+        if (self.metrics.get(glyph_id[0])) |metrics|
+            return metrics.side_bearing
+        else {
+            // 'If the number_of_metrics is less than the total number of glyphs,
+            // then that array is followed by an array for the side bearing values
+            // of the remaining glyphs.'
+
+            const idx = std.math.sub(u16, glyph_id[0], self.metrics.len()) catch return null;
+            return self.bearings.get(idx);
+        }
+    }
 };
 
 /// Horizontal/Vertical Metrics.

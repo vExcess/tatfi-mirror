@@ -64,4 +64,51 @@ pub const Table = struct {
 
         return self.variation_store.parse_delta(outer_idx, inner_idx, coordinates) catch null;
     }
+
+    /// Returns the top side bearing offset for a glyph.
+    pub fn top_side_bearing_offset(
+        self: Table,
+        glyph_id: GlyphId,
+        coordinates: []const NormalizedCoordinate,
+    ) ?f32 {
+        const offset = self.tsb_mapping_offset orelse return null;
+        if (offset[0] > self.data.len) return null;
+        const set_data = self.data[offset[0]..];
+        return self.side_bearing_offset(glyph_id, coordinates, set_data);
+    }
+
+    /// Returns the bottom side bearing offset for a glyph.
+    pub fn bottom_side_bearing_offset(
+        self: Table,
+        glyph_id: GlyphId,
+        coordinates: []const NormalizedCoordinate,
+    ) ?f32 {
+        const offset = self.bsb_mapping_offset orelse return null;
+        if (offset[0] > self.data.len) return null;
+        const set_data = self.data[offset[0]..];
+        return self.side_bearing_offset(glyph_id, coordinates, set_data);
+    }
+
+    /// Returns the vertical origin offset for a glyph.
+    pub fn vertical_origin_offset(
+        self: Table,
+        glyph_id: GlyphId,
+        coordinates: []const NormalizedCoordinate,
+    ) ?f32 {
+        const offset = self.vorg_mapping_offset orelse return null;
+        if (offset[0] > self.data.len) return null;
+        const set_data = self.data[offset[0]..];
+        return self.side_bearing_offset(glyph_id, coordinates, set_data);
+    }
+
+    fn side_bearing_offset(
+        self: Table,
+        glyph_id: GlyphId,
+        coordinates: []const NormalizedCoordinate,
+        set_data: []const u8,
+    ) ?f32 {
+        const outer_idx, const inner_idx =
+            DeltaSetIndexMap.new(set_data).map(glyph_id[0]) orelse return null;
+        return self.variation_store.parse_delta(outer_idx, inner_idx, coordinates) catch null;
+    }
 };

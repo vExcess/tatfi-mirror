@@ -1010,17 +1010,14 @@ pub const Face = struct {
         glyph_id: GlyphId,
     ) ?u16 {
         const t = self.tables.vmtx orelse return null;
-        const advance_maybe = t.advance(glyph_id);
+        var advance = t.advance(glyph_id) orelse return null;
 
         if (cfg.variable_fonts) if (self.is_variable()) {
-            var advance = advance_maybe orelse return null;
-
             // Ignore variation offset when `vvar` is not set.
             if (self.tables.variable_fonts.vvar) |vvar| {
                 if (vvar.advance_offset(glyph_id, self.coords())) |offset| {
                     // [ARS] bit of a hack re the TDOO in ttf_parser
-                    const offset_rounded = f32_to_u16(@round(offset)) orelse
-                        return null;
+                    const offset_rounded = f32_to_u16(@round(offset)) orelse return null;
                     advance += offset_rounded;
                 }
             } else if (self.glyph_phantom_points(gpa, glyph_id)) |points| {
@@ -1029,11 +1026,9 @@ pub const Face = struct {
                     return null;
                 advance += points_rounded;
             }
-
-            return advance;
         };
 
-        return advance_maybe;
+        return advance;
     }
 
     /// Returns glyph's horizontal side bearing.
@@ -1043,15 +1038,20 @@ pub const Face = struct {
         self: Face,
         glyph_id: GlyphId,
     ) ?i16 {
-        _ = self;
-        _ = glyph_id;
+        const t = self.tables.hmtx orelse return null;
+        var bearing = t.side_bearing(glyph_id) orelse return null;
 
-        if (cfg.variable_fonts) {
-            //
-        } else {
-            // self.tables.hmtx?.side_bearing(glyph_id)
-        }
-        return null;
+        if (cfg.variable_fonts) if (self.is_variable()) {
+            if (self.tables.variable_fonts.hvar) |hvar| if (hvar
+                .left_side_bearing_offset(glyph_id, self.coords())) |offset|
+            {
+                // [ARS] bit of a hack re the TDOO in ttf_parser
+                const offset_rounded = f32_to_i16(@round(offset)) orelse return null;
+                bearing += offset_rounded;
+            };
+        };
+
+        return bearing;
     }
 
     /// Returns glyph's vertical side bearing.
@@ -1061,14 +1061,65 @@ pub const Face = struct {
         self: Face,
         glyph_id: GlyphId,
     ) ?i16 {
-        _ = self;
-        _ = glyph_id;
+        const t = self.tables.vmtx orelse return null;
+        var bearing = t.side_bearing(glyph_id) orelse return null;
 
-        if (cfg.variable_fonts) {
-            //
-        } else {
-            // self.tables.vmtx?.side_bearing(glyph_id)
-        }
+        if (cfg.variable_fonts) if (self.is_variable()) {
+            if (self.tables.variable_fonts.vvar) |vvar| if (vvar
+                .top_side_bearing_offset(glyph_id, self.coords())) |offset|
+            {
+                // [ARS] bit of a hack re the TDOO in ttf_parser
+                const offset_rounded = f32_to_i16(@round(offset)) orelse return null;
+                bearing += offset_rounded;
+            };
+        };
+
+        return bearing;
+    }
+
+    /// Returns glyph's vertical origin according to
+    /// [Vertical Origin Table](https://docs.microsoft.com/en-us/typography/opentype/spec/vorg).
+    ///
+    /// This method is affected by variation axes.
+    pub fn glyph_y_origin(
+        self: Face,
+        glyph_id: GlyphId,
+    ) ?i16 {
+        const t = self.tables.vorg orelse return null;
+        var origin = t.glyph_y_origin(glyph_id);
+
+        if (cfg.variable_fonts) if (self.is_variable()) {
+            if (self.tables.variable_fonts.vvar) |vvar| if (vvar
+                .vertical_origin_offset(glyph_id, self.coords())) |offset|
+            {
+                // [ARS] bit of a hack re the TDOO in ttf_parser
+                const offset_rounded = f32_to_i16(@round(offset)) orelse return null;
+                origin += offset_rounded;
+            };
+        };
+
+        return origin;
+    }
+
+    /// Returns glyph's name.
+    ///
+    /// Uses the `post` and `CFF` tables as sources.
+    ///
+    /// Returns `null` when no name is associated with a `glyph`.
+    ///
+    /// Return string is either static or owned by the font data.
+    pub fn glyph_name(
+        self: Face,
+        glyph_id: GlyphId,
+    ) ?[]const u8 {
+        if (self.tables.post) |post|
+            if (post.glyph_name(glyph_id)) |name|
+                return name;
+
+        if (self.tables.cff) |cff|
+            if (cff.glyph_name(glyph_id)) |name|
+                return name;
+
         return null;
     }
 
@@ -1238,7 +1289,7 @@ pub const FaceTables = struct {
     stat: ?tables.stat.Table = null,
     svg: ?tables.svg.Table = null,
     vhea: ?tables.vhea.Table = null,
-    vmtx: ?tables.hmtx.Table = null,
+    vmtx: ?tables.hmtx.Table = null, // [ARS] not a typo
     vorg: ?tables.vorg.Table = null,
 
     opentype_layout: if (cfg.opentype_layout) struct {
