@@ -37,11 +37,7 @@ pub fn LazyArray(I: type, T: type) type {
             index: I,
         ) ?T {
             if (@typeInfo(T) == .optional) @compileError("use get_optional");
-            const size: usize = switch (has_trait(T, "FromData")) {
-                .int => @typeInfo(T).int.bits / 8,
-                .impl => T.FromData.SIZE,
-                inline else => |F| @typeInfo(F).int.bits / 8,
-            };
+            const size = size_of(T);
 
             if (index >= self.len()) return null;
             const start: usize = index * size;
@@ -90,11 +86,7 @@ pub fn LazyArray(I: type, T: type) type {
         pub fn len(
             self: Self,
         ) I {
-            const size: usize = switch (has_trait(T, "FromData")) {
-                .int => @typeInfo(T).int.bits / 8,
-                .impl => T.FromData.SIZE,
-                inline else => |F| @typeInfo(F).int.bits / 8,
-            };
+            const size = size_of(T);
 
             return @truncate(self.data.len / size);
         }
@@ -165,11 +157,7 @@ pub fn LazyArray(I: type, T: type) type {
             start: I,
             end: I,
         ) ?Self {
-            const size: usize = switch (has_trait(T, "FromData")) {
-                .int => @typeInfo(T).int.bits / 8,
-                .impl => T.FromData.SIZE,
-                inline else => |F| @typeInfo(F).int.bits / 8,
-            };
+            const size = size_of(T);
 
             const start_t = start * size;
             const end_t = end * size;
@@ -294,11 +282,7 @@ pub const Stream = struct {
         self: *Stream,
         T: type,
     ) Error!T {
-        const size: usize = switch (has_trait(T, "FromData")) {
-            .int => @typeInfo(T).int.bits / 8,
-            .impl => T.FromData.SIZE,
-            inline else => |F| @typeInfo(F).int.bits / 8,
-        };
+        const size = size_of(T);
 
         const bytes = try self.read_bytes(size);
 
@@ -370,11 +354,7 @@ pub const Stream = struct {
         // u16 or u32
         count: anytype,
     ) Error!LazyArray(@TypeOf(count), T) {
-        const size: usize = switch (has_trait(T, "FromData")) {
-            .int => @typeInfo(T).int.bits / 8,
-            .impl => T.FromData.SIZE,
-            inline else => |F| @typeInfo(F).int.bits / 8,
-        };
+        const size = size_of(T);
 
         const len = count * size;
 
@@ -420,11 +400,7 @@ pub const Stream = struct {
         self: *Stream,
         T: type,
     ) void {
-        const size: usize = switch (has_trait(T, "FromData")) {
-            .int => @typeInfo(T).int.bits / 8,
-            .impl => T.FromData.SIZE,
-            inline else => |F| @typeInfo(F).int.bits / 8,
-        };
+        const size = size_of(T);
 
         self.advance(size);
     }
@@ -475,6 +451,14 @@ pub const Stream = struct {
         self.offset = self.data.len;
     }
 };
+
+pub inline fn size_of(T: type) usize {
+    return switch (has_trait(T, "FromData")) {
+        .int => @typeInfo(T).int.bits / 8,
+        .impl => T.FromData.SIZE,
+        inline else => |F| @typeInfo(F).int.bits / 8,
+    };
+}
 
 pub const Error = error{
     ParseFail,

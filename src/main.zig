@@ -67,7 +67,7 @@ pub fn main() !void {
     _ = r.width();
     _ = r.height();
 
-    // _ = face.glyph_raster_image(.{63}, 54);
+    _ = face.glyph_raster_image(.{63}, 54);
     // const svg = face.glyph_svg_image(.{64}) ;
     // if (svg) |s| _ = s.glyphs_range();
     // _ = face.is_color_glyph(.{54});
