@@ -1197,6 +1197,47 @@ pub const Face = struct {
         return self.tables.head.global_bbox;
     }
 
+    /// Returns a reference to a glyph's raster image.
+    ///
+    /// A font can define a glyph using a raster or a vector image instead of a simple outline.
+    /// Which is primarily used for emojis. This method should be used to access raster images.
+    ///
+    /// `pixels_per_em` allows selecting a preferred image size. The chosen size will
+    /// be closer to an upper one. So when font has 64px and 96px images and `pixels_per_em`
+    /// is set to 72, 96px image will be returned.
+    /// To get the largest image simply use `std::u16::MAX`.
+    ///
+    /// Note that this method will return an encoded image. It should be decoded
+    /// by the caller. We don't validate or preprocess it in any way.
+    ///
+    /// Also, a font can contain both: images and outlines. So when this method returns `None`
+    /// you should also try `outline_glyph()` afterwards.
+    ///
+    /// There are multiple ways an image can be stored in a TrueType font
+    /// and this method supports most of them.
+    /// This includes `sbix`, `bloc` + `bdat`, `EBLC` + `EBDT`, `CBLC` + `CBDT`.
+    /// And font's tables will be accesses in this specific order.
+    pub fn glyph_raster_image(
+        self: Face,
+        glyph_id: GlyphId,
+        pixels_per_em: u16,
+    ) ?RasterGlyphImage {
+        if (self.tables.sbix) |table|
+            if (table.best_strike(pixels_per_em)) |strike|
+                return strike.get(glyph_id);
+
+        if (self.tables.bdat) |table|
+            return table.get(glyph_id, pixels_per_em);
+
+        if (self.tables.ebdt) |table|
+            return table.get(glyph_id, pixels_per_em);
+
+        if (self.tables.cbdt) |table|
+            return table.get(glyph_id, pixels_per_em);
+
+        return null;
+    }
+
     /// Parses glyph's phantom points.
     ///
     /// Available only for variable fonts with the `gvar` table.
@@ -1833,4 +1874,89 @@ pub const OutlineBuilder = struct {
     fn dummy_quad(_: *anyopaque, _: f32, _: f32, _: f32, _: f32) void {}
     fn dummy_curve(_: *anyopaque, _: f32, _: f32, _: f32, _: f32, _: f32, _: f32) void {}
     fn dummy_close(_: *anyopaque) void {}
+};
+
+/// A glyph's raster image.
+///
+/// Note, that glyph metrics are in pixels and not in font units.
+pub const RasterGlyphImage = struct {
+    /// Horizontal offset.
+    x: i16,
+    /// Vertical offset.
+    y: i16,
+    /// Image width.
+    ///
+    /// It doesn't guarantee that this value is the same as set in the `data`.
+    width: u16,
+    /// Image height.
+    ///
+    /// It doesn't guarantee that this value is the same as set in the `data`.
+    height: u16,
+    /// A pixels per em of the selected strike.
+    pixels_per_em: u16,
+    /// An image format.
+    format: Format,
+    /// A raw image data. It's up to the caller to decode it.
+    data: []const u8,
+
+    /// A glyph raster image format.
+    pub const Format = enum {
+        png,
+
+        /// A monochrome bitmap.
+        ///
+        /// The most significant bit of the first byte corresponds to the top-left pixel, proceeding
+        /// through succeeding bits moving left to right. The data for each row is padded to a byte
+        /// boundary, so the next row begins with the most significant bit of a new byte. 1 corresponds
+        /// to black, and 0 to white.
+        bitmap_mono,
+
+        /// A packed monochrome bitmap.
+        ///
+        /// The most significant bit of the first byte corresponds to the top-left pixel, proceeding
+        /// through succeeding bits moving left to right. Data is tightly packed with no padding. 1
+        /// corresponds to black, and 0 to white.
+        bitmap_mono_packed,
+
+        /// A grayscale bitmap with 2 bits per pixel.
+        ///
+        /// The most significant bits of the first byte corresponds to the top-left pixel, proceeding
+        /// through succeeding bits moving left to right. The data for each row is padded to a byte
+        /// boundary, so the next row begins with the most significant bit of a new byte.
+        bitmap_gray_2,
+
+        /// A packed grayscale bitmap with 2 bits per pixel.
+        ///
+        /// The most significant bits of the first byte corresponds to the top-left pixel, proceeding
+        /// through succeeding bits moving left to right. Data is tightly packed with no padding.
+        bitmap_gray_2_packed,
+
+        /// A grayscale bitmap with 4 bits per pixel.
+        ///
+        /// The most significant bits of the first byte corresponds to the top-left pixel, proceeding
+        /// through succeeding bits moving left to right. The data for each row is padded to a byte
+        /// boundary, so the next row begins with the most significant bit of a new byte.
+        bitmap_gray_4,
+
+        /// A packed grayscale bitmap with 4 bits per pixel.
+        ///
+        /// The most significant bits of the first byte corresponds to the top-left pixel, proceeding
+        /// through succeeding bits moving left to right. Data is tightly packed with no padding.
+        bitmap_gray_4_packed,
+
+        /// A grayscale bitmap with 8 bits per pixel.
+        ///
+        /// The first byte corresponds to the top-left pixel, proceeding through succeeding bytes
+        /// moving left to right.
+        bitmap_gray_8,
+
+        /// A color bitmap with 32 bits per pixel.
+        ///
+        /// The first group of four bytes corresponds to the top-left pixel, proceeding through
+        /// succeeding pixels moving left to right. Each byte corresponds to a color channel and the
+        /// channels within a pixel are in blue, green, red, alpha order. Color values are
+        /// pre-multiplied by the alpha. For example, the color "full-green with half translucency"
+        /// is encoded as `\x00\x80\x00\x80`, and not `\x00\xFF\x00\x80`.
+        bitmap_premul_bgra_32,
+    };
 };
