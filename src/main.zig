@@ -7,6 +7,11 @@ pub fn main() !void {
         \\
     , .{});
 
+    // [ARS] Original intent of this file was to make sure all functions compile, due to Zig's
+    // lazy compilation model. Meanwhile, it has turned into a record of the library's public
+    // interface.
+
+    // Face methods
     const face = tetfy.Face.parse("true", 0) catch return;
     _ = face.raw_face.table(.{ .inner = 53 }) orelse {};
     _ = face.names();
@@ -18,8 +23,10 @@ pub fn main() !void {
     _ = face.is_variable();
     _ = face.italic_angle();
     _ = face.is_regular();
-    _ = face.weight();
-    _ = face.width();
+    const weight = face.weight();
+    _ = weight.to_number();
+    const width = face.width();
+    _ = width.to_number();
     _ = face.ascender();
     _ = face.descender();
     _ = face.line_gap();
@@ -53,13 +60,83 @@ pub fn main() !void {
     _ = face.glyph_ver_side_bearing(.{3});
     _ = face.glyph_y_origin(.{9});
     _ = face.glyph_name(.{6});
-
-    _ = face.outline_glyph(failing_allocator, .{6}, unsafe_builder);
+    // use a real implementation of the OutlineBuilder interface
+    _ = face.outline_glyph(failing_allocator, .{6}, tetfy.OutlineBuilder.dummy_builder);
     _ = face.glyph_bounding_box(failing_allocator, .{53});
-    _ = face.global_bounding_box();
+    const r = face.global_bounding_box();
+    _ = r.width();
+    _ = r.height();
+
+    // _ = face.glyph_raster_image(.{63}, 54);
+    // const svg = face.glyph_svg_image(.{64}) ;
+    // if (svg) |s| _ = s.glyphs_range();
+    // _ = face.is_color_glyph(.{54});
+    // _ = face.color_palettes();
+    // _ = face.paint_color_glyph(.{64}, 16, tetfy.RgbaColor{}, tetfy.Painter.dummy_painter);
+
+    // _ = face.variation_axes();
+    // _ = face.set_variation(tetfy.Tag{}, 300.0); // mutable method
+    // _ = face.variation_coordinates();
+    // _ = face.has_non_default_variation_coordinates();
+
+    _ = face.glyph_phantom_points(failing_allocator, .{55});
 
     const raw_tables: tetfy.RawFaceTables = .{};
     _ = tetfy.Face.from_raw_tables(raw_tables) catch {};
+
+    // RawFace methods
+    const raw_face = face.raw_face;
+    _ = raw_face.table(tetfy.Tag{ .inner = 43 });
+
+    // FaceTables methods
+    const tables = face.tables;
+    _ = tables.head;
+    _ = tables.hhea;
+    _ = tables.maxp;
+    _ = tables.bdat;
+    const cbdt = tables.cbdt;
+    _ = cbdt; // if (cbdt) |table| _ = table.get(.{64}, 0);
+    const cff = tables.cff;
+    if (cff) |table| {
+        _ = table.outline(.{64}, tetfy.OutlineBuilder.dummy_builder) catch {};
+        // _ = table.glyph_index(.{64});
+        // _ = table.glyph_width(.{64});
+        _ = table.glyph_index_by_name("name");
+        // _ = table.glyph_name(.{64});
+        // _ = table.cid(.{65});
+    }
+    // TODO: Fill out the rest
+    _ = tables.cmap; // Subtables
+    _ = tables.colr;
+    _ = tables.ebdt;
+    _ = tables.glyf;
+    _ = tables.hmtx;
+    _ = tables.kern;
+    _ = tables.name;
+    _ = tables.os2;
+    _ = tables.post;
+    _ = tables.sbix;
+    _ = tables.stat;
+    _ = tables.svg;
+    _ = tables.vhea;
+    _ = tables.vmtx;
+    _ = tables.vorg;
+    _ = tables.opentype_layout.gdef;
+    _ = tables.opentype_layout.gpos;
+    _ = tables.opentype_layout.gsub;
+    _ = tables.opentype_layout.math;
+    _ = tables.apple_layout.ankr;
+    _ = tables.apple_layout.feat;
+    _ = tables.apple_layout.kerx;
+    _ = tables.apple_layout.morx;
+    _ = tables.apple_layout.trak;
+    _ = tables.variable_fonts.avar;
+    _ = tables.variable_fonts.cff2;
+    _ = tables.variable_fonts.fvar;
+    _ = tables.variable_fonts.gvar;
+    _ = tables.variable_fonts.hvar;
+    _ = tables.variable_fonts.mvar;
+    _ = tables.variable_fonts.vvar;
 }
 
 // [ARS] To be replaced by std.mem.Allocator.failing should zig upgrade to 0.16.*
@@ -76,8 +153,3 @@ const vtable: std.mem.Allocator.VTable = .{
 fn noAlloc(_: *anyopaque, _: usize, _: std.mem.Alignment, _: usize) ?[*]u8 {
     return null;
 }
-
-const unsafe_builder: tetfy.OutlineBuilder = .{
-    .ptr = undefined,
-    .vtable = undefined,
-};
