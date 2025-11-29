@@ -1,13 +1,13 @@
+const lib = @import("../../lib.zig");
 const parser = @import("../../parser.zig");
 
 const StringId = @import("../cff.zig").StringId;
-
-const LazyArray16 = parser.LazyArray16;
+const Charset = @import("charset.zig").Charset;
 
 const Encoding = @This();
 
 kind: Kind,
-supplemental: LazyArray16(Supplement),
+supplemental: parser.LazyArray16(Supplement),
 
 pub const new_standard: Encoding = .{
     .kind = .standard,
@@ -36,7 +36,7 @@ pub fn parse(
         else => return error.ParseFail,
     };
 
-    const supplemental: LazyArray16(Supplement) = if (has_supplemental) s: {
+    const supplemental: parser.LazyArray16(Supplement) = if (has_supplemental) s: {
         const suppl_count: u16 = try s.read(u8);
         break :s try s.read_array(Supplement, suppl_count);
     } else .{};
@@ -44,11 +44,61 @@ pub fn parse(
     return .{ .kind = kind, .supplemental = supplemental };
 }
 
+pub fn code_to_gid(
+    self: Encoding,
+    charset: Charset,
+    code: u8,
+) ?lib.GlyphId {
+    {
+        var iter = self.supplemental.iterator();
+        while (iter.next()) |s|
+            if (s.code == code)
+                return charset.sid_to_gid(s.name);
+    }
+
+    const index: usize = code;
+
+    switch (self.kind) {
+        // Standard encodings store a StringID/SID and not GlyphID/GID.
+        // Therefore we have to get SID first and then convert it to GID via Charset.
+        // Custom encodings (FormatN) store GID directly.
+        //
+        // Indexing for predefined encodings never fails,
+        // because `code` is always `u8` and encodings have 256 entries.
+        //
+        // We treat `Expert` as `Standard` as well, since we allow only 8bit codepoints.
+        .standard, .expert => {
+            const sid: StringId = .{(STANDARD_ENCODING[index])};
+            return charset.sid_to_gid(sid);
+        },
+        .format0 => |table| {
+            var iter = table.iterator();
+            var i: u16 = 0;
+            while (iter.next()) |c| : (i += 1) if (c == code) return .{i + 1};
+            return null;
+        },
+        .format1 => |table| {
+            // Starts from 1 because .notdef is implicit.
+            var gid: u16 = 1;
+
+            var iter = table.iterator();
+            while (iter.next()) |range| : (gid += range.left + 1) {
+                const end = range.first +| range.left;
+                if (code >= range.first and code <= end) {
+                    gid += (code - range.first);
+                    return .{gid};
+                }
+            }
+            return null;
+        },
+    }
+}
+
 pub const Kind = union(enum) {
     standard,
     expert,
-    format0: LazyArray16(u8),
-    format1: LazyArray16(Format1Range),
+    format0: parser.LazyArray16(u8),
+    format1: parser.LazyArray16(Format1Range),
 };
 
 pub const Supplement = struct {

@@ -205,6 +205,50 @@ pub const Table = struct {
         };
     }
 
+    /// Resolves a Glyph ID for a code point.
+    ///
+    /// Similar to [`Face::glyph_index`](crate::Face::glyph_index) but 8bit
+    /// and uses CFF encoding and charset tables instead of TrueType `cmap`.
+    pub fn glyph_index(
+        self: Table,
+        code_point: u8,
+    ) ?lib.GlyphId {
+        if (self.kind == .cid) return null;
+
+        return self.kind.sid.encoding.code_to_gid(self.charset, code_point) orelse
+            // Try using the Standard encoding otherwise.
+            // Custom Encodings does not guarantee to include all glyphs.
+            Encoding.new_standard.code_to_gid(self.charset, code_point);
+    }
+
+    /// Returns a glyph width.
+    ///
+    /// This value is different from outline bbox width and is stored separately.
+    ///
+    /// Technically similar to [`Face::glyph_hor_advance`](crate::Face::glyph_hor_advance).
+    pub fn glyph_width(
+        self: Table,
+        glyph_id: lib.GlyphId,
+    ) ?u16 {
+        if (self.kind == .cid) return null;
+
+        const sid = self.kind.sid;
+        const data = self.char_strings.get(glyph_id[0]) orelse return null;
+        _, const maybe_width = parse_char_string(
+            data,
+            &self,
+            glyph_id,
+            true,
+            lib.OutlineBuilder.dummy_builder,
+        ) catch return null;
+        const width = w: {
+            const w = maybe_width orelse break :w sid.default_width;
+            break :w sid.nominal_width + w;
+        };
+
+        return cast.f32_to_u16(width);
+    }
+
     /// Returns a glyph ID by a name.
     pub fn glyph_index_by_name(
         self: Table,
@@ -250,6 +294,19 @@ pub const Table = struct {
     ) cff.Error!lib.Rect {
         const data = self.char_strings.get(glyph_id[0]) orelse return error.NoGlyph;
         const ret = try parse_char_string(data, &self, glyph_id, false, builder);
+        return ret[0];
+    }
+
+    /// Returns the CID corresponding to a glyph ID.
+    ///
+    /// Returns `None` if this is not a CIDFont.
+    pub fn glyph_cid(
+        self: Table,
+        glyph_id: lib.GlyphId,
+    ) ?u16 {
+        if (self.kind == .sid) return null;
+
+        const ret = self.charset.gid_to_sid(glyph_id) orelse return null;
         return ret[0];
     }
 };
