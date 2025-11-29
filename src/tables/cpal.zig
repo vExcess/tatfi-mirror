@@ -1,6 +1,8 @@
 //! A [Color Palette Table](
 //! https://docs.microsoft.com/en-us/typography/opentype/spec/cpal) implementation.
 
+const std = @import("std");
+const lib = @import("../lib.zig");
 const parser = @import("../parser.zig");
 
 const LazyArray16 = parser.LazyArray16;
@@ -38,6 +40,30 @@ pub const Table = struct {
             .colors = colors,
         };
     }
+
+    /// Returns the number of palettes.
+    pub fn palettes(
+        self: Table,
+    ) u16 {
+        // Already checked to be nonzero during parsing.
+        return self.color_indices.len();
+    }
+
+    /// Returns the color at the given index into the given palette.
+    pub fn get(
+        self: Table,
+        palette_index: u16,
+        palette_entry: u16,
+    ) ?lib.RgbaColor {
+        const index = std.math.add(
+            u16,
+            self.color_indices.get(palette_index) orelse return null,
+            palette_entry,
+        ) catch return null;
+
+        const c = self.colors.get(index) orelse return null;
+        return c.to_rgba();
+    }
 };
 
 const BgraColor = struct {
@@ -63,4 +89,15 @@ const BgraColor = struct {
             };
         }
     };
+
+    fn to_rgba(
+        self: BgraColor,
+    ) lib.RgbaColor {
+        return .{
+            .red = self.red,
+            .green = self.green,
+            .blue = self.blue,
+            .alpha = self.alpha,
+        };
+    }
 };

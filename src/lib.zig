@@ -1257,6 +1257,62 @@ pub const Face = struct {
         return t.documents.find(glyph_id);
     }
 
+    // Returns `true` if the glyph can be colored/painted using the `COLR`+`CPAL` tables.
+    ///
+    /// See [`paint_color_glyph`](Face::paint_color_glyph) for details.
+    pub fn is_color_glyph(
+        self: Face,
+        glyph_id: GlyphId,
+    ) bool {
+        const t = self.tables.colr orelse return false;
+        return t.contains(glyph_id);
+    }
+
+    /// Returns the number of palettes stored in the `COLR`+`CPAL` tables.
+    ///
+    /// See [`paint_color_glyph`](Face::paint_color_glyph) for details.
+    pub fn color_palettes(
+        self: Face,
+    ) ?u16 {
+        const t = self.tables.colr orelse return null;
+        return t.palettes.palettes();
+    }
+
+    /// Paints a color glyph from the `COLR` table.
+    ///
+    /// A font can have multiple palettes, which you can check via
+    /// [`color_palettes`](Face::color_palettes).
+    /// If unsure, just pass 0 to the `palette` argument, which is the default.
+    ///
+    /// A font can define a glyph using layers of colored shapes instead of a
+    /// simple outline. Which is primarily used for emojis. This method should
+    /// be used to access glyphs defined in the `COLR` table.
+    ///
+    /// Also, a font can contain both: a layered definition and outlines. So
+    /// when this method returns `None` you should also try
+    /// [`outline_glyph`](Face::outline_glyph) afterwards.
+    ///
+    /// Returns an error if the glyph has no `COLR` definition or if the glyph
+    /// definition is malformed.
+    ///
+    /// See `examples/font2svg.rs` for usage examples.
+    pub fn paint_color_glyph(
+        self: Face,
+        glyph_id: GlyphId,
+        palette: u16,
+        foreground_color: RgbaColor,
+        painter: tables.colr.Painter,
+    ) tables.colr.Error!void {
+        const t = self.tables.colr orelse return error.PaintError;
+        try t.paint(
+            glyph_id,
+            palette,
+            painter,
+            if (cfg.variable_fonts) self.coords(),
+            foreground_color,
+        );
+    }
+
     /// Parses glyph's phantom points.
     ///
     /// Available only for variable fonts with the `gvar` table.
@@ -1835,8 +1891,38 @@ pub const Transform = struct {
     ) Transform {
         return .{ .e = tx, .f = ty };
     }
+
+    /// Creates a new scale transform.
+    pub fn new_scale(
+        sx: f32,
+        sy: f32,
+    ) Transform {
+        return .{ .a = sx, .d = sy };
+    }
+
+    /// Creates a new rotation transform.
+    pub fn new_rotate(
+        angle: f32,
+    ) Transform {
+        const cc = @cos(angle * std.math.pi);
+        const ss = @sin(angle * std.math.pi);
+
+        return .{ .a = cc, .b = ss, .c = -ss, .d = cc };
+    }
+
+    /// Creates a new skew transform.
+    pub fn new_skew(
+        skew_x: f32,
+        skew_y: f32,
+    ) Transform {
+        const x = @tan(skew_x * std.math.pi);
+        const y = @tan(skew_y * std.math.pi);
+
+        return .{ .b = y, .c = -x };
+    }
 };
 
+/// An interface for glyph outline construction.
 pub const OutlineBuilder = struct {
     ptr: *anyopaque,
     vtable: VTable,
@@ -1978,4 +2064,27 @@ pub const RasterGlyphImage = struct {
         /// is encoded as `\x00\x80\x00\x80`, and not `\x00\xFF\x00\x80`.
         bitmap_premul_bgra_32,
     };
+};
+
+/// A RGBA color in the sRGB color space.
+pub const RgbaColor = struct {
+    red: u8,
+    green: u8,
+    blue: u8,
+    alpha: u8,
+
+    /// internal use only
+    pub fn apply_alpha(
+        self: RgbaColor,
+        alpha: f32,
+    ) RgbaColor {
+        var ret = self;
+        const _1 = @as(f32, @floatFromInt(self.alpha));
+        const _2 = _1 / 255;
+        const _3 = _2 * alpha;
+        const _4 = _3 * 255.0;
+        ret.alpha = std.math.lossyCast(u8, _4);
+
+        return ret;
+    }
 };

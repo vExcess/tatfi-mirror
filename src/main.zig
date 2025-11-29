@@ -69,8 +69,8 @@ pub fn main() !void {
 
     _ = face.glyph_raster_image(.{63}, 54);
     _ = face.glyph_svg_image(.{64});
-    // _ = face.is_color_glyph(.{54});
-    // _ = face.color_palettes();
+    _ = face.is_color_glyph(.{54});
+    _ = face.color_palettes();
     // _ = face.paint_color_glyph(.{64}, 16, tetfy.RgbaColor{}, tetfy.Painter.dummy_painter);
 
     // _ = face.variation_axes();
