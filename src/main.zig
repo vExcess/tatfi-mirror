@@ -12,7 +12,7 @@ pub fn main() !void {
     // interface.
 
     // Face methods
-    const face = tetfy.Face.parse("true", 0) catch return;
+    var face = tetfy.Face.parse("true", 0) catch return;
     _ = face.raw_face.table(.{ .inner = 53 }) orelse {};
     _ = face.names();
     _ = face.style();
@@ -71,12 +71,12 @@ pub fn main() !void {
     _ = face.glyph_svg_image(.{64});
     _ = face.is_color_glyph(.{54});
     _ = face.color_palettes();
-    // _ = face.paint_color_glyph(.{64}, 16, tetfy.RgbaColor{}, tetfy.Painter.dummy_painter);
+    _ = face.paint_color_glyph(.{64}, 16, white, unsafe_painter) catch {};
 
-    // _ = face.variation_axes();
-    // _ = face.set_variation(tetfy.Tag{}, 300.0); // mutable method
-    // _ = face.variation_coordinates();
-    // _ = face.has_non_default_variation_coordinates();
+    _ = face.variation_axes();
+    _ = face.set_variation(tetfy.Tag{ .inner = 4 }, 300.0); // mutable method
+    _ = face.variation_coordinates();
+    _ = face.has_non_default_variation_coordinates();
 
     _ = face.glyph_phantom_points(failing_allocator, .{55});
 
@@ -152,3 +152,10 @@ const vtable: std.mem.Allocator.VTable = .{
 fn noAlloc(_: *anyopaque, _: usize, _: std.mem.Alignment, _: usize) ?[*]u8 {
     return null;
 }
+
+const unsafe_painter = tetfy.tables.colr.Painter{
+    .ptr = undefined,
+    .vtable = undefined,
+};
+
+const white: tetfy.RgbaColor = .{ .red = 255, .green = 255, .blue = 255, .alpha = 255 };

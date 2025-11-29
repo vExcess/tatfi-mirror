@@ -7,7 +7,7 @@
 const std = @import("std");
 const cfg = @import("config");
 const parser = @import("parser.zig");
-const tables = @import("tables.zig");
+pub const tables = @import("tables.zig");
 const opentype_layout = @import("ggg.zig");
 const cast = @import("numcasts.zig");
 
@@ -1313,6 +1313,68 @@ pub const Face = struct {
         );
     }
 
+    /// Returns an iterator over variation axes.
+    pub fn variation_axes(
+        self: Face,
+    ) parser.LazyArray16(tables.fvar.VariationAxis) {
+        if (!cfg.variable_fonts) @compileError("variation_axes needs variable_fonts enabled");
+
+        const t = self.tables.variable_fonts.fvar orelse return .{};
+        return t.axes;
+    }
+
+    /// Sets a variation axis coordinate.
+    ///
+    /// This is one of the only two mutable methods in the library.
+    /// We can simplify the API a lot by storing the variable coordinates
+    /// in the face object itself.
+    ///
+    /// Since coordinates are stored on the stack, we allow only 64 of them.
+    ///
+    /// Returns false when face is not variable or doesn't have such axis, retuns true otherwise.
+    pub fn set_variation(
+        self: *Face,
+        axis: Tag,
+        value: f32,
+    ) bool {
+        if (!cfg.variable_fonts) @compileError("set_variation needs variable_fonts enabled");
+
+        if (!self.is_variable()) return false;
+        if ((self.variation_axes().len()) >= MAX_VAR_COORDS) return false;
+
+        var iter = self.variation_axes().iterator();
+        var i: usize = 0;
+        while (iter.next()) |var_axis| : (i += 1) {
+            if (var_axis.tag.inner != axis.inner) continue;
+            self.coordinates.data[i] = var_axis.normalized_value(value);
+
+            if (self.tables.variable_fonts.avar) |avar|
+                _ = avar.map_coordinate(&self.coordinates.data[0..self.coordinates.len], i);
+        }
+
+        return true;
+    }
+
+    /// Returns the current normalized variation coordinates.
+    pub fn variation_coordinates(
+        self: Face,
+    ) []const NormalizedCoordinate {
+        if (!cfg.variable_fonts) @compileError("variation_coordinates needs variable_fonts enabled");
+
+        return self.coordinates.data[0..self.coordinates.len];
+    }
+
+    /// Checks that face has non-default variation coordinates.
+    pub fn has_non_default_variation_coordinates(
+        self: Face,
+    ) bool {
+        if (!cfg.variable_fonts) @compileError("has_non_default_variation_coordinates needs variable_fonts enabled");
+
+        for (self.coordinates.data[0..self.coordinates.len]) |c| {
+            if (c.inner != 0) return true;
+        } else return false;
+    }
+
     /// Parses glyph's phantom points.
     ///
     /// Available only for variable fonts with the `gvar` table.
@@ -1323,6 +1385,8 @@ pub const Face = struct {
         gpa: if (cfg.variable_fonts) std.mem.Allocator else void,
         glyph_id: GlyphId,
     ) ?PhantomPoints {
+        if (!cfg.variable_fonts) @compileError("glyph_phantom_points needs variable_fonts enabled");
+
         const glyf = self.tables.glyf orelse return null;
         const gvar = self.tables.variable_fonts.gvar orelse return null;
         return gvar.phantom_points(gpa, glyf, self.coords(), glyph_id);
@@ -1823,7 +1887,20 @@ const VarCoords = struct {
 /// Where 0 is a default value.
 ///
 /// The number is stored as f2.16
-pub const NormalizedCoordinate = struct { inner: i16 };
+pub const NormalizedCoordinate = struct {
+    inner: i16,
+
+    pub fn from(n: anytype) NormalizedCoordinate {
+        const T = @TypeOf(n);
+        if (T == i16) {
+            const v = std.math.clamp(n, -(1 << 14), 1 << 14);
+            return .{ .inner = v };
+        } else if (T == f32) {
+            const v = std.math.clamp(n, -1.0, 1.0);
+            return .{ .inner = @intFromFloat(v * (1 << 16)) };
+        } else @compileError("can make NormalizedCoordinates only from i16 and f32");
+    }
+};
 
 /// Phantom points.
 ///
