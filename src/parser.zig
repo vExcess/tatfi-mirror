@@ -226,6 +226,18 @@ pub const F2DOT14 = struct {
         const f: f32 = @floatFromInt(i.inner);
         return f / (1 << 14);
     }
+
+    pub fn apply_float_delta(
+        self: F2DOT14,
+        delta: f32,
+    ) f32 {
+        return self.to_f32() + @as(
+            f32,
+            @floatCast(
+                @as(f64, @floatCast(delta)) * (@as(f64, 1.0) / @as(f64, 1 << 14)),
+            ),
+        );
+    }
 };
 
 /// A 32-bit signed fixed-point number (16.16).
@@ -245,6 +257,18 @@ pub const Fixed = struct {
             return .{ .value = f / (1 << 16) };
         }
     };
+
+    pub fn apply_float_delta(
+        self: Fixed,
+        delta: f32,
+    ) f32 {
+        return self.value + @as(
+            f32,
+            @floatCast(
+                @as(f64, @floatCast(delta)) * (@as(f64, 1.0) / @as(f64, 1 << 16)),
+            ),
+        );
+    }
 };
 
 /// A streaming binary parser.
