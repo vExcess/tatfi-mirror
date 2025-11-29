@@ -144,6 +144,14 @@ pub const Table = struct {
         return table;
     }
 
+    /// Returns `true` if the current table has version 0.
+    ///
+    /// A simple table can only emit `outline_glyph`, `paint`, `push_clip`, and
+    /// `pop_clip` [`Painter`] methods.
+    pub fn is_simple(self: Table) bool {
+        return self.version == 0;
+    }
+
     /// Whether the table contains a definition for the given glyph.
     pub fn contains(
         self: Table,

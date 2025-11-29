@@ -82,6 +82,26 @@ pub const Table = struct {
         const glyph_data = self.get(glyph_id) orelse return null;
         return outline_impl(self.loca_table, self.data, glyph_data, 0, &b) catch return null;
     }
+
+    /// The bounding box of the glyph. Unlike the `outline` method, this method does not
+    /// calculate the bounding box manually by outlining the glyph, but instead uses the
+    /// bounding box in the `glyf` program. As a result, this method will be much faster,
+    /// but the bounding box could be more inaccurate.
+    pub fn bbox(
+        self: Table,
+        glyph_id: lib.GlyphId,
+    ) ?lib.Rect {
+        const glyph_data = self.get(glyph_id) orelse return null;
+
+        var s = parser.Stream.new(glyph_data);
+        s.skip(i16); // number of contours
+        return .{
+            .x_min = s.read(i16) catch return null,
+            .y_min = s.read(i16) catch return null,
+            .x_max = s.read(i16) catch return null,
+            .y_max = s.read(i16) catch return null,
+        };
+    }
 };
 
 pub fn parse_simple_outline(
