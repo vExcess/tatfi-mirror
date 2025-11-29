@@ -94,15 +94,15 @@ pub fn main() !void {
     _ = tables.maxp;
     _ = tables.bdat;
     const cbdt = tables.cbdt;
-    _ = cbdt; // if (cbdt) |table| _ = table.get(.{64}, 0);
+    if (cbdt) |table| _ = table.get(.{64}, 0);
     const cff = tables.cff;
     if (cff) |table| {
         _ = table.outline(.{64}, tetfy.OutlineBuilder.dummy_builder) catch {};
-        // _ = table.glyph_index(.{64});
-        // _ = table.glyph_width(.{64});
+        _ = table.glyph_index(64);
+        _ = table.glyph_width(.{64});
         _ = table.glyph_index_by_name("name");
-        // _ = table.glyph_name(.{64});
-        // _ = table.cid(.{65});
+        _ = table.glyph_name(.{64});
+        _ = table.glyph_cid(.{65});
     }
     // TODO: Fill out the rest
     _ = tables.cmap; // Subtables
