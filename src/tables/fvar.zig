@@ -2,9 +2,9 @@
 //! https://docs.microsoft.com/en-us/typography/opentype/spec/fvar) implementation.
 
 const std = @import("std");
+const lib = @import("../lib.zig");
 const parser = @import("../parser.zig");
-
-const Tag = @import("../lib.zig").Tag;
+const cast = @import("../numcasts.zig");
 
 const LazyArray16 = parser.LazyArray16;
 const Offset16 = parser.Offset16;
@@ -44,7 +44,7 @@ pub const Table = struct {
 
 /// A [variation axis](https://docs.microsoft.com/en-us/typography/opentype/spec/fvar#variationaxisrecord).
 pub const VariationAxis = struct {
-    tag: Tag,
+    tag: lib.Tag,
     min_value: f32,
     def_value: f32,
     max_value: f32,
@@ -62,7 +62,7 @@ pub const VariationAxis = struct {
         ) parser.Error!Self {
             var s = parser.Stream.new(data);
 
-            const tag = try s.read(Tag);
+            const tag = try s.read(lib.Tag);
             const min_value = try s.read(Fixed);
             const def_value = try s.read(Fixed);
             const max_value = try s.read(Fixed);
@@ -79,4 +79,25 @@ pub const VariationAxis = struct {
             };
         }
     };
+
+    /// Returns a normalized variation coordinate for this axis.
+    pub fn normalized_value(
+        self: VariationAxis,
+        value: f32,
+    ) lib.NormalizedCoordinate {
+        var v = value;
+
+        // Based on
+        // https://docs.microsoft.com/en-us/typography/opentype/spec/avar#overview
+        v = std.math.clamp(v, self.min_value, self.max_value);
+
+        v = if (v == self.def_value)
+            0.0
+        else if (v < self.def_value)
+            (v - self.def_value) / (self.def_value - self.min_value)
+        else
+            (v - self.def_value) / (self.max_value - self.def_value);
+
+        return .from(v);
+    }
 };
