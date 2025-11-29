@@ -1238,6 +1238,25 @@ pub const Face = struct {
         return null;
     }
 
+    /// Returns a reference to a glyph's SVG image.
+    ///
+    /// A font can define a glyph using a raster or a vector image instead of a simple outline.
+    /// Which is primarily used for emojis. This method should be used to access SVG images.
+    ///
+    /// Note that this method will return just an SVG data. It should be rendered
+    /// or even decompressed (in case of SVGZ) by the caller.
+    /// We don't validate or preprocess it in any way.
+    ///
+    /// Also, a font can contain both: images and outlines. So when this method returns `None`
+    /// you should also try `outline_glyph()` afterwards.
+    pub fn glyph_svg_image(
+        self: Face,
+        glyph_id: GlyphId,
+    ) ?tables.svg.SvgDocument {
+        const t = self.tables.svg orelse return null;
+        return t.documents.find(glyph_id);
+    }
+
     /// Parses glyph's phantom points.
     ///
     /// Available only for variable fonts with the `gvar` table.
