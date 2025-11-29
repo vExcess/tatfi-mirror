@@ -130,7 +130,7 @@ pub const Subtable2 = struct {
                 // This is a two byte code.
                 const base = std.math.add(u16, first_code, first_byte << 8) catch return;
                 for (0..sub_header.entry_count) |k| {
-                    const code_point = std.math.add(u16, base, k) catch return;
+                    const code_point = std.math.add(u16, base, @truncate(k)) catch return;
                     F(code_point, ctx);
                 }
             }

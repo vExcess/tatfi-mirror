@@ -194,6 +194,47 @@ pub const Subtable = struct {
             inline else => |subtable| subtable.glyph_index(code_point),
         };
     }
+
+    /// Resolves a variation of a glyph ID from two code points.
+    ///
+    /// Returns `null`:
+    /// - when glyph ID is `0`.
+    /// - when format is not `unicode_variation_sequences`.
+    pub fn glyph_variation_index(
+        self: Subtable,
+        code_point: u21,
+        variation: u32,
+    ) ?GlyphVariationResult {
+        switch (self.format) {
+            .unicode_variation_sequences,
+            => |subtable| return subtable.glyph_index(code_point, variation),
+            else => return null,
+        }
+    }
+
+    /// Calls `f` for all codepoints contained in this subtable.
+    ///
+    /// This is a low-level method and it doesn't check that the current
+    /// encoding is Unicode. It simply calls the function `f` for all `u32`
+    /// codepoints that are present in this subtable.
+    ///
+    /// Note that this may list codepoints for which `glyph_index` still returns
+    /// `None` because this method finds all codepoints which were _defined_ in
+    /// this subtable. The subtable may still map them to glyph ID `0`.
+    ///
+    /// Returns without doing anything:
+    /// - when format is `MixedCoverage`, since it's not supported.
+    /// - when format is `UnicodeVariationSequences`, since it's not supported.
+    pub fn codepoints(
+        self: Subtable,
+        ctx: anytype,
+        F: fn (u32, @TypeOf(ctx)) void,
+    ) void {
+        switch (self.format) {
+            .mixed_coverage, .unicode_variation_sequences => {}, // unsupported
+            inline else => |subtable| subtable.codepoints(ctx, F),
+        }
+    }
 };
 
 /// A character encoding subtable variant.
