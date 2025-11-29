@@ -1600,6 +1600,20 @@ pub const Rect = struct {
         .x_max = 0,
         .y_max = 0,
     };
+
+    /// Returns rect's width.
+    pub fn width(
+        self: Rect,
+    ) i16 {
+        return self.x_max - self.x_min;
+    }
+
+    /// Returns rect's height.
+    pub fn height(
+        self: Rect,
+    ) i16 {
+        return self.y_max - self.y_min;
+    }
 };
 
 /// A rectangle described by the left-lower and upper-right points.
@@ -1816,7 +1830,7 @@ pub const OutlineBuilder = struct {
     };
 
     fn dummy_move(_: *anyopaque, _: f32, _: f32) void {}
-    fn dummy_quad(_: *anyopaque, _: f32, _: f32,_: f32, _: f32) void {}
-    fn dummy_curve(_: *anyopaque, _: f32, _: f32,_: f32, _: f32, _: f32, _: f32) void {}
+    fn dummy_quad(_: *anyopaque, _: f32, _: f32, _: f32, _: f32) void {}
+    fn dummy_curve(_: *anyopaque, _: f32, _: f32, _: f32, _: f32, _: f32, _: f32) void {}
     fn dummy_close(_: *anyopaque) void {}
 };
