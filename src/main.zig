@@ -104,8 +104,16 @@ pub fn main() !void {
         _ = table.glyph_name(.{64});
         _ = table.glyph_cid(.{65});
     }
+    const cmap = tables.cmap;
+    if (cmap) |table| {
+        const sts = table.subtables;
+        const st = sts.get(0).?;
+        _ = st.is_unicode();
+        _ = st.glyph_index(54);
+        _ = st.glyph_variation_index(4, 4);
+        _ = st.codepoints(@as(u32, 1), func);
+    }
     // TODO: Fill out the rest
-    _ = tables.cmap; // Subtables
     _ = tables.colr;
     _ = tables.ebdt;
     _ = tables.glyf;
@@ -159,3 +167,5 @@ const unsafe_painter = tetfy.tables.colr.Painter{
 };
 
 const white: tetfy.RgbaColor = .{ .red = 255, .green = 255, .blue = 255, .alpha = 255 };
+
+fn func(_: u32, _: u32) void {}
