@@ -113,10 +113,21 @@ pub fn main() !void {
         _ = st.glyph_variation_index(4, 4);
         _ = st.codepoints(@as(u32, 1), func);
     }
-    // TODO: Fill out the rest
-    _ = tables.colr;
+    const colr = tables.colr;
+    if (colr) |table| {
+        _ = table.is_simple();
+        _ = table.contains(.{4});
+        // the following two methods are called through `face.paint_color_glyph`
+        _ = table.clip_box(.{5}, &.{});
+        _ = table.paint(.{4}, 0, unsafe_painter, &.{}, white) catch {};
+    }
     _ = tables.ebdt;
-    _ = tables.glyf;
+    const glyf = tables.glyf;
+    if (glyf) |table| {
+        _ = table.outline(.{5}, tetfy.OutlineBuilder.dummy_builder);
+        _ = table.bbox(.{4});
+    }
+    // TODO: Fill out the rest
     _ = tables.hmtx;
     _ = tables.kern;
     _ = tables.name;
