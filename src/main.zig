@@ -187,8 +187,19 @@ pub fn main() !void {
             _ = strike.len();
         }
     }
+    const stat = tables.stat;
+    if (stat) |table| {
+        var iter = table.subtables();
+        while (iter.next()) |st| {
+            _ = st.value();
+            _ = st.contains(.{ .value = 0 });
+            _ = st.name_id();
+            _ = st.is_elidable();
+            _ = st.is_older_sibling();
+        }
+        _ = table.subtable_for_axis(.{ .inner = 3 }, null);
+    }
     // TODO: Fill out the rest
-    _ = tables.stat;
     _ = tables.svg;
     _ = tables.vhea;
     _ = tables.vmtx;
