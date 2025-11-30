@@ -974,7 +974,7 @@ fn outline_var_impl(
 /// Same goes for the previous delta. If there are no deltas
 /// before the current one, we have to use the last one in the current contour.
 ///
-/// And in case of `ttf-parser` (`tetfy`'s dad) everything is becoming even more complex,
+/// And in case of `ttf-parser` (`tatfi`'s dad) everything is becoming even more complex,
 /// since we don't actually have a list of points and deltas, only iterators.
 /// Because of `ttf-parser`'s allocation free policy.
 /// Which makes the code even more complicated.

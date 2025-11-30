@@ -1,7 +1,7 @@
 const std = @import("std");
 
 pub fn build(b: *std.Build) void {
-    const mod = b.addModule("tetfy", .{
+    const mod = b.addModule("tatfi", .{
         .root_source_file = b.path("src/lib.zig"),
     });
 
@@ -71,7 +71,7 @@ fn set_up_testing_exe(
             .optimize = optimize,
 
             .imports = &.{
-                .{ .name = "tetfy", .module = mod },
+                .{ .name = "tatfi", .module = mod },
             },
         }),
     });

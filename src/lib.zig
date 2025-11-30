@@ -1126,7 +1126,7 @@ pub const Face = struct {
 
     /// Outlines a glyph and returns its tight bounding box.
     ///
-    /// **Warning**: since `tetfy` is a pull parser,
+    /// **Warning**: since `tatfi` is a pull parser,
     /// `OutlineBuilder` will emit segments even when outline is partially malformed.
     /// You must check `outline_glyph()` result before using
     /// `OutlineBuilder`'s output.
