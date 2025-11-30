@@ -127,11 +127,17 @@ pub fn main() !void {
         _ = table.outline(.{5}, tetfy.OutlineBuilder.dummy_builder);
         _ = table.bbox(.{4});
     }
-    // TODO: Fill out the rest
     _ = tables.hmtx;
-    _ = tables.kern;
+    const kern = tables.kern;
+    if (kern) |table| {
+        const sts = table.subtables;
+        var iter = sts.iterator();
+        while (iter.next()) |st|
+            _ = st.glyphs_kerning(.{5}, .{4});
+    }
     _ = tables.name;
     _ = tables.os2;
+    // TODO: Fill out the rest
     _ = tables.post;
     _ = tables.sbix;
     _ = tables.stat;

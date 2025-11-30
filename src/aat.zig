@@ -4,6 +4,7 @@
 
 const std = @import("std");
 const parser = @import("parser.zig");
+const lib = @import("lib.zig");
 
 const LazyArray16 = parser.LazyArray16;
 
@@ -185,4 +186,61 @@ pub const LookupSingle = struct {
             return self.glyph == 0xFFFF;
         }
     };
+};
+
+/// A [State Table](
+/// https://developer.apple.com/fonts/TrueType-Reference-Manual/RM06/Chap6Tables.html).
+///
+/// Also called `STHeader`.
+///
+/// Currently used by `kern` table.
+pub const StateTable = struct {
+    number_of_classes: u16,
+    first_glyph: lib.GlyphId,
+    class_table: []const u8,
+    state_array_offset: u16,
+    state_array: []const u8,
+    entry_table: []const u8,
+    actions: []const u8,
+
+    pub fn parse(
+        data: []const u8,
+    ) parser.Error!StateTable {
+        var s = parser.Stream.new(data);
+
+        const number_of_classes = try s.read(u16);
+        // Note that in format1 subtable, offsets are not from the subtable start,
+        // but from subtable start + `header_size`.
+        // So there is not need to subtract the `header_size`.
+        const class_table_offset: usize = (try s.read(parser.Offset16))[0];
+        const state_array_offset: usize = (try s.read(parser.Offset16))[0];
+        const entry_table_offset: usize = (try s.read(parser.Offset16))[0];
+        // Ignore `values_offset` since we don't use it.
+
+        // Parse class subtable.
+        s.offset = class_table_offset;
+        const first_glyph = try s.read(lib.GlyphId);
+        const number_of_glyphs = try s.read(u16);
+        // The class table contains u8, so it's easier to use just a slice
+        // instead of a LazyArray.
+        const class_table = try s.read_bytes(number_of_glyphs);
+
+        if (state_array_offset > data.len or
+            entry_table_offset > data.len) return error.ParseFail;
+
+        return .{
+            .number_of_classes = number_of_classes,
+            .first_glyph = first_glyph,
+            .class_table = class_table,
+            .state_array_offset = @truncate(state_array_offset),
+            // We don't know the actual data size and it's kinda expensive to calculate.
+            // So we are simply storing all the data past the offset.
+            // Despite the fact that they may overlap.
+            .state_array = data[state_array_offset..],
+            .entry_table = data[entry_table_offset..],
+            // `ValueOffset` defines an offset from the start of the subtable data.
+            // We do not check that the provided offset is actually after `values_offset`.
+            .actions = data,
+        };
+    }
 };
