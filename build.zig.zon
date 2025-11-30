@@ -1,7 +1,7 @@
 .{
-    .name = .tetfy,
+    .name = .tatfi,
     .version = "0.0.1",
-    .fingerprint = 0x8f0e731662c06ccc, // Changing this has security and trust implications.
+    .fingerprint = 0x1ddbf4254cc9983c, // Changing this has security and trust implications.
     .minimum_zig_version = "0.15.2",
     .paths = .{
         "build.zig",

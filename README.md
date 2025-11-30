@@ -1,6 +1,6 @@
-![alt text](tetfy.jpg "tetfy")
+![alt text](tatfi.jpg "tatfi")
 
-# `tetfy` - TTF parsing in Zig
+# `tatfi` - TTF parsing in Zig
 
 This is (almost) a line-by-line port of the `ttf-parser` Rust crate.
 

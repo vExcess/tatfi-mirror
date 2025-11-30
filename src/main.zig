@@ -1,5 +1,5 @@
 const std = @import("std");
-const tetfy = @import("tetfy");
+const ttf = @import("tatfi");
 
 pub fn main() !void {
     defer std.debug.print(
@@ -12,7 +12,7 @@ pub fn main() !void {
     // interface.
 
     // Face methods
-    var face = tetfy.Face.parse("true", 0) catch return;
+    var face = ttf.Face.parse("true", 0) catch return;
     _ = face.raw_face.table(.{ .inner = 53 }) orelse {};
     _ = face.names();
     _ = face.style();
@@ -61,7 +61,7 @@ pub fn main() !void {
     _ = face.glyph_y_origin(.{9});
     _ = face.glyph_name(.{6});
     // use a real implementation of the OutlineBuilder interface
-    _ = face.outline_glyph(failing_allocator, .{6}, tetfy.OutlineBuilder.dummy_builder);
+    _ = face.outline_glyph(failing_allocator, .{6}, ttf.OutlineBuilder.dummy_builder);
     _ = face.glyph_bounding_box(failing_allocator, .{53});
     const r = face.global_bounding_box();
     _ = r.width();
@@ -74,18 +74,18 @@ pub fn main() !void {
     _ = face.paint_color_glyph(.{64}, 16, white, unsafe_painter) catch {};
 
     _ = face.variation_axes();
-    _ = face.set_variation(tetfy.Tag{ .inner = 4 }, 300.0); // mutable method
+    _ = face.set_variation(ttf.Tag{ .inner = 4 }, 300.0); // mutable method
     _ = face.variation_coordinates();
     _ = face.has_non_default_variation_coordinates();
 
     _ = face.glyph_phantom_points(failing_allocator, .{55});
 
-    const raw_tables: tetfy.RawFaceTables = .{};
-    _ = tetfy.Face.from_raw_tables(raw_tables) catch {};
+    const raw_tables: ttf.RawFaceTables = .{};
+    _ = ttf.Face.from_raw_tables(raw_tables) catch {};
 
     // RawFace methods
     const raw_face = face.raw_face;
-    _ = raw_face.table(tetfy.Tag{ .inner = 43 });
+    _ = raw_face.table(ttf.Tag{ .inner = 43 });
 
     // FaceTables methods
     const tables = face.tables;
@@ -93,51 +93,44 @@ pub fn main() !void {
     _ = tables.hhea;
     _ = tables.maxp;
     _ = tables.bdat;
-    const cbdt = tables.cbdt;
-    if (cbdt) |table| _ = table.get(.{64}, 0);
-    const cff = tables.cff;
-    if (cff) |table| {
-        _ = table.outline(.{64}, tetfy.OutlineBuilder.dummy_builder) catch {};
-        _ = table.glyph_index(64);
-        _ = table.glyph_width(.{64});
-        _ = table.glyph_index_by_name("name");
-        _ = table.glyph_name(.{64});
-        _ = table.glyph_cid(.{65});
+    if (tables.cbdt) |cbdt| _ = cbdt.get(.{64}, 0);
+    if (tables.cff) |cff| {
+        _ = cff.outline(.{64}, ttf.OutlineBuilder.dummy_builder) catch {};
+        _ = cff.glyph_index(64);
+        _ = cff.glyph_width(.{64});
+        _ = cff.glyph_index_by_name("name");
+        _ = cff.glyph_name(.{64});
+        _ = cff.glyph_cid(.{65});
     }
-    const cmap = tables.cmap;
-    if (cmap) |table| {
-        const sts = table.subtables;
+    if (tables.cmap) |cmap| {
+        const sts = cmap.subtables;
         const st = sts.get(0).?;
         _ = st.is_unicode();
         _ = st.glyph_index(54);
         _ = st.glyph_variation_index(4, 4);
         _ = st.codepoints(@as(u32, 1), func);
     }
-    const colr = tables.colr;
-    if (colr) |table| {
-        _ = table.is_simple();
-        _ = table.contains(.{4});
+    if (tables.colr) |colr| {
+        _ = colr.is_simple();
+        _ = colr.contains(.{4});
         // the following two methods are called through `face.paint_color_glyph`
-        _ = table.clip_box(.{5}, &.{});
-        _ = table.paint(.{4}, 0, unsafe_painter, &.{}, white) catch {};
+        _ = colr.clip_box(.{5}, &.{});
+        _ = colr.paint(.{4}, 0, unsafe_painter, &.{}, white) catch {};
     }
     _ = tables.ebdt;
-    const glyf = tables.glyf;
-    if (glyf) |table| {
-        _ = table.outline(.{5}, tetfy.OutlineBuilder.dummy_builder);
-        _ = table.bbox(.{4});
+    if (tables.glyf) |glyf| {
+        _ = glyf.outline(.{5}, ttf.OutlineBuilder.dummy_builder);
+        _ = glyf.bbox(.{4});
     }
     _ = tables.hmtx;
-    const kern = tables.kern;
-    if (kern) |table| {
-        const sts = table.subtables;
-        var iter = sts.iterator();
-        while (iter.next()) |st|
-            _ = st.glyphs_kerning(.{5}, .{4});
+    if (tables.kern) |kern| {
+        const subtables = kern.subtables;
+        var iter = subtables.iterator();
+        while (iter.next()) |subtable|
+            _ = subtable.glyphs_kerning(.{5}, .{4});
     }
-    const name = tables.name;
-    if (name) |table| {
-        const names = table.names;
+    if (tables.name) |name| {
+        const names = name.names;
         _ = names.get(4);
         var iter = names.iterator();
         while (iter.next()) |n| {
@@ -145,59 +138,55 @@ pub fn main() !void {
             _ = n.language();
         }
     }
-    const os2 = tables.os2;
-    if (os2) |table| {
+    if (tables.os2) |os2| {
         // direcly called by methods on Face
-        _ = table.weight();
-        _ = table.width();
-        _ = table.permissions();
-        _ = table.is_subsetting_allowed();
-        _ = table.is_outline_embedding_allowed();
-        _ = table.subscript_metrics();
-        _ = table.superscript_metrics();
-        _ = table.strikeout_metrics();
-        _ = table.unicode_ranges();
-        _ = table.style();
-        _ = table.is_bold();
-        _ = table.use_typographic_metrics();
-        _ = table.typographic_ascender();
-        _ = table.typographic_descender();
-        _ = table.typographic_line_gap();
-        _ = table.windows_ascender();
-        _ = table.windows_descender();
-        _ = table.x_height();
-        _ = table.capital_height();
+        _ = os2.weight();
+        _ = os2.width();
+        _ = os2.permissions();
+        _ = os2.is_subsetting_allowed();
+        _ = os2.is_outline_embedding_allowed();
+        _ = os2.subscript_metrics();
+        _ = os2.superscript_metrics();
+        _ = os2.strikeout_metrics();
+        _ = os2.unicode_ranges();
+        _ = os2.style();
+        _ = os2.is_bold();
+        _ = os2.use_typographic_metrics();
+        _ = os2.typographic_ascender();
+        _ = os2.typographic_descender();
+        _ = os2.typographic_line_gap();
+        _ = os2.windows_ascender();
+        _ = os2.windows_descender();
+        _ = os2.x_height();
+        _ = os2.capital_height();
     }
-    const post = tables.post;
-    if (post) |table| {
-        _ = table.glyph_name(.{5});
-        _ = table.glyph_index_by_name("name");
-        var iter = table.names();
+    if (tables.post) |post| {
+        _ = post.glyph_name(.{5});
+        _ = post.glyph_index_by_name("name");
+        var iter = post.names();
         while (iter.next()) |_| {}
     }
-    const sbix = tables.sbix;
-    if (sbix) |table| {
-        _ = table.best_strike(5);
-        const ss = table.strikes;
-        _ = ss.get(4);
-        _ = ss.len();
-        var iter = ss.iterator();
+    if (tables.sbix) |sbix| {
+        _ = sbix.best_strike(5);
+        const strikes = sbix.strikes;
+        _ = strikes.get(4);
+        _ = strikes.len();
+        var iter = strikes.iterator();
         while (iter.next()) |strike| {
             _ = strike.get(.{4});
             _ = strike.len();
         }
     }
-    const stat = tables.stat;
-    if (stat) |table| {
-        var iter = table.subtables();
-        while (iter.next()) |st| {
-            _ = st.value();
-            _ = st.contains(.{ .value = 0 });
-            _ = st.name_id();
-            _ = st.is_elidable();
-            _ = st.is_older_sibling();
+    if (tables.stat) |stat| {
+        var iter = stat.subtables();
+        while (iter.next()) |subtable| {
+            _ = subtable.value();
+            _ = subtable.contains(.{ .value = 0 });
+            _ = subtable.name_id();
+            _ = subtable.is_elidable();
+            _ = subtable.is_older_sibling();
         }
-        _ = table.subtable_for_axis(.{ .inner = 3 }, null);
+        _ = stat.subtable_for_axis(.{ .inner = 3 }, null);
     }
     // TODO: Fill out the rest
     _ = tables.svg;
@@ -237,11 +226,11 @@ fn noAlloc(_: *anyopaque, _: usize, _: std.mem.Alignment, _: usize) ?[*]u8 {
     return null;
 }
 
-const unsafe_painter = tetfy.tables.colr.Painter{
+const unsafe_painter = ttf.tables.colr.Painter{
     .ptr = undefined,
     .vtable = undefined,
 };
 
-const white: tetfy.RgbaColor = .{ .red = 255, .green = 255, .blue = 255, .alpha = 255 };
+const white: ttf.RgbaColor = .{ .red = 255, .green = 255, .blue = 255, .alpha = 255 };
 
 fn func(_: u32, _: u32) void {}
