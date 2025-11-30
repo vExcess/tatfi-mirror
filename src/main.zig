@@ -168,9 +168,26 @@ pub fn main() !void {
         _ = table.x_height();
         _ = table.capital_height();
     }
+    const post = tables.post;
+    if (post) |table| {
+        _ = table.glyph_name(.{5});
+        _ = table.glyph_index_by_name("name");
+        var iter = table.names();
+        while (iter.next()) |_| {}
+    }
+    const sbix = tables.sbix;
+    if (sbix) |table| {
+        _ = table.best_strike(5);
+        const ss = table.strikes;
+        _ = ss.get(4);
+        _ = ss.len();
+        var iter = ss.iterator();
+        while (iter.next()) |strike| {
+            _ = strike.get(.{4});
+            _ = strike.len();
+        }
+    }
     // TODO: Fill out the rest
-    _ = tables.post;
-    _ = tables.sbix;
     _ = tables.stat;
     _ = tables.svg;
     _ = tables.vhea;

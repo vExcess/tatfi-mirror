@@ -111,8 +111,8 @@ pub const Strike = struct {
         if (start == end) return error.ParseFail;
 
         const data_len = len: {
-            const len = try std.math.sub(u32, end, start);
-            break :len try std.math.sub(u32, len, 8); // 8 is a Glyph data header size.
+            const length = try std.math.sub(u32, end, start);
+            break :len try std.math.sub(u32, length, 8); // 8 is a Glyph data header size.
         };
 
         var s = try parser.Stream.new_at(self.data, start);
@@ -151,6 +151,14 @@ pub const Strike = struct {
             .format = format,
             .data = image_data,
         };
+    }
+
+    /// Returns the number of glyphs in this strike.
+    pub fn len(
+        self: Strike,
+    ) u16 {
+        // The last offset simply indicates the glyph data end. We don't need it.
+        return self.offsets.len() -| 1;
     }
 };
 
@@ -191,7 +199,7 @@ pub const Strikes = struct {
         strikes: *const Strikes,
         index: u32 = 0,
 
-        fn next(
+        pub fn next(
             self: *Iterator,
         ) ?Strike {
             if (self.index < self.strikes.len()) {
