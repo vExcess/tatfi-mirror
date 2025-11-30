@@ -223,7 +223,7 @@ pub const Names = struct {
     data: []const u8,
     offset: usize,
 
-    fn next(
+    pub fn next(
         self: *Names,
     ) ?[]const u8 {
         // Glyph names are stored as Pascal Strings.
