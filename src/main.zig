@@ -135,8 +135,39 @@ pub fn main() !void {
         while (iter.next()) |st|
             _ = st.glyphs_kerning(.{5}, .{4});
     }
-    _ = tables.name;
-    _ = tables.os2;
+    const name = tables.name;
+    if (name) |table| {
+        const names = table.names;
+        _ = names.get(4);
+        var iter = names.iterator();
+        while (iter.next()) |n| {
+            _ = n.to_string(failing_allocator);
+            _ = n.language();
+        }
+    }
+    const os2 = tables.os2;
+    if (os2) |table| {
+        // direcly called by methods on Face
+        _ = table.weight();
+        _ = table.width();
+        _ = table.permissions();
+        _ = table.is_subsetting_allowed();
+        _ = table.is_outline_embedding_allowed();
+        _ = table.subscript_metrics();
+        _ = table.superscript_metrics();
+        _ = table.strikeout_metrics();
+        _ = table.unicode_ranges();
+        _ = table.style();
+        _ = table.is_bold();
+        _ = table.use_typographic_metrics();
+        _ = table.typographic_ascender();
+        _ = table.typographic_descender();
+        _ = table.typographic_line_gap();
+        _ = table.windows_ascender();
+        _ = table.windows_descender();
+        _ = table.x_height();
+        _ = table.capital_height();
+    }
     // TODO: Fill out the rest
     _ = tables.post;
     _ = tables.sbix;
