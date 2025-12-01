@@ -69,11 +69,10 @@ pub fn LazyArray(I: type, T: type) type {
 
             if (index >= self.len()) return null;
             const start = index * size;
-            if (start > self.data.len) return null;
-            const end = start + size;
-            if (end > self.data.len) return null;
+            if (start > self.data.len or
+                start + size > self.data.len) return null;
 
-            const bytes = self.data[start..end];
+            const bytes = self.data[start..][0..size];
             const ret = switch (has_trait(P, "FromData")) {
                 .wrapper => |F| .{std.mem.readInt(F, bytes, .big)},
                 else => unreachable,
@@ -87,7 +86,6 @@ pub fn LazyArray(I: type, T: type) type {
             self: Self,
         ) I {
             const size = size_of(T);
-
             return @truncate(self.data.len / size);
         }
 
@@ -171,16 +169,12 @@ pub fn LazyArray(I: type, T: type) type {
 /// Unlike [`LazyArray16`], internal storage is not continuous.
 ///
 /// Multiple offsets can point to the same data.
-// [ARS] Currently a stub
 pub fn LazyOffsetArray16(T: type) type {
     // [ARS] T implements trait FromSlice
     return struct {
         data: []const u8,
         // Zero offsets must be ignored, therefore we're using optionals
         offsets: LazyArray16(?Offset16),
-        comptime {
-            _ = T;
-        }
 
         const Self = @This();
 
@@ -206,6 +200,39 @@ pub fn LazyOffsetArray16(T: type) type {
                 .offsets = offsets,
             };
         }
+
+        /// Returns a value at `index`.
+        pub fn get(
+            self: Self,
+            index: u16,
+        ) ?T {
+            const offset = self.offsets.get_optional(index) orelse return null;
+            if (offset[0] > self.data.len) return null;
+            return T.parse(self.data[offset[0]..]) catch null;
+        }
+
+        /// Returns array's length.
+        pub fn len(
+            self: Self,
+        ) u16 {
+            return self.offsets.len();
+        }
+
+        pub fn iterator(self: *const Self) Iterator {
+            return .{ .array = self };
+        }
+
+        pub const Iterator = struct {
+            array: *const Self,
+            index: u16 = 0,
+
+            pub fn next(self: *Iterator) error{IteratorEnd}!?T {
+                if (self.index < self.array.len()) {
+                    defer self.index += 1;
+                    return self.array.get(self.index);
+                } else return error.IteratorEnd;
+            }
+        };
     };
 }
 
@@ -379,11 +406,8 @@ pub const Stream = struct {
         count: anytype,
     ) Error!LazyArray(@TypeOf(count), T) {
         const size = size_of(T);
-
         const len = count * size;
-
         const bytes = try self.read_bytes(len);
-
         return LazyArray(@TypeOf(count), T).new(bytes);
     }
 
@@ -398,11 +422,8 @@ pub const Stream = struct {
             .wrapper => |F| @typeInfo(F).int.bits / 8,
             else => @compileError("read_array_optional only to be used for wrappers"),
         };
-
         const len = count * size;
-
         const bytes = try self.read_bytes(len);
-
         return LazyArray(@TypeOf(count), ?T).new(bytes);
     }
 
@@ -477,6 +498,9 @@ pub const Stream = struct {
 };
 
 pub inline fn size_of(T: type) usize {
+    if (@typeInfo(T) == .optional) // [ARS] for LazyArray16(?Offset16) to work
+        return size_of(@typeInfo(T).optional.child);
+
     return switch (has_trait(T, "FromData")) {
         .int => @typeInfo(T).int.bits / 8,
         .impl => T.FromData.SIZE,
