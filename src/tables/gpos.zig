@@ -52,6 +52,53 @@ pub const HintingDevice = struct {
     end_size: u16,
     delta_format: u16,
     delta_values: parser.LazyArray16(u16),
+
+    /// Returns X-axis delta.
+    pub fn x_delta(
+        self: HintingDevice,
+        units_per_em: u16,
+        pixels_per_em: ?struct { u16, u16 },
+    ) ?i32 {
+        const x, _ = pixels_per_em orelse return null;
+        return self.get_delta(x, units_per_em);
+    }
+
+    /// Returns Y-axis delta.
+    pub fn y_delta(
+        self: HintingDevice,
+        units_per_em: u16,
+        pixels_per_em: ?struct { u16, u16 },
+    ) ?i32 {
+        _, const y = pixels_per_em orelse return null;
+        return self.get_delta(y, units_per_em);
+    }
+
+    fn get_delta(
+        self: HintingDevice,
+        ppem: u16,
+        scale: u16,
+    ) ?i32 {
+        const f_16 = self.delta_format;
+        std.debug.assert(f_16 >= 1 and f_16 <= 3);
+        const f: u3 = @truncate(f_16);
+
+        if (ppem == 0 or
+            ppem < self.start_size or
+            ppem > self.end_size) return null;
+
+        const s = ppem - self.start_size;
+        const byte = self.delta_values.get(s >> (4 - f)) orelse return null;
+        // let bits = byte >> (16 - (((s & ((1 << (4 - f)) - 1)) + 1) << f)); // [ARS] TODO need to double check?
+        const bits = byte >> @as(u4, @truncate(16 - (((s & ((@as(u16, 1) << (4 - f)) - 1)) + 1) << f)));
+        // let mask = 0xFFFF >> (16 - (1 << f));
+        const mask = @as(u16, 0xFFFF) >> @as(u4, @truncate(16 - (@as(u16, 1) << f)));
+
+        var delta: i64 = bits & mask;
+        if (delta >= ((mask + 1) >> 1))
+            delta -= mask + 1;
+
+        return std.math.cast(i32, delta * @divFloor(scale, ppem));
+    }
 };
 
 /// A [Device Table](https://docs.microsoft.com/en-us/typography/opentype/spec/chapter2#devVarIdxTbls)
