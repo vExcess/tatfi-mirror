@@ -11,16 +11,20 @@ pub const LayoutTable = layout_table.LayoutTable;
 
 // end of internal reëxports
 
+const std = @import("std");
+const lib = @import("lib.zig");
 const parser = @import("parser.zig");
 
-const GlyphId = @import("lib.zig").GlyphId;
-const LazyArray16 = parser.LazyArray16;
+pub const ContextLookup = @import("ggg/context.zig").ContextLookup;
+pub const ChainedContextLookup = @import("ggg/chained_context.zig").ChainedContextLookup;
+
+pub const parse_extension_lookup = @import("ggg/lookup.zig").parse_extension_lookup;
 
 /// A [Class Definition Table](
 /// https://docs.microsoft.com/en-us/typography/opentype/spec/chapter2#class-definition-table).
 pub const ClassDefinition = union(enum) {
-    format1: struct { start: GlyphId, classes: LazyArray16(Class) },
-    format2: struct { records: LazyArray16(RangeRecord) },
+    format1: struct { start: lib.GlyphId, classes: parser.LazyArray16(Class) },
+    format2: struct { records: parser.LazyArray16(RangeRecord) },
     empty,
 
     pub fn parse(
@@ -31,7 +35,7 @@ pub const ClassDefinition = union(enum) {
 
         switch (v) {
             1 => {
-                const start = try s.read(GlyphId);
+                const start = try s.read(lib.GlyphId);
                 const count = try s.read(u16);
                 const classes = try s.read_array(Class, count);
                 return .{ .format1 = .{
@@ -47,6 +51,25 @@ pub const ClassDefinition = union(enum) {
             else => return error.ParseFail,
         }
     }
+
+    /// Returns the glyph class of the glyph (zero if it is not defined).
+    pub fn get(
+        self: ClassDefinition,
+        glyph: lib.GlyphId,
+    ) Class {
+        switch (self) {
+            .format1 => |f| {
+                const index = std.math.sub(u16, glyph[0], f.start[0]) catch return 0;
+                return f.classes.get(index) orelse 0;
+            },
+            .format2 => |f| {
+                const record = RangeRecord.range(f.records, glyph) orelse return 0;
+                const offset = glyph[0] - record.start[0];
+                return std.math.add(u16, record.value, offset) catch 0;
+            },
+            .empty => return 0,
+        }
+    }
 };
 
 /// A value of [Class Definition Table](
@@ -56,9 +79,9 @@ pub const Class = u16;
 /// A record that describes a range of glyph IDs.
 pub const RangeRecord = struct {
     /// First glyph ID in the range
-    start: GlyphId,
+    start: lib.GlyphId,
     /// Last glyph ID in the range
-    end: GlyphId,
+    end: lib.GlyphId,
     /// Coverage Index of first glyph ID in range.
     value: u16,
 
@@ -72,12 +95,34 @@ pub const RangeRecord = struct {
         ) parser.Error!Self {
             var s = parser.Stream.new(data);
             return .{
-                .start = try s.read(GlyphId),
-                .end = try s.read(GlyphId),
+                .start = try s.read(lib.GlyphId),
+                .end = try s.read(lib.GlyphId),
                 .value = try s.read(u16),
             };
         }
     };
+
+    /// Returns a [`RangeRecord`] for a glyph.
+    pub fn range(
+        self: parser.LazyArray16(RangeRecord),
+        glyph: lib.GlyphId,
+    ) ?RangeRecord {
+        const func = struct {
+            fn func(
+                record: RangeRecord,
+                rhs: lib.GlyphId,
+            ) std.math.Order {
+                return if (rhs[0] < record.start[0])
+                    .gt
+                else if (rhs[0] <= record.end[0])
+                    .eq
+                else
+                    .lt;
+            }
+        }.func;
+        _, const ret = self.binary_search_by(glyph, func) orelse return null;
+        return ret;
+    }
 };
 
 /// A [Coverage Table](
@@ -85,11 +130,11 @@ pub const RangeRecord = struct {
 pub const Coverage = union(enum) {
     format1: struct {
         /// Array of glyph IDs. Sorted.
-        glyphs: LazyArray16(GlyphId),
+        glyphs: parser.LazyArray16(lib.GlyphId),
     },
     format2: struct {
         /// Array of glyph ranges. Ordered by `RangeRecord.start`.
-        records: LazyArray16(RangeRecord),
+        records: parser.LazyArray16(RangeRecord),
     },
 
     pub fn parse(
@@ -99,7 +144,7 @@ pub const Coverage = union(enum) {
         switch (try s.read(u16)) {
             1 => {
                 const count = try s.read(u16);
-                const glyphs = try s.read_array(GlyphId, count);
+                const glyphs = try s.read_array(lib.GlyphId, count);
                 return .{ .format1 = .{ .glyphs = glyphs } };
             },
             2 => {
@@ -108,6 +153,38 @@ pub const Coverage = union(enum) {
                 return .{ .format2 = .{ .records = records } };
             },
             else => return error.ParseFail,
+        }
+    }
+
+    /// Checks that glyph is present.
+    pub fn contains(
+        self: Coverage,
+        glyph: lib.GlyphId,
+    ) bool {
+        return self.get(glyph) != null;
+    }
+
+    /// Returns the coverage index of the glyph or `None` if it is not covered.
+    pub fn get(
+        self: Coverage,
+        glyph: lib.GlyphId,
+    ) ?u16 {
+        switch (self) {
+            .format1 => |f| {
+                const func = struct {
+                    fn func(lhs: lib.GlyphId, rhs: lib.GlyphId) std.math.Order {
+                        return std.math.order(lhs[0], rhs[0]);
+                    }
+                }.func;
+
+                const p, _ = f.glyphs.binary_search_by(glyph, func) orelse return null;
+                return p;
+            },
+            .format2 => |f| {
+                const record = RangeRecord.range(f.records, glyph) orelse return null;
+                const offset = glyph[0] - record.start[0];
+                return std.math.add(u16, record.value, offset) catch null;
+            },
         }
     }
 };

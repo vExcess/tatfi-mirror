@@ -71,7 +71,7 @@ pub fn main() !void {
     _ = face.glyph_svg_image(.{64});
     _ = face.is_color_glyph(.{54});
     _ = face.color_palettes();
-    _ = face.paint_color_glyph(.{64}, 16, white, unsafe_painter) catch {};
+    _ = face.paint_color_glyph(.{64}, 16, white, unsafe_painter) catch return;
 
     _ = face.variation_axes();
     _ = face.set_variation(ttf.Tag{ .inner = 4 }, 300.0); // mutable method
@@ -81,7 +81,7 @@ pub fn main() !void {
     _ = face.glyph_phantom_points(failing_allocator, .{55});
 
     const raw_tables: ttf.RawFaceTables = .{};
-    _ = ttf.Face.from_raw_tables(raw_tables) catch {};
+    _ = ttf.Face.from_raw_tables(raw_tables) catch return;
 
     // RawFace methods
     const raw_face = face.raw_face;
@@ -95,7 +95,7 @@ pub fn main() !void {
     _ = tables.bdat;
     if (tables.cbdt) |cbdt| _ = cbdt.get(.{64}, 0);
     if (tables.cff) |cff| {
-        _ = cff.outline(.{64}, ttf.OutlineBuilder.dummy_builder) catch {};
+        _ = cff.outline(.{64}, ttf.OutlineBuilder.dummy_builder) catch return;
         _ = cff.glyph_index(64);
         _ = cff.glyph_width(.{64});
         _ = cff.glyph_index_by_name("name");
@@ -115,7 +115,7 @@ pub fn main() !void {
         _ = colr.contains(.{4});
         // the following two methods are called through `face.paint_color_glyph`
         _ = colr.clip_box(.{5}, &.{});
-        _ = colr.paint(.{4}, 0, unsafe_painter, &.{}, white) catch {};
+        _ = colr.paint(.{4}, 0, unsafe_painter, &.{}, white) catch return;
     }
     _ = tables.ebdt;
     if (tables.glyf) |glyf| {
@@ -201,9 +201,34 @@ pub fn main() !void {
     _ = tables.vhea;
     _ = tables.vmtx; // same as hmtx
     if (tables.vorg) |vorg| _ = vorg.glyph_y_origin(.{0});
+    if (tables.opentype_layout.gdef) |gdef| {
+        _ = gdef.glyph_class(.{0});
+        _ = gdef.glyph_mark_attachment_class(.{4});
+        _ = gdef.is_mark_glyph(.{4}, null);
+        _ = gdef.glyph_variation_delta(0, 0, &.{});
+    }
+    if (tables.opentype_layout.gpos) |gpos| {
+        const scripts = gpos.scripts;
+        _ = scripts.get(0);
+        _ = scripts.find(.{ .inner = 0 });
+        _ = scripts.index(.{ .inner = 0 });
+        var script_iter = scripts.iterator();
+        while (script_iter.next()) |_| {}
+
+        _ = gpos.features; // same api as `scripts`
+        // until here is shared with gsub as well
+
+        const lookups = gpos.lookups;
+        var lookup_iter = lookups.iterator();
+        while (lookup_iter.next()) |maybe| {
+            const lookup = maybe orelse continue;
+            const subtables = lookup.subtables; // also an iterator
+            const subtable = subtables.get(ttf.tables.gpos.PositioningSubtable, 0) orelse return;
+            _ = subtable.coverage();
+            // api goes much deeper
+        } else |_| {}
+    }
     // TODO: Fill out the rest
-    _ = tables.opentype_layout.gdef;
-    _ = tables.opentype_layout.gpos;
     _ = tables.opentype_layout.gsub;
     _ = tables.opentype_layout.math;
     _ = tables.apple_layout.ankr;
