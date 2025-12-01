@@ -225,12 +225,32 @@ pub fn main() !void {
             const subtables = lookup.subtables; // also an iterator
             const subtable = subtables.get(0).?;
             _ = subtable.coverage();
-            // api goes much deeper
+            // api goes deeper when you go into the variants.
         } else |_| {}
     }
+    if (tables.opentype_layout.gsub) |gsub| {
+        // api other than subtables of lookups is same as gpos.
+        const lookups = gsub.lookups;
+        const lookup = lookups.get(0).?;
+        const subtables = lookup.subtables;
+        const subtable = subtables.get(0).?; // difference with gpos stsrts here
+        _ = subtable.coverage();
+        // api goes deeper when you go into the variants.
+    }
+    if (tables.opentype_layout.math) |math| {
+        const constants = math.constants.?;
+        _ = constants.radical_degree_bottom_raise_percent();
+        _ = constants.stretch_stack_gap_above_min();
+        // and many others
+
+        const glyph_infos = math.glyph_info.?;
+        const math_values = glyph_infos.italic_corrections.?;
+        _ = math_values.get(.{0}).?.device.?.hinting.x_delta(0, null); // yolo
+        _ = glyph_infos.extended_shapes.?.get(.{0});
+        _ = glyph_infos.extended_shapes.?.contains(.{0});
+        _ = glyph_infos.kern_infos.?.get(.{0}).?.bottom_left.?.height(0);
+    }
     // TODO: Fill out the rest
-    _ = tables.opentype_layout.gsub;
-    _ = tables.opentype_layout.math;
     _ = tables.apple_layout.ankr;
     _ = tables.apple_layout.feat;
     _ = tables.apple_layout.kerx;
