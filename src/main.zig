@@ -122,7 +122,10 @@ pub fn main() !void {
         _ = glyf.outline(.{5}, ttf.OutlineBuilder.dummy_builder);
         _ = glyf.bbox(.{4});
     }
-    _ = tables.hmtx;
+    if (tables.hmtx) |hmtx| {
+        _ = hmtx.advance(.{0});
+        _ = hmtx.side_bearing(.{0});
+    }
     if (tables.kern) |kern| {
         const subtables = kern.subtables;
         var iter = subtables.iterator();
@@ -188,11 +191,17 @@ pub fn main() !void {
         }
         _ = stat.subtable_for_axis(.{ .inner = 3 }, null);
     }
-    // TODO: Fill out the rest
-    _ = tables.svg;
+    if (tables.svg) |svg| {
+        const docs = svg.documents;
+        _ = docs.get(0);
+        _ = docs.find(.{0});
+        var iter = docs.iterator();
+        while (iter.next()) |_| {}
+    }
     _ = tables.vhea;
-    _ = tables.vmtx;
-    _ = tables.vorg;
+    _ = tables.vmtx; // same as hmtx
+    if (tables.vorg) |vorg| _ = vorg.glyph_y_origin(.{0});
+    // TODO: Fill out the rest
     _ = tables.opentype_layout.gdef;
     _ = tables.opentype_layout.gpos;
     _ = tables.opentype_layout.gsub;
