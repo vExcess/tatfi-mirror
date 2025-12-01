@@ -66,6 +66,26 @@ pub const SvgDocumentsList = struct {
 
         return self.get(index);
     }
+
+    pub fn iterator(
+        self: *const SvgDocumentsList,
+    ) Iterator {
+        return .{ .list = self };
+    }
+
+    pub const Iterator = struct {
+        list: *const SvgDocumentsList,
+        index: u16 = 0,
+
+        pub fn next(
+            self: *Iterator,
+        ) ?SvgDocument {
+            if (self.index < self.list.records.len()) {
+                defer self.index += 1;
+                return self.list.get(self.index);
+            } else return null;
+        }
+    };
 };
 
 const SvgDocumentRecord = struct {
