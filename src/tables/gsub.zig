@@ -5,3 +5,5 @@
 // originally written by https://github.com/laurmaedje
 
 //[ARS] This file is a stub.
+
+pub const SubstitutionSubtable = enum {};

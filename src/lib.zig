@@ -309,11 +309,11 @@ pub const Face = struct {
                 },
                 .gpos = g: {
                     const data = raw_tables.opentype_layout.gpos orelse break :g null;
-                    break :g opentype_layout.LayoutTable.parse(data) catch null;
+                    break :g opentype_layout.LayoutTable(.gpos).parse(data) catch null;
                 },
                 .gsub = g: {
                     const data = raw_tables.opentype_layout.gsub orelse break :g null;
-                    break :g opentype_layout.LayoutTable.parse(data) catch null;
+                    break :g opentype_layout.LayoutTable(.gsub).parse(data) catch null;
                 },
                 .math = m: {
                     const data = raw_tables.opentype_layout.math orelse break :m null;
@@ -1548,8 +1548,8 @@ pub const FaceTables = struct {
 
     opentype_layout: if (cfg.opentype_layout) struct {
         gdef: ?tables.gdef.Table = null,
-        gpos: ?opentype_layout.LayoutTable = null,
-        gsub: ?opentype_layout.LayoutTable = null,
+        gpos: ?opentype_layout.LayoutTable(.gpos) = null,
+        gsub: ?opentype_layout.LayoutTable(.gsub) = null,
         math: ?tables.math.Table = null,
     } else void,
 
