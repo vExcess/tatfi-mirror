@@ -3,43 +3,52 @@ const parser = @import("../parser.zig");
 const gpos = @import("../tables/gpos.zig");
 const gsub = @import("../tables/gsub.zig");
 
+/// used as a generic parameter for Lookup Subtables
+pub const LookupSubtable = enum { gpos, gsub };
+
 /// A list of [`Lookup`] values.
-pub const LookupList = parser.LazyOffsetArray16(Lookup);
+pub fn LookupList(subtable: LookupSubtable) type {
+    return parser.LazyOffsetArray16(Lookup(subtable));
+}
 
 /// A [Lookup Table](https://docs.microsoft.com/en-us/typography/opentype/spec/chapter2#lookup-table).
-pub const Lookup = struct {
-    /// Lookup qualifiers.
-    flags: LookupFlags,
-    /// Available subtables.
-    subtables: LookupSubtables,
-    /// Index into GDEF mark glyph sets structure.
-    mark_filtering_set: ?u16,
+pub fn Lookup(subtable: LookupSubtable) type {
+    return struct {
+        /// Lookup qualifiers.
+        flags: LookupFlags,
+        /// Available subtables.
+        subtables: LookupSubtables(subtable),
+        /// Index into GDEF mark glyph sets structure.
+        mark_filtering_set: ?u16,
 
-    pub fn parse(
-        data: []const u8,
-    ) parser.Error!Lookup {
-        var s = parser.Stream.new(data);
-        const kind = try s.read(u16);
-        const flags = try s.read(LookupFlags);
-        const count = try s.read(u16);
-        const offsets = try s.read_array(parser.Offset16, count);
+        const Self = @This();
 
-        var mark_filtering_set: ?u16 = null;
-        if (flags.use_mark_filtering_set) {
-            mark_filtering_set = try s.read(u16);
+        pub fn parse(
+            data: []const u8,
+        ) parser.Error!Self {
+            var s = parser.Stream.new(data);
+            const kind = try s.read(u16);
+            const flags = try s.read(LookupFlags);
+            const count = try s.read(u16);
+            const offsets = try s.read_array(parser.Offset16, count);
+
+            var mark_filtering_set: ?u16 = null;
+            if (flags.use_mark_filtering_set) {
+                mark_filtering_set = try s.read(u16);
+            }
+
+            return .{
+                .flags = flags,
+                .subtables = .{
+                    .kind = kind,
+                    .data = data,
+                    .offsets = offsets,
+                },
+                .mark_filtering_set = mark_filtering_set,
+            };
         }
-
-        return .{
-            .flags = flags,
-            .subtables = .{
-                .kind = kind,
-                .data = data,
-                .offsets = offsets,
-            },
-            .mark_filtering_set = mark_filtering_set,
-        };
-    }
-};
+    };
+}
 
 /// Lookup table flags.
 pub const LookupFlags = packed struct(u16) {
@@ -60,51 +69,51 @@ pub const LookupFlags = packed struct(u16) {
 };
 
 /// A list of lookup subtables.
-pub const LookupSubtables = struct {
-    kind: u16,
-    data: []const u8,
-    offsets: parser.LazyArray16(parser.Offset16),
+pub fn LookupSubtables(kind: LookupSubtable) type {
+    const T = switch (kind) {
+        .gpos => gpos.PositioningSubtable,
+        .gsub => gsub.SubstitutionSubtable,
+    };
 
-    /// Returns a number of items in the LookupSubtables.
-    pub fn len(
-        self: LookupSubtables,
-    ) u16 {
-        return self.offsets.len();
-    }
+    return struct {
+        kind: u16,
+        data: []const u8,
+        offsets: parser.LazyArray16(parser.Offset16),
 
-    /// Parses a subtable at index.
-    ///
-    /// Accepts either `gpos.PositioningSubtable` or `gsub.SubstitutionSubtable`
-    pub fn get(
-        self: LookupSubtables,
-        T: type,
-        index: u16,
-    ) ?T {
-        if (T != gpos.PositioningSubtable and T != gsub.SubstitutionSubtable)
-            @compileError("LookupSubtables only accepts gpos.PositioningSubtable or gsub.SubstitutionSubtable");
+        const Self = @This();
 
-        const offset = self.offsets.get(index) orelse return null;
-        if (offset[0] > self.data.len) return null;
-        const data = self.data[offset[0]..];
-        return T.parse(data, self.kind) catch null;
-    }
+        /// Returns a number of items in the LookupSubtables.
+        pub fn len(
+            self: Self,
+        ) u16 {
+            return self.offsets.len();
+        }
 
-    pub fn iterator(
-        data: *const LookupSubtables,
-        T: type,
-    ) Iterator(T) {
-        return .{ .data = data };
-    }
+        /// Parses a subtable at index.
+        ///
+        /// Accepts either `gpos.PositioningSubtable` or `gsub.SubstitutionSubtable`
+        pub fn get(
+            self: Self,
+            index: u16,
+        ) ?T {
+            const offset = self.offsets.get(index) orelse return null;
+            if (offset[0] > self.data.len) return null;
+            const data = self.data[offset[0]..];
+            return T.parse(data, self.kind) catch null;
+        }
 
-    pub fn Iterator(T: type) type {
-        return struct {
-            data: *const LookupSubtables,
+        pub fn iterator(
+            data: *const Self,
+        ) Iterator {
+            return .{ .data = data };
+        }
+
+        pub const Iterator = struct {
+            data: *const Self,
             index: u16 = 0,
 
-            const Self = @This();
-
             pub fn next(
-                self: *Self,
+                self: *Iterator,
             ) ?T {
                 if (self.index < self.data.len()) {
                     defer self.index += 1;
@@ -114,8 +123,8 @@ pub const LookupSubtables = struct {
                 }
             }
         };
-    }
-};
+    };
+}
 
 pub fn parse_extension_lookup(
     T: type,

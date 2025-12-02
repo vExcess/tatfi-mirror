@@ -3,66 +3,71 @@ const cfg = @import("config");
 const lib = @import("../lib.zig");
 const parser = @import("../parser.zig");
 
+const LookupKind = @import("lookup.zig").LookupSubtable;
 const LookupList = @import("lookup.zig").LookupList;
 const FeatureVariations = @import("feature_variations.zig").FeatureVariations;
 
 /// A [Layout Table](https://docs.microsoft.com/en-us/typography/opentype/spec/chapter2#table-organization).
-pub const LayoutTable = struct {
-    /// A list of all supported scripts.
-    scripts: ScriptList,
-    /// A list of all supported features.
-    features: FeatureList,
-    /// A list of all lookups.
-    lookups: LookupList,
-    /// Used to substitute an alternate set of lookup tables
-    /// to use for any given feature under specified conditions.
-    variations: if (cfg.variable_fonts) ?FeatureVariations else void,
+pub fn LayoutTable(subtable: LookupKind) type {
+    return struct {
+        /// A list of all supported scripts.
+        scripts: ScriptList,
+        /// A list of all supported features.
+        features: FeatureList,
+        /// A list of all lookups.
+        lookups: LookupList(subtable),
+        /// Used to substitute an alternate set of lookup tables
+        /// to use for any given feature under specified conditions.
+        variations: if (cfg.variable_fonts) ?FeatureVariations else void,
 
-    pub fn parse(
-        data: []const u8,
-    ) parser.Error!LayoutTable {
-        var s = parser.Stream.new(data);
+        const Self = @This();
 
-        if (try s.read(u16) != 1) return error.ParseFail; // major_version
-        const minor_version = try s.read(u16);
+        pub fn parse(
+            data: []const u8,
+        ) parser.Error!Self {
+            var s = parser.Stream.new(data);
 
-        const scripts = s: {
-            const offset = try s.read(parser.Offset16);
-            if (offset[0] > data.len) return error.ParseFail;
+            if (try s.read(u16) != 1) return error.ParseFail; // major_version
+            const minor_version = try s.read(u16);
 
-            break :s try ScriptList.parse(data[offset[0]..]);
-        };
-        const features = f: {
-            const offset = try s.read(parser.Offset16);
-            if (offset[0] > data.len) return error.ParseFail;
+            const scripts = s: {
+                const offset = try s.read(parser.Offset16);
+                if (offset[0] > data.len) return error.ParseFail;
 
-            break :f try FeatureList.parse(data[offset[0]..]);
-        };
-        const lookups = l: {
-            const offset = try s.read(parser.Offset16);
-            if (offset[0] > data.len) return error.ParseFail;
+                break :s try ScriptList.parse(data[offset[0]..]);
+            };
+            const features = f: {
+                const offset = try s.read(parser.Offset16);
+                if (offset[0] > data.len) return error.ParseFail;
 
-            break :l try LookupList.parse(data[offset[0]..]);
-        };
+                break :f try FeatureList.parse(data[offset[0]..]);
+            };
+            const lookups = l: {
+                const offset = try s.read(parser.Offset16);
+                if (offset[0] > data.len) return error.ParseFail;
 
-        const variations = if (cfg.variable_fonts) v: {
-            const variations_offset =
-                if (minor_version >= 1) try s.read_optional(parser.Offset32) else null;
+                break :l try LookupList(subtable).parse(data[offset[0]..]);
+            };
 
-            const offset = variations_offset orelse break :v null;
-            if (offset[0] > data.len) break :v null;
+            const variations = if (cfg.variable_fonts) v: {
+                const variations_offset =
+                    if (minor_version >= 1) try s.read_optional(parser.Offset32) else null;
 
-            break :v FeatureVariations.parse(data[offset[0]..]) catch null;
-        } else {};
+                const offset = variations_offset orelse break :v null;
+                if (offset[0] > data.len) break :v null;
 
-        return .{
-            .scripts = scripts,
-            .features = features,
-            .lookups = lookups,
-            .variations = variations,
-        };
-    }
-};
+                break :v FeatureVariations.parse(data[offset[0]..]) catch null;
+            } else {};
+
+            return .{
+                .scripts = scripts,
+                .features = features,
+                .lookups = lookups,
+                .variations = variations,
+            };
+        }
+    };
+}
 
 /// A list of [`Script`] records.
 pub const ScriptList = RecordList(Script);

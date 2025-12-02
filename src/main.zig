@@ -223,7 +223,7 @@ pub fn main() !void {
         while (lookup_iter.next()) |maybe| {
             const lookup = maybe orelse continue;
             const subtables = lookup.subtables; // also an iterator
-            const subtable = subtables.get(ttf.tables.gpos.PositioningSubtable, 0) orelse return;
+            const subtable = subtables.get(0).?;
             _ = subtable.coverage();
             // api goes much deeper
         } else |_| {}
