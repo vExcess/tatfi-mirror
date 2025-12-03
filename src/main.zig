@@ -245,14 +245,14 @@ pub fn main() !void {
 
         const glyph_infos = math.glyph_info.?;
         const math_values = glyph_infos.italic_corrections.?;
-        _ = math_values.get(.{0}).?.device.?.hinting.x_delta(0, null); // yolo
+        _ = math_values.get(.{0}).?.device.?.hinting.x_delta(0, null);
         _ = glyph_infos.extended_shapes.?.get(.{0});
         _ = glyph_infos.extended_shapes.?.contains(.{0});
         _ = glyph_infos.kern_infos.?.get(.{0}).?.bottom_left.?.height(0);
     }
+    _ = tables.apple_layout.ankr.?.points(.{0});
+    _ = tables.apple_layout.feat.?.names.find(0);
     // TODO: Fill out the rest
-    _ = tables.apple_layout.ankr;
-    _ = tables.apple_layout.feat;
     _ = tables.apple_layout.kerx;
     _ = tables.apple_layout.morx;
     _ = tables.apple_layout.trak;
