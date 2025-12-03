@@ -102,7 +102,7 @@ pub const RangeRecord = struct {
         }
     };
 
-    /// Returns a [`RangeRecord`] for a glyph.
+    /// Returns a `RangeRecord` for a glyph.
     pub fn range(
         self: parser.LazyArray16(RangeRecord),
         glyph: lib.GlyphId,
@@ -164,7 +164,7 @@ pub const Coverage = union(enum) {
         return self.get(glyph) != null;
     }
 
-    /// Returns the coverage index of the glyph or `None` if it is not covered.
+    /// Returns the coverage index of the glyph or `null` if it is not covered.
     pub fn get(
         self: Coverage,
         glyph: lib.GlyphId,

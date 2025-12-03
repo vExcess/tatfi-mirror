@@ -77,9 +77,9 @@ pub const Table = struct {
     /// If no match value is given the first subtable for the axis is returned. If a match value is
     /// given, the first subtable for the axis where the value matches is returned. A value matches
     /// if it is equal to the subtable's value or contained within the range defined by the
-    /// subtable. If no matches are found `None` is returned. Typically a match value is not
+    /// subtable. If no matches are found `null` is returned. Typically a match value is not
     /// specified for non-variable fonts as multiple subtables for a given axis ought not exist. For
-    /// variable fonts a non-`None` match value should be specified as multiple records for each of
+    /// variable fonts a non-`null` match value should be specified as multiple records for each of
     /// the variation axes exist.
     ///
     /// Note: Format 4 subtables are explicitly ignored in this function.
@@ -200,7 +200,7 @@ pub const AxisValueSubtable = union(enum) {
 
     /// Returns the value from an axis value subtable.
     ///
-    /// For formats 1 and 3 the value is returned, for formats 2 and 4 `None` is returned as there
+    /// For formats 1 and 3 the value is returned, for formats 2 and 4 `null` is returned as there
     /// is no single value associated with those formats.
     pub fn value(
         self: AxisValueSubtable,
@@ -267,7 +267,7 @@ pub const AxisValueSubtable = union(enum) {
     }
 };
 
-/// [Flags](https://learn.microsoft.com/en-us/typography/opentype/spec/stat#flags) for [`AxisValueSubtable`].
+/// [Flags](https://learn.microsoft.com/en-us/typography/opentype/spec/stat#flags) for `AxisValueSubtable`.
 pub const AxisValueFlags = packed struct(u16) {
     /// If set, this value also applies to older versions of this font.
     older_sibling_attribute: bool,
@@ -278,9 +278,9 @@ pub const AxisValueFlags = packed struct(u16) {
 
 /// Axis value subtable [format 1](https://learn.microsoft.com/en-us/typography/opentype/spec/stat#axis-value-table-format-1).
 pub const AxisValueSubtableFormat1 = struct {
-    /// Zero-based index into [`Table::axes`].
+    /// Zero-based index into `Table.axes`.
     axis_index: u16,
-    /// Flags for [`AxisValueSubtable`].
+    /// Flags for `AxisValueSubtable`.
     flags: AxisValueFlags,
     /// The name ID of the display string.
     value_name_id: u16,
@@ -308,9 +308,9 @@ pub const AxisValueSubtableFormat1 = struct {
 
 /// Axis value subtable [format 2](https://learn.microsoft.com/en-us/typography/opentype/spec/stat#axis-value-table-format-2).
 pub const AxisValueSubtableFormat2 = struct {
-    /// Zero-based index into [`Table::axes`].
+    /// Zero-based index into `Table.axes`.
     axis_index: u16,
-    /// Flags for [`AxisValueSubtable`].
+    /// Flags for `AxisValueSubtable`.
     flags: AxisValueFlags,
     /// The name ID of the display string.
     value_name_id: u16,
@@ -344,9 +344,9 @@ pub const AxisValueSubtableFormat2 = struct {
 
 /// Axis value subtable [format 3](https://learn.microsoft.com/en-us/typography/opentype/spec/stat#axis-value-table-format-3).
 pub const AxisValueSubtableFormat3 = struct {
-    /// Zero-based index into [`Table::axes`].
+    /// Zero-based index into `Table.axes`.
     axis_index: u16,
-    /// Flags for [`AxisValueSubtable`].
+    /// Flags for `AxisValueSubtable`.
     flags: AxisValueFlags,
     /// The name ID of the display string.
     value_name_id: u16,
@@ -377,7 +377,7 @@ pub const AxisValueSubtableFormat3 = struct {
 
 /// Axis value subtable [format 4](https://learn.microsoft.com/en-us/typography/opentype/spec/stat#axis-value-table-format-4).
 pub const AxisValueSubtableFormat4 = struct {
-    /// Flags for [`AxisValueSubtable`].
+    /// Flags for `AxisValueSubtable`.
     flags: AxisValueFlags,
     /// The name ID of the display string.
     value_name_id: u16,
@@ -401,9 +401,9 @@ pub const AxisValueSubtableFormat4 = struct {
     }
 };
 
-/// Axis-value pairing for [`AxisValueSubtableFormat4`].
+/// Axis-value pairing for `AxisValueSubtableFormat4`.
 pub const AxisValue = struct {
-    /// Zero-based index into [`Table::axes`].
+    /// Zero-based index into `Table.axes`.
     axis_index: u16,
     /// Numeric value for this axis.
     value: parser.Fixed,

@@ -43,7 +43,7 @@ pub const Charset = union(enum) {
                 return .{ .format1 = try s.read_array(Format1Range, count) };
             },
             2 => {
-                // The same as format 1, but Range::left is u16.
+                // The same as format 1, but Range.left is u16.
                 var count: u16 = 0;
                 {
                     var s_cloned: parser.Stream = .{
@@ -97,7 +97,7 @@ pub const Charset = union(enum) {
                 } else return null;
             },
             .format2 => |array| {
-                // The same as format 1, but Range::left is u16.
+                // The same as format 1, but Range.left is u16.
                 var id: u16 = 1;
                 var iter = array.iterator();
                 while (iter.next()) |range| {

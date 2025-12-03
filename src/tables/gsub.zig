@@ -117,7 +117,7 @@ pub const MultipleSubstitution = struct {
         return .{ .coverage = coverage_var, .sequences = .new(data, offsets) };
     }
 
-    /// A list of [`Sequence`] tables.
+    /// A list of `Sequence` tables.
     pub const SequenceList = parser.LazyOffsetArray16(Sequence);
 
     /// A sequence of glyphs for
@@ -156,7 +156,7 @@ pub const AlternateSubstitution = struct {
         return .{ .coverage = coverage_var, .alternate_sets = .new(data, offsets) };
     }
 
-    /// A set of [`AlternateSet`].
+    /// A set of `AlternateSet`.
     pub const AlternateSets = parser.LazyOffsetArray16(AlternateSet);
 
     /// A list of glyphs for
@@ -195,10 +195,10 @@ pub const LigatureSubstitution = struct {
         return .{ .coverage = coverage_var, .ligature_sets = .new(data, offsets) };
     }
 
-    /// A list of [`Ligature`] sets.
+    /// A list of `Ligature` sets.
     pub const LigatureSets = parser.LazyOffsetArray16(LigatureSet);
 
-    /// A [`Ligature`] set.
+    /// A `Ligature` set.
     pub const LigatureSet = parser.LazyOffsetArray16(Ligature);
 
     /// Glyph components for one ligature.

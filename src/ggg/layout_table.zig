@@ -69,14 +69,14 @@ pub fn LayoutTable(subtable: LookupKind) type {
     };
 }
 
-/// A list of [`Script`] records.
+/// A list of `Script` records.
 pub const ScriptList = RecordList(Script);
-/// A list of [`LanguageSystem`] records.
+/// A list of `LanguageSystem` records.
 pub const LanguageSystemList = RecordList(LanguageSystem);
-/// A list of [`Feature`] records.
+/// A list of `Feature` records.
 pub const FeatureList = RecordList(Feature);
 
-/// A data storage used by [`ScriptList`], [`LanguageSystemList`] and [`FeatureList`] data types.
+/// A data storage used by `ScriptList`, `LanguageSystemList` and `FeatureList` data types.
 // [ARS] currently a stub
 pub fn RecordList(T: type) type {
     // [ARS] T should implement the RecordListItem trait, somehow
@@ -110,7 +110,7 @@ pub fn RecordList(T: type) type {
             return T.parse(record.tag, data) catch null;
         }
 
-        /// Returns RecordList value by [`Tag`].
+        /// Returns RecordList value by `Tag`.
         pub fn find(
             self: Self,
             tag: lib.Tag,
@@ -124,7 +124,7 @@ pub fn RecordList(T: type) type {
             return T.parse(record.tag, data) catch null;
         }
 
-        /// Returns RecordList value index by [`Tag`].
+        /// Returns RecordList value index by `Tag`.
         pub fn index(
             self: Self,
             tag: lib.Tag,
@@ -271,13 +271,13 @@ const TagRecord = struct {
     }
 };
 
-/// An index in [`ScriptList`].
+/// An index in `ScriptList`.
 pub const ScriptIndex = u16;
-/// An index in [`LanguageSystemList`].
+/// An index in `LanguageSystemList`.
 pub const LanguageIndex = u16;
-/// An index in [`FeatureList`].
+/// An index in `FeatureList`.
 pub const FeatureIndex = u16;
-/// An index in [`LookupList`].
+/// An index in `LookupList`.
 pub const LookupIndex = u16;
-/// An index in [`FeatureVariations`].
+/// An index in `FeatureVariations`.
 pub const VariationIndex = u32;

@@ -35,7 +35,7 @@ pub const SvgDocumentsList = struct {
 
     /// Returns SVG document data at index.
     ///
-    /// `index` is not a GlyphId. You should use [`find()`](SvgDocumentsList::find) instead.
+    /// `index` is not a GlyphId. You should use `find()` instead.
     pub fn get(
         self: SvgDocumentsList,
         index: u16,

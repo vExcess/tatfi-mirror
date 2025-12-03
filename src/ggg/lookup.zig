@@ -6,7 +6,7 @@ const gsub = @import("../tables/gsub.zig");
 /// used as a generic parameter for Lookup Subtables
 pub const LookupSubtable = enum { gpos, gsub };
 
-/// A list of [`Lookup`] values.
+/// A list of `Lookup` values.
 pub fn LookupList(subtable: LookupSubtable) type {
     return parser.LazyOffsetArray16(Lookup(subtable));
 }

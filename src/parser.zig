@@ -164,9 +164,9 @@ pub fn LazyArray(I: type, T: type) type {
     };
 }
 
-/// A [`LazyArray16`]-like container, but data is accessed by offsets.
+/// A `LazyArray16`-like container, but data is accessed by offsets.
 ///
-/// Unlike [`LazyArray16`], internal storage is not continuous.
+/// Unlike `LazyArray16`, internal storage is not continuous.
 ///
 /// Multiple offsets can point to the same data.
 pub fn LazyOffsetArray16(T: type) type {
@@ -438,7 +438,7 @@ pub const Stream = struct {
         return try self.read_array(T, count);
     }
 
-    /// Advances by `FromData::SIZE`.
+    /// Advances by `FromData.SIZE`.
     ///
     /// Doesn't check bounds.
     pub fn skip(

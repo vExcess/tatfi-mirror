@@ -80,7 +80,7 @@ pub const Table = struct {
     /// [Glyph Class Definition Table](
     /// https://docs.microsoft.com/en-us/typography/opentype/spec/gdef#glyph-class-definition-table).
     ///
-    /// Returns `None` when *Glyph Class Definition Table* is not set
+    /// Returns `null` when *Glyph Class Definition Table* is not set
     /// or glyph class is not set or invalid.
     pub fn glyph_class(
         self: Table,

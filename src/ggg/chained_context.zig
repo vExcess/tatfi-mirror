@@ -118,10 +118,10 @@ pub const ChainedContextLookup = union(enum) {
     }
 };
 
-/// A list of [`ChainedSequenceRule`] sets.
+/// A list of `ChainedSequenceRule` sets.
 pub const ChainedSequenceRuleSets = parser.LazyOffsetArray16(ChainedSequenceRuleSet);
 
-/// A set of [`ChainedSequenceRule`].
+/// A set of `ChainedSequenceRule`.
 pub const ChainedSequenceRuleSet = parser.LazyOffsetArray16(ChainedSequenceRule);
 
 /// A [Chained Sequence Rule](https://docs.microsoft.com/en-us/typography/opentype/spec/chapter2#chained-sequence-context-format-1-simple-glyph-contexts).

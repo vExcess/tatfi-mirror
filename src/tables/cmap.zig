@@ -3,8 +3,8 @@
 //! https://docs.microsoft.com/en-us/typography/opentype/spec/cmap) implementation.
 //!
 //! This module provides a low-level alternative to
-//! [`Face::glyph_index`](../struct.Face.html#method.glyph_index) and
-//! [`Face::glyph_variation_index`](../struct.Face.html#method.glyph_variation_index)
+//! `Face.glyph_index` and
+//! `Face.glyph_variation_index`
 //! methods.
 
 const parser = @import("../parser.zig");
@@ -175,7 +175,7 @@ pub const Subtable = struct {
 
     /// Maps a character to a glyph ID.
     ///
-    /// This is a low-level method and unlike `Face::glyph_index` it doesn't
+    /// This is a low-level method and unlike `Face.glyph_index` it doesn't
     /// check that the current encoding is Unicode.
     /// It simply maps a `u32` codepoint number to a glyph ID.
     ///
@@ -219,7 +219,7 @@ pub const Subtable = struct {
     /// codepoints that are present in this subtable.
     ///
     /// Note that this may list codepoints for which `glyph_index` still returns
-    /// `None` because this method finds all codepoints which were _defined_ in
+    /// `null` because this method finds all codepoints which were _defined_ in
     /// this subtable. The subtable may still map them to glyph ID `0`.
     ///
     /// Returns without doing anything:
