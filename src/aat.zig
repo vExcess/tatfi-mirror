@@ -6,8 +6,6 @@ const std = @import("std");
 const parser = @import("parser.zig");
 const lib = @import("lib.zig");
 
-const LazyArray16 = parser.LazyArray16;
-
 /// A [lookup table](
 /// https://developer.apple.com/fonts/TrueType-Reference-Manual/RM06/Chap6Tables.html).
 ///
@@ -27,14 +25,22 @@ pub const Lookup = struct {
             .data = try .parse(number_of_glyphs, data),
         };
     }
+
+    /// Returns a value associated with the specified glyph.
+    pub fn value(
+        self: Lookup,
+        glyph_id: lib.GlyphId,
+    ) ?u16 {
+        return self.data.value(glyph_id);
+    }
 };
 
 const LookupInner = union(enum) {
-    format1: LazyArray16(u16),
+    format1: parser.LazyArray16(u16),
     format2: BinarySearchTable(LookupSegment),
     format4: struct { BinarySearchTable(LookupSegment), []const u8 },
     format6: BinarySearchTable(LookupSingle),
-    format8: struct { first_glyph: u16, values: LazyArray16(u16) },
+    format8: struct { first_glyph: u16, values: parser.LazyArray16(u16) },
     format10: struct {
         value_size: u16,
         first_glyph: u16,
@@ -89,13 +95,71 @@ const LookupInner = union(enum) {
             else => return error.ParseFail,
         }
     }
+
+    fn value(
+        self: LookupInner,
+        glyph_id: lib.GlyphId,
+    ) ?u16 {
+        switch (self) {
+            .format1 => |values| return values.get(glyph_id[0]),
+            inline .format2, .format6 => |bsearch| {
+                const v = bsearch.get(glyph_id) orelse return null;
+                return v.value;
+            },
+            .format4 => |f| {
+                const bsearch, const data = f;
+
+                // In format 4, LookupSegment contains an offset to a list of u16 values.
+                // One value for each glyph in the LookupSegment range.
+                const segment = bsearch.get(glyph_id) orelse return null;
+                const index = std.math.sub(u16, glyph_id[0], segment.first_glyph) catch return null;
+                const offset = @as(usize, segment.value) + parser.size_of(u16) * @as(usize, index);
+
+                var s = parser.Stream.new_at(data, offset) catch return null;
+                return s.read(u16) catch null;
+            },
+            .format8 => |f| {
+                const first_glyph = f.first_glyph;
+                const values = f.values;
+
+                const index = std.math.sub(u16, glyph_id[0], first_glyph) catch return null;
+                return values.get(index);
+            },
+            .format10 => |f| {
+                const value_size = f.value_size;
+                const first_glyph = f.first_glyph;
+                const glyph_count = f.glyph_count;
+                const data = f.data;
+
+                const index = std.math.sub(u16, glyph_id[0], first_glyph) catch return null;
+                var s = parser.Stream.new(data);
+                switch (value_size) {
+                    1 => {
+                        const array = s.read_array(u8, glyph_count) catch return null;
+                        return array.get(index) orelse null;
+                    },
+                    2 => {
+                        const array = s.read_array(u16, glyph_count) catch return null;
+                        return array.get(index);
+                    },
+                    4 => {
+                        // [RazrFalcon] TODO: we should return u32 here, but this is not supported yet
+                        const array = s.read_array(u32, glyph_count) catch return null;
+                        const ret = array.get(index) orelse return null;
+                        return @truncate(ret);
+                    },
+                    else => return null,
+                }
+            },
+        }
+    }
 };
 
 /// A binary searching table as defined at
 /// https://developer.apple.com/fonts/TrueType-Reference-Manual/RM06/Chap6Tables.html
 fn BinarySearchTable(T: type) type {
     return struct {
-        values: LazyArray16(T),
+        values: parser.LazyArray16(T),
         len: u16, // NonZeroU16, // values length excluding termination segment
 
         const Self = @This();
@@ -116,7 +180,7 @@ fn BinarySearchTable(T: type) type {
             // 'The number of termination values that need to be included is table-specific.
             // The value that indicates binary search termination is 0xFFFF.'
             const last_value = values.last() orelse return error.ParseFail;
-            const len = if (T.FromData.is_termination(last_value))
+            const len = if (T.is_termination(last_value))
                 try std.math.sub(u16, number_of_segments, 1)
             else
                 number_of_segments;
@@ -126,6 +190,27 @@ fn BinarySearchTable(T: type) type {
                 .len = len,
                 .values = values,
             };
+        }
+
+        fn get(
+            self: Self,
+            key: lib.GlyphId,
+        ) ?T {
+            var min: isize = 0;
+            var max: isize = self.len - 1;
+            while (min <= max) {
+                const mid = @divFloor(min + max, 2);
+                const v = self.values.get(
+                    std.math.cast(u16, mid) orelse return null,
+                ) orelse return null;
+                switch (v.contains(key)) {
+                    .lt => max = mid - 1,
+                    .gt => min = mid + 1,
+                    .eq => return v,
+                }
+            }
+
+            return null;
         }
     };
 }
@@ -150,14 +235,26 @@ pub const LookupSegment = struct {
                 .value = try s.read(u16),
             };
         }
-
-        // for trait BinarySearchValue:FromData
-        fn is_termination(
-            self: Self,
-        ) bool {
-            return self.last_glyph == 0xFFFF and self.first_glyph == 0xFFFF;
-        }
     };
+
+    // for trait BinarySearchValue:FromData
+    fn is_termination(
+        self: Self,
+    ) bool {
+        return self.last_glyph == 0xFFFF and self.first_glyph == 0xFFFF;
+    }
+
+    fn contains(
+        self: Self,
+        id: lib.GlyphId,
+    ) std.math.Order {
+        return if (id[0] < self.first_glyph)
+            .lt
+        else if (id[0] <= self.last_glyph)
+            .eq
+        else
+            .gt;
+    }
 };
 
 pub const LookupSingle = struct {
@@ -178,14 +275,21 @@ pub const LookupSingle = struct {
                 .value = try s.read(u16),
             };
         }
-
-        // for trait BinarySearchValue:FromData
-        fn is_termination(
-            self: Self,
-        ) bool {
-            return self.glyph == 0xFFFF;
-        }
     };
+
+    // for trait BinarySearchValue:FromData
+    fn is_termination(
+        self: Self,
+    ) bool {
+        return self.glyph == 0xFFFF;
+    }
+
+    fn contains(
+        self: Self,
+        id: lib.GlyphId,
+    ) std.math.Order {
+        return std.math.order(id[0], self.glyph);
+    }
 };
 
 /// A [State Table](

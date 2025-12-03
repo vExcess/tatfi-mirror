@@ -1,10 +1,8 @@
 //! A [Feature Name Table](
 //! https://developer.apple.com/fonts/TrueType-Reference-Manual/RM06/Chap6feat.html) implementation.
 
+const std = @import("std");
 const parser = @import("../parser.zig");
-
-const LazyArray16 = parser.LazyArray16;
-const Offset32 = parser.Offset32;
 
 /// A [Feature Name Table](
 /// https://developer.apple.com/fonts/TrueType-Reference-Manual/RM06/Chap6feat.html).
@@ -34,14 +32,72 @@ pub const Table = struct {
 /// A list of feature names.
 pub const FeatureNames = struct {
     data: []const u8,
-    records: LazyArray16(FeatureNameRecord),
+    records: parser.LazyArray16(FeatureNameRecord),
+
+    /// Returns a feature name at an index.
+    pub fn get(
+        self: FeatureNames,
+        index: u16,
+    ) ?FeatureName {
+        const record = self.records.get(index) orelse return null;
+
+        if (record.setting_table_offset[0] > self.data.len) return null;
+        const data = self.data[record.setting_table_offset[0]..];
+        var s = parser.Stream.new(data);
+        const setting_names =
+            s.read_array(SettingName, record.setting_table_records_count) catch return null;
+        return .{
+            .feature = record.feature,
+            .setting_names = setting_names,
+            .default_setting_index = if (record.flags & 0x40 != 0)
+                record.default_setting_index
+            else
+                0,
+            .exclusive = record.flags & 0x80 != 0,
+            .name_index = record.name_index,
+        };
+    }
+
+    /// Finds a feature name by ID.
+    pub fn find(
+        self: FeatureNames,
+        feature: u16,
+    ) ?FeatureName {
+        const func = struct {
+            fn func(name: FeatureNameRecord, f: u16) std.math.Order {
+                return std.math.order(name.feature, f);
+            }
+        }.func;
+        const index, _ = self.records.binary_search_by(feature, func) orelse return null;
+        return self.get(index);
+    }
+
+    pub fn iterator(
+        self: *const FeatureNames,
+    ) Iterator {
+        return .{ .names = self };
+    }
+
+    pub const Iterator = struct {
+        names: *const FeatureNames,
+        index: u16 = 0,
+
+        pub fn next(
+            self: *Iterator,
+        ) ?FeatureName {
+            if (self.index < self.names.records.len()) {
+                defer self.index += 1;
+                return self.names.get(self.index);
+            } else return null;
+        }
+    };
 };
 
 const FeatureNameRecord = struct {
     feature: u16,
     setting_table_records_count: u16,
     // Offset from the beginning of the table.
-    setting_table_offset: Offset32,
+    setting_table_offset: parser.Offset32,
     flags: u8,
     default_setting_index: u8,
     name_index: u16,
@@ -58,10 +114,48 @@ const FeatureNameRecord = struct {
             return .{
                 .feature = try s.read(u16),
                 .setting_table_records_count = try s.read(u16),
-                .setting_table_offset = try s.read(Offset32),
+                .setting_table_offset = try s.read(parser.Offset32),
                 .flags = try s.read(u8),
                 .default_setting_index = try s.read(u8),
                 .name_index = try s.read(u16),
+            };
+        }
+    };
+};
+
+/// A feature names.
+pub const FeatureName = struct {
+    /// The feature's ID.
+    feature: u16,
+    /// The feature's setting names.
+    setting_names: parser.LazyArray16(SettingName),
+    /// The index of the default setting in the `setting_names`.
+    default_setting_index: u8,
+    /// The feature's exclusive settings. If set, the feature settings are mutually exclusive.
+    exclusive: bool,
+    /// The `name` table index for the feature's name in a 256..32768 range.
+    name_index: u16,
+};
+
+/// A setting name.
+pub const SettingName = struct {
+    /// The setting.
+    setting: u16,
+    /// The `name` table index for the feature's name in a 256..32768 range.
+    name_index: u16,
+
+    const Self = @This();
+    pub const FromData = struct {
+        // [ARS] impl of FromData trait
+        pub const SIZE: usize = 4;
+
+        pub fn parse(
+            data: *const [SIZE]u8,
+        ) parser.Error!Self {
+            var s = parser.Stream.new(data);
+            return .{
+                .setting = try s.read(u16),
+                .name_index = try s.read(i16),
             };
         }
     };
