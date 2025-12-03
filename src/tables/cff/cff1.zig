@@ -95,7 +95,7 @@ pub const Table = struct {
     char_strings: Index,
     kind: FontKind,
 
-    // Copy of Face::units_per_em().
+    // Copy of Face.units_per_em().
     // Required to do glyph outlining, since coordinates must be scaled up by this before applying the `matrix`.
     units_per_em: ?u16,
 
@@ -106,7 +106,7 @@ pub const Table = struct {
         return try Table.parse_inner(data, null);
     }
 
-    /// The same as [`Table::parse`], with the difference that it allows you to
+    /// The same as `Table.parse`, with the difference that it allows you to
     /// manually pass the units per em of the font, which is needed to properly
     /// scale certain fonts with a non-identity matrix.
     pub fn parse_with_upem(
@@ -207,7 +207,7 @@ pub const Table = struct {
 
     /// Resolves a Glyph ID for a code point.
     ///
-    /// Similar to [`Face::glyph_index`](crate::Face::glyph_index) but 8bit
+    /// Similar to `Face.glyph_index` but 8bit
     /// and uses CFF encoding and charset tables instead of TrueType `cmap`.
     pub fn glyph_index(
         self: Table,
@@ -225,7 +225,7 @@ pub const Table = struct {
     ///
     /// This value is different from outline bbox width and is stored separately.
     ///
-    /// Technically similar to [`Face::glyph_hor_advance`](crate::Face::glyph_hor_advance).
+    /// Technically similar to `Face.glyph_hor_advance`.
     pub fn glyph_width(
         self: Table,
         glyph_id: lib.GlyphId,
@@ -299,7 +299,7 @@ pub const Table = struct {
 
     /// Returns the CID corresponding to a glyph ID.
     ///
-    /// Returns `None` if this is not a CIDFont.
+    /// Returns `null` if this is not a CIDFont.
     pub fn glyph_cid(
         self: Table,
         glyph_id: lib.GlyphId,

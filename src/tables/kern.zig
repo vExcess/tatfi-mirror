@@ -174,14 +174,14 @@ pub const Subtable = struct {
     has_cross_stream: bool,
     /// Indicates that subtable uses a state machine.
     ///
-    /// In this case `glyphs_kerning()` will return `None`.
+    /// In this case `glyphs_kerning()` will return `null`.
     has_state_machine: bool,
     /// Subtable format.
     format: Format,
 
     /// Returns kerning for a pair of glyphs.
     ///
-    /// Returns `None` in case of state machine based subtable.
+    /// Returns `null` in case of state machine based subtable.
     pub fn glyphs_kerning(
         self: Subtable,
         left: lib.GlyphId,

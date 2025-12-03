@@ -12,7 +12,7 @@ const Offset32 = parser.Offset32;
 /// A [Standard Bitmap Graphics Table](
 /// https://docs.microsoft.com/en-us/typography/opentype/spec/sbix).
 pub const Table = struct {
-    /// A list of [`Strike`]s.
+    /// A list of `Strike`s.
     strikes: Strikes,
 
     /// Parses a table from raw data.
@@ -41,7 +41,7 @@ pub const Table = struct {
         } };
     }
 
-    /// Selects the best matching [`Strike`] based on `pixels_per_em`.
+    /// Selects the best matching `Strike` based on `pixels_per_em`.
     pub fn best_strike(
         self: Table,
         pixels_per_em: u16,
@@ -162,7 +162,7 @@ pub const Strike = struct {
     }
 };
 
-/// A list of [`Strike`]s.
+/// A list of `Strike`s.
 pub const Strikes = struct {
     /// `sbix` table data.
     data: []const u8,
@@ -221,7 +221,7 @@ fn png_size(
     const width = try s.read(u32);
     const height = try s.read(u32);
 
-    // PNG size larger than u16::MAX is an error.
+    // PNG size larger than maxInt(u16) is an error.
     return .{
         std.math.cast(u16, width) orelse return error.Overflow,
         std.math.cast(u16, height) orelse return error.Overflow,

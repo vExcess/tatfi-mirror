@@ -208,13 +208,13 @@ pub const ValueRecord = struct {
     /// Vertical adjustment for advance, in design units — only used for vertical layout.
     y_advance: i16 = 0,
 
-    /// A [`Device`] table with horizontal adjustment for placement.
+    /// A `Device` table with horizontal adjustment for placement.
     x_placement_device: ?Device = null,
-    /// A [`Device`] table with vertical adjustment for placement.
+    /// A `Device` table with vertical adjustment for placement.
     y_placement_device: ?Device = null,
-    /// A [`Device`] table with horizontal adjustment for advance.
+    /// A `Device` table with horizontal adjustment for advance.
     x_advance_device: ?Device = null,
-    /// A [`Device`] table with vertical adjustment for advance.
+    /// A `Device` table with vertical adjustment for advance.
     y_advance_device: ?Device = null,
 
     fn parse(
@@ -294,7 +294,7 @@ pub const ValueRecordsArray = struct {
         };
     }
 
-    /// Returns a [`ValueRecord`] at index.
+    /// Returns a `ValueRecord` at index.
     pub fn get(
         self: ValueRecordsArray,
         index: u16,
@@ -419,8 +419,8 @@ pub const PairAdjustment = union(enum) {
     }
 };
 
-/// A list of [`PairSet`]s.
-// Essentially a `LazyOffsetArray16` but stores additional data required to parse [`PairSet`].
+/// A list of `PairSet`s.
+// Essentially a `LazyOffsetArray16` but stores additional data required to parse `PairSet`.
 pub const PairSets = struct {
     data: []const u8,
     // Zero offsets must be ignored, therefore we're using `?Offset16`.
@@ -447,7 +447,7 @@ pub const PairSets = struct {
     }
 };
 
-/// A [`ValueRecord`] pairs set used by [`PairAdjustment`].
+/// A `ValueRecord` pairs set used by `PairAdjustment`.
 pub const PairSet = struct {
     data: []const u8,
     flags: struct { ValueFormatFlags, ValueFormatFlags },
@@ -518,7 +518,7 @@ pub const PairSet = struct {
         return if (cmp == .eq) value else null;
     }
 
-    /// Returns a [`ValueRecord`] pair using the second glyph.
+    /// Returns a `ValueRecord` pair using the second glyph.
     pub fn get(
         self: PairSet,
         second: lib.GlyphId,
@@ -533,7 +533,7 @@ pub const PairSet = struct {
     }
 };
 
-/// A [`ValueRecord`] pairs matrix used by [`PairAdjustment`].
+/// A `ValueRecord` pairs matrix used by `PairAdjustment`.
 pub const ClassMatrix = struct {
     // We have to store table's original slice,
     // because offsets in ValueRecords are from the begging of the table.
@@ -562,7 +562,7 @@ pub const ClassMatrix = struct {
         };
     }
 
-    /// Returns a [`ValueRecord`] pair using specified classes.
+    /// Returns a `ValueRecord` pair using specified classes.
     pub fn get(
         self: ClassMatrix,
         classes: struct { u16, u16 },
@@ -608,7 +608,7 @@ pub const CursiveAdjustment = struct {
     }
 };
 
-/// A list of entry and exit [`Anchor`] pairs.
+/// A list of entry and exit `Anchor` pairs.
 pub const CursiveAnchorSet = struct {
     data: []const u8,
     records: parser.LazyArray16(EntryExitRecord),
@@ -737,7 +737,7 @@ const MarkRecord = struct {
     };
 };
 
-/// An [`Anchor`] parsing helper.
+/// An `Anchor` parsing helper.
 pub const AnchorMatrix = struct {
     data: []const u8,
     /// Number of rows in the matrix.
@@ -762,7 +762,7 @@ pub const AnchorMatrix = struct {
         };
     }
 
-    /// Returns an [`Anchor`] at position.
+    /// Returns an `Anchor` at position.
     pub fn get(
         self: AnchorMatrix,
         row: u16,
@@ -843,7 +843,7 @@ pub const LigatureArray = struct {
         };
     }
 
-    /// Returns an [`AnchorMatrix`] at index.
+    /// Returns an `AnchorMatrix` at index.
     pub fn get(
         self: LigatureArray,
         index: u16,
@@ -912,9 +912,9 @@ pub const Anchor = struct {
     x: i16,
     /// Vertical value, in design units.
     y: i16,
-    /// A [`Device`] table with horizontal value.
+    /// A `Device` table with horizontal value.
     x_device: ?Device,
-    /// A [`Device`] table with vertical value.
+    /// A `Device` table with vertical value.
     y_device: ?Device,
 
     fn parse(

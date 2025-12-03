@@ -1,4 +1,4 @@
-/// A [`Name`](crate::name::Name) language.
+/// A `Name` language.
 ///
 /// Consists of Language + Region pairs.
 ///

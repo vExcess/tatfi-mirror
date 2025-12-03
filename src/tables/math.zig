@@ -622,7 +622,7 @@ pub const MathValues = struct {
         };
     }
 
-    /// Returns the value for the glyph or `None` if it is not covered.
+    /// Returns the value for the glyph or `null` if it is not covered.
     pub fn get(
         self: MathValues,
         glyph: lib.GlyphId,
@@ -692,7 +692,7 @@ pub const KernInfos = struct {
         };
     }
 
-    /// Returns the kerning info for the glyph or `None` if it is not covered.
+    /// Returns the kerning info for the glyph or `null` if it is not covered.
     pub fn get(
         self: KernInfos,
         glyph: lib.GlyphId,

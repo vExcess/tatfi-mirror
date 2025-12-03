@@ -88,7 +88,7 @@ pub const Table = struct {
 
     /// Checks if face is bold.
     ///
-    /// Do not confuse with [`Weight::Bold`].
+    /// Do not confuse with `Weight.Bold`.
     pub fn is_bold(
         self: Table,
     ) bool {
@@ -269,7 +269,7 @@ pub const Table = struct {
         }
     }
 
-    /// Checks if the face allows embedding a subset, further restricted by [`Self.permissions`].
+    /// Checks if the face allows embedding a subset, further restricted by `Self.permissions`.
     pub fn is_subsetting_allowed(
         self: Table,
     ) bool {
@@ -284,7 +284,7 @@ pub const Table = struct {
 
     /// Checks if the face allows outline data to be embedded.
     ///
-    /// If false, only bitmaps may be embedded in accordance with [`Self::permissions`].
+    /// If false, only bitmaps may be embedded in accordance with `Self.permissions`.
     ///
     /// If the font contains no bitmaps and this flag is not set, it implies no embedding is allowed.
     pub fn is_outline_embedding_allowed(

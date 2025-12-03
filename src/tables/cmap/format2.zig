@@ -78,7 +78,7 @@ pub const Subtable2 = struct {
         if (low_byte < first_code or low_byte >= range_end)
             return null;
 
-        // SubHeaderRecord::id_range_offset points to SubHeaderRecord::first_code
+        // SubHeaderRecord.id_range_offset points to SubHeaderRecord.first_code
         // in the glyphIndexArray. So we have to advance to our code point.
         const index_offset = io: {
             const s: usize = std.math.sub(u16, low_byte, first_code) catch

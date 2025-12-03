@@ -87,10 +87,10 @@ pub const ContextLookup = union(enum) {
     }
 };
 
-/// A list of [`SequenceRuleSet`]s.
+/// A list of `SequenceRuleSet`s.
 pub const SequenceRuleSets = parser.LazyOffsetArray16(SequenceRuleSet);
 
-/// A set of [`SequenceRule`]s.
+/// A set of `SequenceRule`s.
 pub const SequenceRuleSet = parser.LazyOffsetArray16(SequenceRule);
 
 /// A sequence rule.

@@ -165,7 +165,7 @@ pub const Name = struct {
     language_id: u16,
     /// A [Name ID](https://docs.microsoft.com/en-us/typography/opentype/spec/name#name-ids).
     ///
-    /// A predefined list of ID's can be found in the [`name_id`](name_id/index.html) module.
+    /// A predefined list of ID's can be found in the `name_id` module.
     name_id: u16,
     /// A raw name data.
     ///

@@ -108,7 +108,7 @@ pub const GlyphVariationResult = union(enum) {
     found: GlyphId,
     /// Glyph should be looked in other, non-variation tables.
     ///
-    /// Basically, you should use `Encoding::glyph_index` or `Face::glyph_index`
+    /// Basically, you should use `Encoding.glyph_index` or `Face.glyph_index`
     /// in this case.
     use_default,
 };

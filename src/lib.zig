@@ -3,7 +3,7 @@
 /// * [OpenType](https://docs.microsoft.com/en-us/typography/opentype/spec/), and
 /// * [AAT](https://developer.apple.com/fonts/TrueType-Reference-Manual/RM06/Chap6AATIntro.html).
 ///
-/// Font parsing starts with a [`Face`].
+/// Font parsing starts with a `Face`.
 const std = @import("std");
 const cfg = @import("config");
 const parser = @import("parser.zig");
@@ -20,7 +20,7 @@ pub const GlyphId = struct { u16 };
 ///
 /// Provides a high-level API for working with TrueType fonts.
 /// If you're not familiar with how TrueType works internally, you should use this type.
-/// If you do know and want a bit more low-level access - checkout [`FaceTables`].
+/// If you do know and want a bit more low-level access - checkout `FaceTables`.
 ///
 /// Note that `Face` doesn't own the font data and doesn't allocate anything in heap.
 /// Therefore you cannot "store" it. The idea is that you should parse the `Face`
@@ -35,10 +35,10 @@ pub const Face = struct {
 
     const Self = @This();
 
-    /// Creates a new [`Face`] from a raw data.
+    /// Creates a new `Face` from a raw data.
     ///
     /// `index` indicates the specific font face in a font collection.
-    /// Use [`fonts_in_collection`] to get the total number of font faces.
+    /// Use `fonts_in_collection` to get the total number of font faces.
     /// Set to 0 if unsure.
     ///
     /// This method will do some parsing and sanitization,
@@ -384,9 +384,9 @@ pub const Face = struct {
         };
     }
 
-    /// Creates a new [`Face`] from provided [`RawFaceTables`].
+    /// Creates a new `Face` from provided `RawFaceTables`.
     ///
-    /// Does not create a `['RawFace']
+    /// Does not create a `RawFace`
     pub fn from_raw_tables(
         raw_tables: RawFaceTables,
     ) FaceParsingError!Face {
@@ -485,14 +485,14 @@ pub const Face = struct {
         self: Face,
     ) bool {
         if (cfg.variable_fonts) {
-            // `fvar::Table::parse` already checked that `axisCount` is non-zero.
+            // `fvar.Table.parse` already checked that `axisCount` is non-zero.
             return self.tables.variable_fonts.fvar != null;
         } else return false;
     }
 
     /// Returns face's weight.
     ///
-    /// Returns `Weight::Normal` when OS/2 table is not present.
+    /// Returns `Weight.normal` when OS/2 table is not present.
     pub fn weight(
         self: Face,
     ) tables.os2.Weight {
@@ -502,7 +502,7 @@ pub const Face = struct {
 
     /// Returns face's width.
     ///
-    /// Returns `Width::Normal` when OS/2 table is not present or when value is invalid.
+    /// Returns `Width.normal` when OS/2 table is not present or when value is invalid.
     pub fn width(
         self: Face,
     ) tables.os2.Width {
@@ -852,7 +852,7 @@ pub const Face = struct {
         return t.permissions();
     }
 
-    /// Checks if the face allows embedding a subset, further restricted by [`Self::permissions`].
+    /// Checks if the face allows embedding a subset, further restricted by `Self.permissions`.
     pub fn is_subsetting_allowed(
         self: Face,
     ) bool {
@@ -862,7 +862,7 @@ pub const Face = struct {
 
     /// Checks if the face allows outline data to be embedded.
     ///
-    /// If false, only bitmaps may be embedded in accordance with [`Self::permissions`].
+    /// If false, only bitmaps may be embedded in accordance with `Self.permissions`.
     ///
     /// If the font contains no bitmaps and this flag is not set, it implies no embedding is allowed.
     pub fn is_outline_embedding_allowed(
@@ -1175,7 +1175,7 @@ pub const Face = struct {
     ///
     /// When a glyph is defined by a raster or a vector image,
     /// that can be obtained via `glyph_image()`,
-    /// the bounding box must be calculated manually and this method will return `None`.
+    /// the bounding box must be calculated manually and this method will return `null`.
     ///
     /// Note: the returned bbox is not validated in any way. A font file can have a glyph bbox
     /// set to zero/negative width and/or height and this is perfectly ok.
@@ -1205,12 +1205,12 @@ pub const Face = struct {
     /// `pixels_per_em` allows selecting a preferred image size. The chosen size will
     /// be closer to an upper one. So when font has 64px and 96px images and `pixels_per_em`
     /// is set to 72, 96px image will be returned.
-    /// To get the largest image simply use `std::u16::MAX`.
+    /// To get the largest image simply use `maxInt(u16)`.
     ///
     /// Note that this method will return an encoded image. It should be decoded
     /// by the caller. We don't validate or preprocess it in any way.
     ///
-    /// Also, a font can contain both: images and outlines. So when this method returns `None`
+    /// Also, a font can contain both: images and outlines. So when this method returns `null`
     /// you should also try `outline_glyph()` afterwards.
     ///
     /// There are multiple ways an image can be stored in a TrueType font
@@ -1247,7 +1247,7 @@ pub const Face = struct {
     /// or even decompressed (in case of SVGZ) by the caller.
     /// We don't validate or preprocess it in any way.
     ///
-    /// Also, a font can contain both: images and outlines. So when this method returns `None`
+    /// Also, a font can contain both: images and outlines. So when this method returns `null`
     /// you should also try `outline_glyph()` afterwards.
     pub fn glyph_svg_image(
         self: Face,
@@ -1259,7 +1259,7 @@ pub const Face = struct {
 
     // Returns `true` if the glyph can be colored/painted using the `COLR`+`CPAL` tables.
     ///
-    /// See [`paint_color_glyph`](Face::paint_color_glyph) for details.
+    /// See `paint_color_glyph` for details.
     pub fn is_color_glyph(
         self: Face,
         glyph_id: GlyphId,
@@ -1270,7 +1270,7 @@ pub const Face = struct {
 
     /// Returns the number of palettes stored in the `COLR`+`CPAL` tables.
     ///
-    /// See [`paint_color_glyph`](Face::paint_color_glyph) for details.
+    /// See `paint_color_glyph` for details.
     pub fn color_palettes(
         self: Face,
     ) ?u16 {
@@ -1280,8 +1280,7 @@ pub const Face = struct {
 
     /// Paints a color glyph from the `COLR` table.
     ///
-    /// A font can have multiple palettes, which you can check via
-    /// [`color_palettes`](Face::color_palettes).
+    /// A font can have multiple palettes, which you can check via `color_palettes`.
     /// If unsure, just pass 0 to the `palette` argument, which is the default.
     ///
     /// A font can define a glyph using layers of colored shapes instead of a
@@ -1289,8 +1288,7 @@ pub const Face = struct {
     /// be used to access glyphs defined in the `COLR` table.
     ///
     /// Also, a font can contain both: a layered definition and outlines. So
-    /// when this method returns `None` you should also try
-    /// [`outline_glyph`](Face::outline_glyph) afterwards.
+    /// when this method returns `null` you should also try `outline_glyph` afterwards.
     ///
     /// Returns an error if the glyph has no `COLR` definition or if the glyph
     /// definition is malformed.
@@ -1420,12 +1418,12 @@ pub const Face = struct {
 
 /// A raw font face.
 ///
-/// You are probably looking for [`Face`]. This is a low-level type.
+/// You are probably looking for `Face`. This is a low-level type.
 ///
-/// Unlike [`Face`], [`RawFace`] parses only face table records.
+/// Unlike `Face`, `RawFace` parses only face table records.
 /// Meaning all you can get from this type is a raw (`[]const u8`) data of a requested table.
-/// Then you can either parse just a singe table from a font/face or populate [`RawFaceTables`]
-/// manually before passing it to [`Face.from_raw_tables`].
+/// Then you can either parse just a singe table from a font/face or populate `RawFaceTables`
+/// manually before passing it to `Face.from_raw_tables`.
 pub const RawFace = struct {
     /// The input font file data.
     data: []const u8,
@@ -1434,13 +1432,13 @@ pub const RawFace = struct {
 
     const Self = @This();
 
-    /// Creates a new [`RawFace`] from a raw data.
+    /// Creates a new `RawFace` from a raw data.
     ///
     /// `index` indicates the specific font face in a font collection.
-    /// Use [`fonts_in_collection`] to get the total number of font faces.
+    /// Use `fonts_in_collection` to get the total number of font faces.
     /// Set to 0 if unsure.
     ///
-    /// While we do reuse [`FaceParsingError`], `No*Table` errors will not be throws.
+    /// While we do reuse `FaceParsingError`, `No*Table` errors will not be throws.
     pub fn parse(
         data: []const u8,
         index: u32,
@@ -1516,7 +1514,7 @@ pub const RawFace = struct {
 
 /// Parsed face tables.
 ///
-/// Unlike [`Face`], provides a low-level parsing abstraction over TrueType tables.
+/// Unlike `Face`, provides a low-level parsing abstraction over TrueType tables.
 /// Useful when you need a direct access to tables data.
 ///
 /// Also, used when high-level API is problematic to implement.
@@ -1574,8 +1572,7 @@ pub const FaceTables = struct {
 
 /// A list of all supported tables as raw data.
 ///
-/// This type should be used in tandem with
-/// [`Face.from_raw_tables()`](struct.Face.html#method.from_raw_tables).
+/// This type should be used in tandem with `Face.from_raw_tables()`.
 ///
 /// This allows loading font faces not only from TrueType font files,
 /// but from any source. Mainly used for parsing WOFF.
