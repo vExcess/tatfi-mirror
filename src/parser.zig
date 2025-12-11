@@ -66,26 +66,22 @@ pub fn LazyArray(I: type, T: type) type {
             self: Self,
             index: I,
         ) T {
-            if (@typeInfo(T) != .optional) @compileError("use get");
-            const P = @typeInfo(T).optional.child;
-
-            const size: usize = switch (has_trait(P, "FromData")) {
-                .wrapper => |F| @typeInfo(F).int.bits / 8,
-                else => @compileError("get_optional can only be used on wrappers"),
+            if (@typeInfo(T) != .optional) @compileError("use get for non-optionals");
+            const F = switch (has_trait(@typeInfo(T).optional.child, "FromData")) {
+                .wrapper => |F| F,
+                else => @compileError("get_optional only to be used for wrappers"),
             };
 
+            const size: usize = @typeInfo(F).int.bits / 8;
             if (index >= self.len()) return null;
             const start = index * size;
             if (start > self.data.len or
                 start + size > self.data.len) return null;
 
             const bytes = self.data[start..][0..size];
-            const ret = switch (has_trait(P, "FromData")) {
-                .wrapper => |F| .{std.mem.readInt(F, bytes, .big)},
-                else => unreachable,
-            };
-            if (ret[0] == 0) return null;
-            return ret;
+            const ret = std.mem.readInt(F, bytes, .big);
+            if (ret == 0) return null;
+            return .{ret};
         }
 
         /// Returns array's length.
@@ -366,19 +362,16 @@ pub const Stream = struct {
         self: *Stream,
         T: type,
     ) Error!?T {
-        const size: usize = switch (has_trait(T, "FromData")) {
-            .wrapper => |F| @typeInfo(F).int.bits / 8,
+        const F = switch (has_trait(T, "FromData")) {
+            .wrapper => |F| F,
             else => @compileError("read_optional only to be used for wrappers"),
         };
 
+        const size: usize = @typeInfo(F).int.bits / 8;
         const bytes = try self.read_bytes(size);
-
-        const ret = switch (has_trait(T, "FromData")) {
-            .wrapper => |F| .{std.mem.readInt(F, bytes[0..size], .big)},
-            else => unreachable,
-        };
-        if (ret[0] == 0) return null;
-        return ret;
+        const ret = std.mem.readInt(F, bytes[0..size], .big);
+        if (ret == 0) return null;
+        return .{ret};
     }
 
     /// Parses the type from the steam at offset.
@@ -431,10 +424,12 @@ pub const Stream = struct {
         // u16 or u32
         count: anytype,
     ) Error!LazyArray(@TypeOf(count), ?T) {
-        const size: usize = switch (has_trait(T, "FromData")) {
-            .wrapper => |F| @typeInfo(F).int.bits / 8,
+        const F = switch (has_trait(T, "FromData")) {
+            .wrapper => |F| F,
             else => @compileError("read_array_optional only to be used for wrappers"),
         };
+
+        const size: usize = @typeInfo(F).int.bits / 8;
         const len = count * size;
         const bytes = try self.read_bytes(len);
         return LazyArray(@TypeOf(count), ?T).new(bytes);
@@ -459,7 +454,6 @@ pub const Stream = struct {
         T: type,
     ) void {
         const size = size_of(T);
-
         self.advance(size);
     }
 
