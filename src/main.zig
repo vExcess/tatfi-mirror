@@ -137,7 +137,8 @@ pub fn main() !void {
         _ = names.get(4);
         var iter = names.iterator();
         while (iter.next()) |n| {
-            _ = n.to_string(failing_allocator);
+            _ = if (n.name_id == .family)
+                n.to_string(failing_allocator);
             _ = n.language();
         }
     }

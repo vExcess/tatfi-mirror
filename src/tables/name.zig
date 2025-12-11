@@ -101,7 +101,7 @@ const NameRecord = struct {
     platform_id: PlatformId,
     encoding_id: u16,
     language_id: u16,
-    name_id: u16,
+    name_id: NameId,
     length: u16,
     offset: parser.Offset16,
 
@@ -118,7 +118,7 @@ const NameRecord = struct {
                 .platform_id = try s.read(PlatformId),
                 .encoding_id = try s.read(u16),
                 .language_id = try s.read(u16),
-                .name_id = try s.read(u16),
+                .name_id = try s.read(NameId),
                 .length = try s.read(u16),
                 .offset = try s.read(parser.Offset16),
             };
@@ -166,7 +166,7 @@ pub const Name = struct {
     /// A [Name ID](https://docs.microsoft.com/en-us/typography/opentype/spec/name#name-ids).
     ///
     /// A predefined list of ID's can be found in the `name_id` module.
-    name_id: u16,
+    name_id: NameId,
     /// A raw name data.
     ///
     /// Can be in any encoding. Can be empty. If it is unicode, it is UTF-16BE
@@ -236,4 +236,35 @@ pub const Name = struct {
         }
         return .Unknown;
     }
+};
+
+/// A list of [name ID](https://docs.microsoft.com/en-us/typography/opentype/spec/name#name-ids)'s.
+pub const NameId = enum(u16) {
+    copyright_notice = 0,
+    family = 1,
+    subfamily = 2,
+    unique_id = 3,
+    full_name = 4,
+    version = 5,
+    post_script_name = 6,
+    trademark = 7,
+    manufacturer = 8,
+    designer = 9,
+    description = 10,
+    vendor_url = 11,
+    designer_url = 12,
+    license = 13,
+    license_url = 14,
+    reserved = 15,
+    typographic_family = 16,
+    typographic_subfamily = 17,
+    compatible_full = 18,
+    sample_text = 19,
+    post_script_cid = 20,
+    wws_family = 21,
+    wws_subfamily = 22,
+    light_background_palette = 23,
+    dark_background_palette = 24,
+    variations_post_script_name_prefix = 25,
+    _,
 };

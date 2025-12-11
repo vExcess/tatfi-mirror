@@ -47,10 +47,17 @@ pub fn LazyArray(I: type, T: type) type {
             const bytes: *const [size]u8 = self.data[start..][0..size];
             return switch (has_trait(T, "FromData")) {
                 .int => std.mem.readInt(T, bytes, .big),
-                .wrapper => |F| .{std.mem.readInt(F, bytes, .big)},
-                .fancy_wrapper => |F| .{ .inner = std.mem.readInt(F, bytes, .big) },
-                .flags => |F| @bitCast(std.mem.readInt(F, bytes[0..size], .big)),
                 .impl => T.FromData.parse(bytes) catch return null,
+                inline else => |F, tag| {
+                    const i = std.mem.readInt(F, bytes, .big);
+                    return switch (tag) {
+                        .@"enum" => @enumFromInt(i),
+                        .wrapper => .{i},
+                        .fancy_wrapper => .{ .inner = i },
+                        .flags => @bitCast(i),
+                        else => unreachable,
+                    };
+                },
             };
         }
 
@@ -336,13 +343,19 @@ pub const Stream = struct {
         const size = size_of(T);
 
         const bytes = try self.read_bytes(size);
-
         return switch (has_trait(T, "FromData")) {
             .int => std.mem.readInt(T, bytes[0..size], .big),
-            .wrapper => |F| .{std.mem.readInt(F, bytes[0..size], .big)},
-            .fancy_wrapper => |F| .{ .inner = std.mem.readInt(F, bytes[0..size], .big) },
-            .flags => |F| @bitCast(std.mem.readInt(F, bytes[0..size], .big)),
             .impl => try T.FromData.parse(bytes[0..size]),
+            inline else => |F, tag| {
+                const i = std.mem.readInt(F, bytes[0..size], .big);
+                return switch (tag) {
+                    .@"enum" => @enumFromInt(i),
+                    .wrapper => .{i},
+                    .fancy_wrapper => .{ .inner = i },
+                    .flags => @bitCast(i),
+                    else => unreachable,
+                };
+            },
         };
     }
 
@@ -521,6 +534,7 @@ inline fn has_trait(
     wrapper: type,
     fancy_wrapper: type,
     flags: type,
+    @"enum": type,
     impl,
 } {
     switch (@typeInfo(T)) {
@@ -545,6 +559,14 @@ inline fn has_trait(
 
                 if (@hasField(T, "inner"))
                     return .{ .fancy_wrapper = F };
+            }
+        },
+        .@"enum" => |e| {
+            if (@hasDecl(T, trait)) return .impl;
+
+            if (!e.is_exhaustive) {
+                assert_divisible_by_8(e.tag_type, T);
+                return .{ .@"enum" = e.tag_type };
             }
         },
         else => if (@hasDecl(T, trait)) return .impl,
