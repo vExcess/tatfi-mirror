@@ -129,8 +129,16 @@ pub fn main() !void {
     if (tables.kern) |kern| {
         const subtables = kern.subtables;
         var iter = subtables.iterator();
-        while (iter.next()) |subtable|
+        while (iter.next()) |subtable| {
             _ = subtable.glyphs_kerning(.{5}, .{4});
+
+            // AAT specific table
+            const st = subtable.format.format1;
+            _ = st.class(.{0});
+            _ = st.entry(0, 0);
+            _ = st.kerning(@enumFromInt(0));
+            _ = st.new_state(0);
+        }
     }
     if (tables.name) |name| {
         const names = name.names;
@@ -253,8 +261,20 @@ pub fn main() !void {
     }
     _ = tables.apple_layout.ankr.?.points(.{0});
     _ = tables.apple_layout.feat.?.names.find(0);
+    if (tables.apple_layout.kerx) |kerx| {
+        var iter = kerx.subtables.iterator();
+        while (iter.next()) |subtable| {
+            _ = subtable.glyphs_kerning(.{0}, .{0});
+            _ = subtable.glyphs_kerning(.{0}, .{0});
+            _ = subtable.format.format1.glyphs_kerning(0);
+
+            // for example
+            const est = subtable.format.format1.state_table;
+            _ = est.class(.{0});
+            _ = est.entry(0, 0);
+        }
+    }
     // TODO: Fill out the rest
-    _ = tables.apple_layout.kerx;
     _ = tables.apple_layout.morx;
     _ = tables.apple_layout.trak;
     _ = tables.variable_fonts.avar;
