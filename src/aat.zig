@@ -6,6 +6,16 @@ const std = @import("std");
 const parser = @import("parser.zig");
 const lib = @import("lib.zig");
 
+/// Predefined classes.
+///
+/// Search for _Class Code_ in [Apple Advanced Typography Font Tables](
+/// https://developer.apple.com/fonts/TrueType-Reference-Manual/RM06/Chap6Tables.html).
+pub const predefined_class = struct {
+    pub const END_OF_TEXT: u8 = 0;
+    pub const OUT_OF_BOUNDS: u8 = 1;
+    pub const DELETED_GLYPH: u8 = 2;
+};
+
 /// A [lookup table](
 /// https://developer.apple.com/fonts/TrueType-Reference-Manual/RM06/Chap6Tables.html).
 ///
@@ -346,5 +356,227 @@ pub const StateTable = struct {
             // We do not check that the provided offset is actually after `values_offset`.
             .actions = data,
         };
+    }
+
+    /// Returns a glyph class.
+    pub fn class(
+        self: StateTable,
+        glyph_id: lib.GlyphId,
+    ) ?u8 {
+        if (glyph_id[0] == 0xFFFF)
+            return predefined_class.DELETED_GLYPH;
+
+        const idx = std.math.sub(u16, glyph_id[0], self.first_glyph[0]) catch return null;
+        if (idx >= self.class_table.len) return null;
+        return self.class_table[idx];
+    }
+
+    /// Returns a class entry.
+    pub fn entry(
+        self: StateTable,
+        state: u16,
+        class_needle: u8,
+    ) ?StateEntry {
+        var predef_class = class_needle;
+        if (predef_class >= self.number_of_classes)
+            predef_class = predefined_class.OUT_OF_BOUNDS;
+
+        const entry_idx = i: {
+            const idx = @as(usize, state) * @as(usize, self.number_of_classes) + @as(usize, predef_class);
+            if (idx >= self.state_array.len) return null;
+            break :i self.state_array[idx];
+        };
+
+        var s = parser.Stream.new_at(self.entry_table, entry_idx * @sizeOf(StateEntry)) catch return null;
+        return s.read(StateEntry) catch null;
+    }
+
+    /// Returns kerning at offset.
+    pub fn kerning(
+        self: StateTable,
+        offset: ValueOffset,
+    ) ?i16 {
+        var s = parser.Stream.new_at(self.actions, @intFromEnum(offset)) catch return null;
+        return s.read(i16) catch null;
+    }
+
+    /// Produces a new state.
+    pub fn new_state(
+        self: StateTable,
+        state: u16,
+    ) u16 {
+        const n = @divFloor(
+            (@as(i32, state) - @as(i32, self.state_array_offset)),
+            @as(i32, self.number_of_classes),
+        );
+
+        return std.math.cast(u16, n) orelse 0;
+    }
+};
+
+/// An [Extended State Table](
+/// https://developer.apple.com/fonts/TrueType-Reference-Manual/RM06/Chap6Tables.html).
+///
+/// Also called `STXHeader`.
+///
+/// Currently used by `kerx` and `morx` tables.
+pub fn ExtendedStateTable(T: type) type {
+    return struct {
+        number_of_classes: u32,
+        lookup: Lookup,
+        state_array: []const u8,
+        entry_table: []const u8,
+
+        const Self = @This();
+
+        /// Parses an Extended State Table from a stream.
+        ///
+        /// `number_of_glyphs` is from the `maxp` table.
+        pub fn parse(
+            number_of_glyphs: u16,
+            s: *parser.Stream,
+        ) parser.Error!Self {
+            const data = try s.tail();
+
+            const number_of_classes = try s.read(u32);
+            // Note that offsets are not from the subtable start,
+            // but from subtable start + `header_size`.
+            // So there is not need to subtract the `header_size`.
+            const lookup_table_offset = (try s.read(parser.Offset32))[0];
+            const state_array_offset = (try s.read(parser.Offset32))[0];
+            const entry_table_offset = (try s.read(parser.Offset32))[0];
+
+            if (lookup_table_offset > data.len or
+                state_array_offset > data.len or
+                entry_table_offset > data.len) return error.ParseFail;
+
+            return .{
+                .number_of_classes = number_of_classes,
+                .lookup = try .parse(number_of_glyphs, data[lookup_table_offset..]),
+                // We don't know the actual data size and it's kinda expensive to calculate.
+                // So we are simply storing all the data past the offset.
+                // Despite the fact that they may overlap.
+                .state_array = data[state_array_offset..],
+                .entry_table = data[entry_table_offset..],
+            };
+        }
+
+        /// Returns a glyph class.
+        pub fn class(
+            self: Self,
+            glyph_id: lib.GlyphId,
+        ) ?u16 {
+            return if (glyph_id[0] == 0xFFFF)
+                predefined_class.DELETED_GLYPH
+            else
+                self.lookup.value(glyph_id);
+        }
+
+        /// Returns a class entry.
+        pub fn entry(
+            self: Self,
+            state: u16,
+            class_needle: u8,
+        ) ?GenericStateEntry(T) {
+            var predef_class = class_needle;
+            if (predef_class >= self.number_of_classes)
+                predef_class = predefined_class.OUT_OF_BOUNDS;
+
+            const state_idx = @as(usize, state) * @as(usize, self.number_of_classes) + @as(usize, predef_class);
+
+            const entry_idx = i: {
+                var s = parser.Stream.new_at(self.state_array, state_idx * parser.size_of(u16)) catch return null;
+                break :i s.read(u16) catch return null;
+            };
+            var s = parser.Stream.new_at(self.entry_table, entry_idx * parser.size_of(GenericStateEntry(T))) catch return null;
+            return s.read(GenericStateEntry(T)) catch null;
+        }
+    };
+}
+
+pub const StateEntry = GenericStateEntry(void);
+
+/// A State Table entry.
+///
+/// Used by legacy and extended tables.
+pub fn GenericStateEntry(T: type) type {
+    return struct {
+        /// A new state.
+        new_state: u16,
+        /// Entry flags.
+        flags: u16,
+        /// Additional data.
+        ///
+        /// Use `void` if no data expected.
+        extra: T,
+
+        const Self = @This();
+
+        pub const FromData = struct {
+            // [ARS] impl of FromData trait
+            pub const SIZE: usize = 4 + parser.size_of(T);
+
+            pub fn parse(
+                data: *const [SIZE]u8,
+            ) parser.Error!Self {
+                var s = parser.Stream.new(data);
+                return .{
+                    .new_state = try s.read(u16),
+                    .flags = try s.read(u16),
+                    .extra = if (T != void) try s.read(T),
+                };
+            }
+        };
+
+        // [ARS] TODO: change into a packed struct somehow.
+
+        /// Checks that entry has an offset.
+        pub fn has_offset(self: Self) bool {
+            return self.flags & 0x3FFF != 0;
+        }
+
+        /// Returns a value offset.
+        ///
+        /// Used by kern::format1 subtable.
+        pub fn value_offset(self: Self) ValueOffset {
+            return @enumFromInt(self.flags & 0x3FFF);
+        }
+
+        /// If set, reset the kerning data (clear the stack).
+        pub fn has_reset(self: Self) bool {
+            return self.flags & 0x2000 != 0;
+        }
+
+        /// If set, advance to the next glyph before going to the new state.
+        pub fn has_advance(self: Self) bool {
+            return self.flags & 0x4000 == 0;
+        }
+
+        /// If set, push this glyph on the kerning stack.
+        pub fn has_push(self: Self) bool {
+            return self.flags & 0x8000 != 0;
+        }
+
+        /// If set, remember this glyph as the marked glyph.
+        ///
+        /// Used by kerx::format4 subtable.
+        ///
+        /// Yes, the same as `has_push`.
+        pub fn has_mark(self: Self) bool {
+            return self.flags & 0x8000 != 0;
+        }
+    };
+}
+
+/// A type-safe wrapper for a kerning value offset.
+pub const ValueOffset = enum(u16) {
+    _,
+
+    /// Returns the next offset.
+    ///
+    /// After reaching u16::MAX will start from 0.
+    pub fn next(self: ValueOffset) ValueOffset {
+        const ret: u16 = @intFromEnum(self) +% 2; // size of u16.
+        return @enumFromInt(ret);
     }
 };

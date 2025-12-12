@@ -505,6 +505,7 @@ pub const Stream = struct {
 };
 
 pub inline fn size_of(T: type) usize {
+    if (T == void) return 0;
     if (@typeInfo(T) == .optional) // [ARS] for LazyArray16(?Offset16) to work
         return size_of(@typeInfo(T).optional.child);
 
