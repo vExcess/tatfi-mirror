@@ -238,12 +238,7 @@ pub const LookupSegment = struct {
         pub fn parse(
             data: *const [SIZE]u8,
         ) parser.Error!Self {
-            var s = parser.Stream.new(data);
-            return .{
-                .last_glyph = try s.read(u16),
-                .first_glyph = try s.read(u16),
-                .value = try s.read(u16),
-            };
+            return try parser.parse_struct_from_data(Self, data);
         }
     };
 
@@ -279,11 +274,7 @@ pub const LookupSingle = struct {
         pub fn parse(
             data: *const [SIZE]u8,
         ) parser.Error!Self {
-            var s = parser.Stream.new(data);
-            return .{
-                .glyph = try s.read(u16),
-                .value = try s.read(u16),
-            };
+            return try parser.parse_struct_from_data(Self, data);
         }
     };
 
@@ -519,12 +510,7 @@ pub fn GenericStateEntry(T: type) type {
             pub fn parse(
                 data: *const [SIZE]u8,
             ) parser.Error!Self {
-                var s = parser.Stream.new(data);
-                return .{
-                    .new_state = try s.read(u16),
-                    .flags = try s.read(u16),
-                    .extra = if (T != void) try s.read(T),
-                };
+                return try parser.parse_struct_from_data(Self, data);
             }
         };
 

@@ -145,13 +145,7 @@ pub const Feature = struct {
         pub fn parse(
             data: *const [SIZE]u8,
         ) parser.Error!Self {
-            var s = parser.Stream.new(data);
-            return .{
-                .kind = try s.read(u16),
-                .setting = try s.read(u16),
-                .enable_flags = try s.read(u32),
-                .disable_flags = try s.read(u32),
-            };
+            return try parser.parse_struct_from_data(Self, data);
         }
     };
 };
@@ -294,11 +288,7 @@ pub const Subtable = struct {
                     pub fn parse(
                         data: *const [SIZE]u8,
                     ) parser.Error!Self {
-                        var s = parser.Stream.new(data);
-                        return .{
-                            .mark_index = try s.read(u16),
-                            .current_index = try s.read(u16),
-                        };
+                        return try parser.parse_struct_from_data(Self, data);
                     }
                 };
             };
@@ -405,11 +395,7 @@ pub const Subtable = struct {
                     pub fn parse(
                         data: *const [SIZE]u8,
                     ) parser.Error!Self {
-                        var s = parser.Stream.new(data);
-                        return .{
-                            .current_insert_index = try s.read(u16),
-                            .marked_insert_index = try s.read(u16),
-                        };
+                        return try parser.parse_struct_from_data(Self, data);
                     }
                 };
             };

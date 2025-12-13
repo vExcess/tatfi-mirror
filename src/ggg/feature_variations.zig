@@ -39,11 +39,7 @@ const FeatureVariationRecord = struct {
         pub fn parse(
             data: *const [SIZE]u8,
         ) parser.Error!Self {
-            var s = parser.Stream.new(data);
-            return .{
-                .conditions = try s.read(Offset32),
-                .substitutions = try s.read(Offset32),
-            };
+            return try parser.parse_struct_from_data(Self, data);
         }
     };
 };

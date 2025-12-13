@@ -94,11 +94,7 @@ pub const AxisValueMap = struct {
         pub fn parse(
             data: *const [SIZE]u8,
         ) parser.Error!Self {
-            var s = parser.Stream.new(data);
-            return .{
-                .from_coordinate = try s.read(i16),
-                .to_coordinate = try s.read(i16),
-            };
+            return try parser.parse_struct_from_data(Self, data);
         }
     };
 };

@@ -125,12 +125,7 @@ const EncodingRecord = struct {
         pub fn parse(
             data: *const [SIZE]u8,
         ) parser.Error!Self {
-            var s = parser.Stream.new(data);
-            return .{
-                .platform_id = try s.read(PlatformId),
-                .encoding_id = try s.read(u16),
-                .offset = try s.read(Offset32),
-            };
+            return try parser.parse_struct_from_data(Self, data);
         }
     };
 };

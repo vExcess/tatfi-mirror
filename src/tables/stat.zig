@@ -139,12 +139,7 @@ pub const AxisRecord = struct {
         pub fn parse(
             data: *const [SIZE]u8,
         ) parser.Error!Self {
-            var s = parser.Stream.new(data);
-            return .{
-                .tag = try s.read(lib.Tag),
-                .name_id = try s.read(u16),
-                .ordering = try s.read(u16),
-            };
+            return try parser.parse_struct_from_data(Self, data);
         }
     };
 };
@@ -295,13 +290,7 @@ pub const AxisValueSubtableFormat1 = struct {
         pub fn parse(
             data: *const [SIZE]u8,
         ) parser.Error!Self {
-            var s = parser.Stream.new(data);
-            return .{
-                .axis_index = try s.read(u16),
-                .flags = try s.read(AxisValueFlags),
-                .value_name_id = try s.read(u16),
-                .value = try s.read(parser.Fixed),
-            };
+            return try parser.parse_struct_from_data(Self, data);
         }
     };
 };
@@ -329,15 +318,7 @@ pub const AxisValueSubtableFormat2 = struct {
         pub fn parse(
             data: *const [SIZE]u8,
         ) parser.Error!Self {
-            var s = parser.Stream.new(data);
-            return .{
-                .axis_index = try s.read(u16),
-                .flags = try s.read(AxisValueFlags),
-                .value_name_id = try s.read(u16),
-                .nominal_value = try s.read(parser.Fixed),
-                .range_min_value = try s.read(parser.Fixed),
-                .range_max_value = try s.read(parser.Fixed),
-            };
+            return try parser.parse_struct_from_data(Self, data);
         }
     };
 };
@@ -363,14 +344,7 @@ pub const AxisValueSubtableFormat3 = struct {
         pub fn parse(
             data: *const [SIZE]u8,
         ) parser.Error!Self {
-            var s = parser.Stream.new(data);
-            return .{
-                .axis_index = try s.read(u16),
-                .flags = try s.read(AxisValueFlags),
-                .value_name_id = try s.read(u16),
-                .value = try s.read(parser.Fixed),
-                .linked_value = try s.read(parser.Fixed),
-            };
+            return try parser.parse_struct_from_data(Self, data);
         }
     };
 };
@@ -416,11 +390,7 @@ pub const AxisValue = struct {
         pub fn parse(
             data: *const [SIZE]u8,
         ) parser.Error!Self {
-            var s = parser.Stream.new(data);
-            return .{
-                .axis_index = try s.read(u16),
-                .value = try s.read(parser.Fixed),
-            };
+            return try parser.parse_struct_from_data(Self, data);
         }
     };
 };

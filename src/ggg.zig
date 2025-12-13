@@ -93,12 +93,7 @@ pub const RangeRecord = struct {
         pub fn parse(
             data: *const [SIZE]u8,
         ) parser.Error!Self {
-            var s = parser.Stream.new(data);
-            return .{
-                .start = try s.read(lib.GlyphId),
-                .end = try s.read(lib.GlyphId),
-                .value = try s.read(u16),
-            };
+            return try parser.parse_struct_from_data(Self, data);
         }
     };
 

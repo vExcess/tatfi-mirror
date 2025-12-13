@@ -1689,14 +1689,7 @@ pub const TableRecord = struct {
         pub fn parse(
             data: *const [SIZE]u8,
         ) parser.Error!Self {
-            var s = parser.Stream.new(data);
-
-            return .{
-                .tag = try s.read(Tag),
-                .check_sum = try s.read(u32),
-                .offset = try s.read(u32),
-                .length = try s.read(u32),
-            };
+            return try parser.parse_struct_from_data(Self, data);
         }
     };
 };

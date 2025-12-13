@@ -87,12 +87,7 @@ const ValueRecord = struct {
         pub fn parse(
             data: *const [SIZE]u8,
         ) parser.Error!Self {
-            var s = parser.Stream.new(data);
-            return .{
-                .value_tag = try s.read(Tag),
-                .delta_set_outer_index = try s.read(u16),
-                .delta_set_inner_index = try s.read(u16),
-            };
+            return try parser.parse_struct_from_data(Self, data);
         }
     };
 };

@@ -626,11 +626,7 @@ const EntryExitRecord = struct {
         pub fn parse(
             data: *const [SIZE]u8,
         ) parser.Error!Self {
-            var s = parser.Stream.new(data);
-            return .{
-                .entry_anchor_offset = try s.read_optional(parser.Offset16),
-                .exit_anchor_offset = try s.read_optional(parser.Offset16),
-            };
+            return try parser.parse_struct_from_data(Self, data);
         }
     };
 };
@@ -728,11 +724,7 @@ const MarkRecord = struct {
         pub fn parse(
             data: *const [SIZE]u8,
         ) parser.Error!Self {
-            var s = parser.Stream.new(data);
-            return .{
-                .class = try s.read(ggg.Class),
-                .mark_anchor = try s.read(parser.Offset16),
-            };
+            return try parser.parse_struct_from_data(Self, data);
         }
     };
 };
