@@ -3,11 +3,6 @@
 
 const parser = @import("../parser.zig");
 
-const LazyArray16 = parser.LazyArray16;
-const Offset16 = parser.Offset16;
-const Offset32 = parser.Offset32;
-const Fixed = parser.Fixed;
-
 /// A [Tracking Table](
 /// https://developer.apple.com/fonts/TrueType-Reference-Manual/RM06/Chap6trak.html).
 pub const Table = struct {
@@ -26,8 +21,8 @@ pub const Table = struct {
 
         if (try s.read(u16) != 0) return error.ParseFail; // format
 
-        const hor_offset = try s.read_optional(Offset16);
-        const ver_offset = try s.read_optional(Offset16);
+        const hor_offset = try s.read_optional(parser.Offset16);
+        const ver_offset = try s.read_optional(parser.Offset16);
         s.skip(u16); // reserved
 
         const horizontal: TrackData = if (hor_offset) |offset|
@@ -51,7 +46,7 @@ pub const TrackData = struct {
     /// A list of tracks.
     tracks: Tracks = .{},
     /// A list of sizes.
-    sizes: LazyArray16(Fixed) = .{},
+    sizes: parser.LazyArray16(parser.Fixed) = .{},
 
     fn parse(
         offset: usize,
@@ -61,7 +56,7 @@ pub const TrackData = struct {
 
         const tracks_count = try s.read(u16);
         const sizes_count = try s.read(u16);
-        const size_table_offset = try s.read(Offset32); // Offset from start of the table.
+        const size_table_offset = try s.read(parser.Offset32); // Offset from start of the table.
 
         const tracks: Tracks = .{
             .data = data,
@@ -73,7 +68,7 @@ pub const TrackData = struct {
         //       Why we need an offset then?
         const sizes = s: {
             var subs = try parser.Stream.new_at(data, size_table_offset[0]);
-            break :s try subs.read_array(Fixed, sizes_count);
+            break :s try subs.read_array(parser.Fixed, sizes_count);
         };
 
         return .{
@@ -86,14 +81,49 @@ pub const TrackData = struct {
 /// A list of tracks.
 pub const Tracks = struct {
     data: []const u8 = &.{}, // the whole table
-    records: LazyArray16(TrackTableRecord) = .{},
+    records: parser.LazyArray16(TrackTableRecord) = .{},
     sizes_count: u16 = 0,
+
+    /// Returns a track at index.
+    pub fn get(
+        self: Tracks,
+        index: u16,
+    ) ?Track {
+        const record = self.records.get(index) orelse return null;
+        if (record.offset[0] > self.data.len) return null;
+        var s = parser.Stream.new(self.data[record.offset[0]..]);
+        return .{
+            .value = record.value.value,
+            .values = s.read_array(i16, self.sizes_count) catch return null,
+            .name_index = record.name_id,
+        };
+    }
+
+    pub fn iterator(
+        tracks: Tracks,
+    ) Iterator {
+        return .{ .tracks = tracks };
+    }
+
+    pub const Iterator = struct {
+        tracks: Tracks,
+        index: u16 = 0,
+
+        pub fn next(
+            self: *Iterator,
+        ) ?Track {
+            if (self.index >= self.tracks.records.len()) return null;
+
+            defer self.index += 1;
+            return self.tracks.get(self.index);
+        }
+    };
 };
 
 const TrackTableRecord = struct {
-    value: Fixed,
+    value: parser.Fixed,
     name_id: u16,
-    offset: Offset16, // Offset from start of the table.
+    offset: parser.Offset16, // Offset from start of the table.
 
     const Self = @This();
     pub const FromData = struct {
@@ -106,4 +136,14 @@ const TrackTableRecord = struct {
             return try parser.parse_struct_from_data(Self, data);
         }
     };
+};
+
+/// A single track.
+pub const Track = struct {
+    /// A track value.
+    value: f32,
+    /// The `name` table index for the track's name.
+    name_index: u16,
+    /// A list of tracking values for each size.
+    values: parser.LazyArray16(i16),
 };
