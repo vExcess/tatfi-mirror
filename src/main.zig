@@ -274,8 +274,19 @@ pub fn main() !void {
             _ = est.entry(0, 0);
         }
     }
+    if (tables.apple_layout.morx) |morx| {
+        var iter = morx.chains.iterator();
+        while (iter.next()) |chain| {
+            var feature_iter = chain.features.iterator();
+            while (feature_iter.next()) |_| {}
+
+            var subtable_iter = chain.subtables.iterator();
+            while (subtable_iter.next()) |subtable| {
+                _ = subtable.kind.contextual.lookup(0);
+            }
+        }
+    }
     // TODO: Fill out the rest
-    _ = tables.apple_layout.morx;
     _ = tables.apple_layout.trak;
     _ = tables.variable_fonts.avar;
     _ = tables.variable_fonts.cff2;
