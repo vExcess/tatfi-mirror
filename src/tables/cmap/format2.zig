@@ -152,13 +152,7 @@ const SubHeaderRecord = struct {
         pub fn parse(
             data: *const [SIZE]u8,
         ) parser.Error!Self {
-            var s = parser.Stream.new(data);
-            return .{
-                .first_code = try s.read(u16),
-                .entry_count = try s.read(u16),
-                .id_delta = try s.read(i16),
-                .id_range_offset = try s.read(u16),
-            };
+            return try parser.parse_struct_from_data(Self, data);
         }
     };
 };

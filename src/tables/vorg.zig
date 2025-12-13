@@ -69,11 +69,7 @@ pub const VerticalOriginMetrics = struct {
         pub fn parse(
             data: *const [SIZE]u8,
         ) parser.Error!Self {
-            var s = parser.Stream.new(data);
-            return .{
-                .glyph_id = try s.read(GlyphId),
-                .y = try s.read(i16),
-            };
+            return try parser.parse_struct_from_data(Self, data);
         }
     };
 };

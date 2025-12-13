@@ -255,11 +255,7 @@ const TagRecord = struct {
         pub fn parse(
             data: *const [SIZE]u8,
         ) parser.Error!Self {
-            var s = parser.Stream.new(data);
-            return .{
-                .tag = try s.read(lib.Tag),
-                .offset = try s.read(parser.Offset16),
-            };
+            return try parser.parse_struct_from_data(Self, data);
         }
     };
 

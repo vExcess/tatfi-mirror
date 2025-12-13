@@ -237,11 +237,7 @@ const GlyphIdOffsetPair = struct {
         pub fn parse(
             data: *const [SIZE]u8,
         ) parser.Error!Self {
-            var s = parser.Stream.new(data);
-            return .{
-                .glyph_id = try s.read(lib.GlyphId),
-                .offset = try s.read(parser.Offset16),
-            };
+            return try parser.parse_struct_from_data(Self, data);
         }
     };
 };

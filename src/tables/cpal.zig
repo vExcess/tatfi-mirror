@@ -80,13 +80,7 @@ const BgraColor = struct {
         pub fn parse(
             data: *const [SIZE]u8,
         ) parser.Error!Self {
-            var s = parser.Stream.new(data);
-            return .{
-                .blue = try s.read(u8),
-                .green = try s.read(u8),
-                .red = try s.read(u8),
-                .alpha = try s.read(u8),
-            };
+            return try parser.parse_struct_from_data(Self, data);
         }
     };
 

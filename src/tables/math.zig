@@ -646,11 +646,7 @@ const MathValueRecord = struct {
         pub fn parse(
             data: *const [SIZE]u8,
         ) parser.Error!Self {
-            var s = parser.Stream.new(data);
-            return .{
-                .value = try s.read(i16),
-                .device_offset = try s.read_optional(parser.Offset16),
-            };
+            return try parser.parse_struct_from_data(Self, data);
         }
     };
 
@@ -717,13 +713,7 @@ const KernInfoRecord = struct {
         pub fn parse(
             data: *const [SIZE]u8,
         ) parser.Error!Self {
-            var s = parser.Stream.new(data);
-            return .{
-                .top_right = try s.read_optional(parser.Offset16),
-                .top_left = try s.read_optional(parser.Offset16),
-                .bottom_right = try s.read_optional(parser.Offset16),
-                .bottom_left = try s.read_optional(parser.Offset16),
-            };
+            return try parser.parse_struct_from_data(Self, data);
         }
     };
 

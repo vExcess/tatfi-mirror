@@ -110,15 +110,7 @@ const FeatureNameRecord = struct {
         pub fn parse(
             data: *const [SIZE]u8,
         ) parser.Error!Self {
-            var s = parser.Stream.new(data);
-            return .{
-                .feature = try s.read(u16),
-                .setting_table_records_count = try s.read(u16),
-                .setting_table_offset = try s.read(parser.Offset32),
-                .flags = try s.read(u8),
-                .default_setting_index = try s.read(u8),
-                .name_index = try s.read(u16),
-            };
+            return try parser.parse_struct_from_data(Self, data);
         }
     };
 };
@@ -152,11 +144,7 @@ pub const SettingName = struct {
         pub fn parse(
             data: *const [SIZE]u8,
         ) parser.Error!Self {
-            var s = parser.Stream.new(data);
-            return .{
-                .setting = try s.read(u16),
-                .name_index = try s.read(i16),
-            };
+            return try parser.parse_struct_from_data(Self, data);
         }
     };
 };

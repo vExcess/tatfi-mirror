@@ -516,6 +516,30 @@ pub inline fn size_of(T: type) usize {
     };
 }
 
+pub fn parse_struct_from_data(
+    T: type,
+    data: *const [T.FromData.SIZE]u8,
+) Error!T {
+    comptime {
+        // Check whether T.FromData.SIZE is correct
+        var sum = 0;
+        for (@typeInfo(T).@"struct".fields) |f| sum += size_of(f.type);
+        std.debug.assert(T.FromData.SIZE == sum);
+    }
+
+    var s = Stream.new(data);
+    var ret: T = undefined;
+
+    // hope it is order of declaration
+    inline for (@typeInfo(T).@"struct".fields) |f| switch (@typeInfo(f.type)) {
+        .void => {},
+        .optional => |o| @field(ret, f.name) = try s.read_optional(o.child),
+        else => @field(ret, f.name) = try s.read(f.type),
+    };
+
+    return ret;
+}
+
 pub const Error = error{
     ParseFail,
     Overflow,

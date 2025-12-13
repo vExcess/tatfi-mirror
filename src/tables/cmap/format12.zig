@@ -79,12 +79,7 @@ pub const SequentialMapGroup = struct {
         pub fn parse(
             data: *const [SIZE]u8,
         ) parser.Error!Self {
-            var s = parser.Stream.new(data);
-            return .{
-                .start_char_code = try s.read(u32),
-                .end_char_code = try s.read(u32),
-                .start_glyph_id = try s.read(u32),
-            };
+            return try parser.parse_struct_from_data(Self, data);
         }
     };
 };

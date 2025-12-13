@@ -107,12 +107,7 @@ pub const Metrics = struct {
         pub fn parse(
             data: *const [SIZE]u8,
         ) parser.Error!Self {
-            var s = parser.Stream.new(data);
-
-            return .{
-                .advance = try s.read(u16),
-                .side_bearing = try s.read(i16),
-            };
+            return try parser.parse_struct_from_data(Self, data);
         }
     };
 };

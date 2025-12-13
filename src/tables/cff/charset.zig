@@ -175,11 +175,7 @@ pub const Format1Range = struct {
         pub fn parse(
             data: *const [SIZE]u8,
         ) parser.Error!Self {
-            var s = parser.Stream.new(data);
-            return .{
-                .first = try s.read(StringId),
-                .left = try s.read(u8),
-            };
+            return try parser.parse_struct_from_data(Self, data);
         }
     };
 };
@@ -196,11 +192,7 @@ pub const Format2Range = struct {
         pub fn parse(
             data: *const [SIZE]u8,
         ) parser.Error!Self {
-            var s = parser.Stream.new(data);
-            return .{
-                .first = try s.read(StringId),
-                .left = try s.read(u16),
-            };
+            return try parser.parse_struct_from_data(Self, data);
         }
     };
 };

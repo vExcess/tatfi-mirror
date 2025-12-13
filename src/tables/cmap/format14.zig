@@ -92,12 +92,7 @@ const VariationSelectorRecord = struct {
         pub fn parse(
             data: *const [SIZE]u8,
         ) parser.Error!Self {
-            var s = parser.Stream.new(data);
-            return .{
-                .var_selector = try s.read(u24),
-                .default_uvs_offset = try s.read_optional(parser.Offset32),
-                .non_default_uvs_offset = try s.read_optional(parser.Offset32),
-            };
+            return try parser.parse_struct_from_data(Self, data);
         }
     };
 };
@@ -134,11 +129,7 @@ const UnicodeRangeRecord = struct {
         pub fn parse(
             data: *const [SIZE]u8,
         ) parser.Error!Self {
-            var s = parser.Stream.new(data);
-            return .{
-                .start_unicode_value = try s.read(u24),
-                .additional_count = try s.read(u8),
-            };
+            return try parser.parse_struct_from_data(Self, data);
         }
     };
 };
@@ -162,11 +153,7 @@ const UVSMappingRecord = struct {
         pub fn parse(
             data: *const [SIZE]u8,
         ) parser.Error!Self {
-            var s = parser.Stream.new(data);
-            return .{
-                .unicode_value = try s.read(u24),
-                .glyph_id = try s.read(GlyphId),
-            };
+            return try parser.parse_struct_from_data(Self, data);
         }
     };
 };

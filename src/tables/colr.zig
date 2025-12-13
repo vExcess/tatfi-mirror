@@ -1193,12 +1193,7 @@ const BaseGlyphRecord = struct {
         pub fn parse(
             data: *const [SIZE]u8,
         ) parser.Error!Self {
-            var s = parser.Stream.new(data);
-            return .{
-                .glyph_id = try s.read(lib.GlyphId),
-                .first_layer_index = try s.read(u16),
-                .num_layers = try s.read(u16),
-            };
+            return try parser.parse_struct_from_data(Self, data);
         }
     };
 
@@ -1221,11 +1216,7 @@ const LayerRecord = struct {
         pub fn parse(
             data: *const [SIZE]u8,
         ) parser.Error!Self {
-            var s = parser.Stream.new(data);
-            return .{
-                .glyph_id = try s.read(lib.GlyphId),
-                .palette_index = try s.read(u16),
-            };
+            return try parser.parse_struct_from_data(Self, data);
         }
     };
 };
@@ -1244,11 +1235,7 @@ const BaseGlyphPaintRecord = struct {
         pub fn parse(
             data: *const [SIZE]u8,
         ) parser.Error!Self {
-            var s = parser.Stream.new(data);
-            return .{
-                .glyph_id = try s.read(lib.GlyphId),
-                .paint_table_offset = try s.read(parser.Offset32),
-            };
+            return try parser.parse_struct_from_data(Self, data);
         }
     };
 
@@ -1336,12 +1323,7 @@ const ClipRecord = struct {
         pub fn parse(
             data: *const [SIZE]u8,
         ) parser.Error!Self {
-            var s = parser.Stream.new(data);
-            return .{
-                .start_glyph_id = try s.read(lib.GlyphId),
-                .end_glyph_id = try s.read(lib.GlyphId),
-                .clip_box_offset = try s.read(parser.Offset24),
-            };
+            return try parser.parse_struct_from_data(Self, data);
         }
     };
 };
@@ -1559,13 +1541,7 @@ const VarColorStopRaw = struct {
         pub fn parse(
             data: *const [SIZE]u8,
         ) parser.Error!Self {
-            var s = parser.Stream.new(data);
-            return .{
-                .stop_offset = try s.read(parser.F2DOT14),
-                .palette_index = try s.read(u16),
-                .alpha = try s.read(parser.F2DOT14),
-                .var_index_base = try s.read(u32),
-            };
+            return try parser.parse_struct_from_data(Self, data);
         }
     };
 };
@@ -1592,12 +1568,7 @@ const ColorStopRaw = struct {
         pub fn parse(
             data: *const [SIZE]u8,
         ) parser.Error!Self {
-            var s = parser.Stream.new(data);
-            return .{
-                .stop_offset = try s.read(parser.F2DOT14),
-                .palette_index = try s.read(u16),
-                .alpha = try s.read(parser.F2DOT14),
-            };
+            return try parser.parse_struct_from_data(Self, data);
         }
     };
 };

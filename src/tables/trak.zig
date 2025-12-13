@@ -103,12 +103,7 @@ const TrackTableRecord = struct {
         pub fn parse(
             data: *const [SIZE]u8,
         ) parser.Error!Self {
-            var s = parser.Stream.new(data);
-            return .{
-                .value = try s.read(Fixed),
-                .name_id = try s.read(u16),
-                .offset = try s.read(Offset16),
-            };
+            return try parser.parse_struct_from_data(Self, data);
         }
     };
 };
