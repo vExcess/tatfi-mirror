@@ -74,7 +74,7 @@ pub fn main() !void {
     _ = face.paint_color_glyph(.{64}, 16, white, unsafe_painter) catch return;
 
     _ = face.variation_axes();
-    _ = face.set_variation(ttf.Tag{ .inner = 4 }, 300.0); // mutable method
+    _ = face.set_variation(ttf.Tag{ .inner = 4 }, 300.0) catch return; // mutable method
     _ = face.variation_coordinates();
     _ = face.has_non_default_variation_coordinates();
 

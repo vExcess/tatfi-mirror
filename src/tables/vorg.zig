@@ -47,8 +47,7 @@ pub const Table = struct {
             }
         }.func;
 
-        _, const vom = self.metrics.binary_search_by(glyph_id, func) orelse
-            return self.default_y;
+        _, const vom = self.metrics.binary_search_by(glyph_id, func) catch return self.default_y;
         return vom.y;
     }
 };

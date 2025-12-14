@@ -115,13 +115,20 @@ pub fn RecordList(T: type) type {
             self: Self,
             tag: lib.Tag,
         ) ?T {
-            _, const record = self.records.binary_search_by(
+            return self.find_impl(tag) catch null;
+        }
+
+        pub fn find_impl(
+            self: Self,
+            tag: lib.Tag,
+        ) !T {
+            _, const record = try self.records.binary_search_by(
                 tag,
                 TagRecord.compare,
-            ) orelse return null;
-            if (record.offset[0] > self.data.len) return null;
+            );
+            if (record.offset[0] > self.data.len) return error.DataError;
             const data = self.data[record.offset[0]..];
-            return T.parse(record.tag, data) catch null;
+            return try T.parse(record.tag, data);
         }
 
         /// Returns RecordList value index by `Tag`.
@@ -132,7 +139,7 @@ pub fn RecordList(T: type) type {
             const i, _ = self.records.binary_search_by(
                 tag,
                 TagRecord.compare,
-            ) orelse return null;
+            ) catch return null;
             return i;
         }
 

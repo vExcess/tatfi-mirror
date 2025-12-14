@@ -25,6 +25,14 @@ pub const Table = struct {
         self: Table,
         glyph_id: lib.GlyphId,
         pixels_per_em: u16,
+    ) ?Location {
+        return self.get_impl(glyph_id, pixels_per_em) catch null;
+    }
+
+    fn get_impl(
+        self: Table,
+        glyph_id: lib.GlyphId,
+        pixels_per_em: u16,
     ) parser.Error!Location {
         var s = parser.Stream.new(self.data);
 
@@ -108,8 +116,7 @@ pub const Table = struct {
                         return std.math.order(lhs[0], rhs[0]);
                     }
                 }.func;
-                const index, _ = glyphs.binary_search_by(glyph_id, func) orelse
-                    return error.ParseFail;
+                const index, _ = glyphs.binary_search_by(glyph_id, func) catch return error.ParseFail;
 
                 image_offset = try std.math.add(usize, image_offset, try std.math.mul(usize, index, image_size));
             },

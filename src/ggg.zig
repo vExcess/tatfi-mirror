@@ -115,7 +115,7 @@ pub const RangeRecord = struct {
                     .lt;
             }
         }.func;
-        _, const ret = self.binary_search_by(glyph, func) orelse return null;
+        _, const ret = self.binary_search_by(glyph, func) catch return null;
         return ret;
     }
 };
@@ -172,7 +172,7 @@ pub const Coverage = union(enum) {
                     }
                 }.func;
 
-                const p, _ = f.glyphs.binary_search_by(glyph, func) orelse return null;
+                const p, _ = f.glyphs.binary_search_by(glyph, func) catch return null;
                 return p;
             },
             .format2 => |f| {

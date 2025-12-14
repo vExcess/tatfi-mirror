@@ -39,7 +39,7 @@ pub const Table = struct {
         glyph_id: lib.GlyphId,
         pixels_per_em: u16,
     ) parser.Error!lib.RasterGlyphImage {
-        const location = try self.locations.get(glyph_id, pixels_per_em);
+        const location = self.locations.get(glyph_id, pixels_per_em) orelse return error.ParseFail;
         var s = try parser.Stream.new_at(self.data, location.offset);
         const metrics: cblc.Location.Metrics = switch (location.format.metrics) {
             .small => s: {

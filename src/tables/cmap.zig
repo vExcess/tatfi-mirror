@@ -64,19 +64,26 @@ pub const Subtables = struct {
         if (record.offset[0] > self.data.len) return null;
         const data = self.data[record.offset[0]..];
 
+        return get_impl(record, data) catch null;
+    }
+
+    fn get_impl(
+        record: EncodingRecord,
+        data: []const u8,
+    ) !Subtable {
         var s = parser.Stream.new(data);
-        const format_int = s.read(u16) catch return null;
-        const format: Format = switch (format_int) {
-            0 => .{ .byte_encoding_table = Subtable0.parse(data) catch return null },
-            2 => .{ .high_byte_mapping_through_table = Subtable2.parse(data) catch return null },
-            4 => .{ .segment_mapping_to_delta_values = Subtable4.parse(data) catch return null },
-            6 => .{ .trimmed_table_mapping = Subtable6.parse(data) catch return null },
+        const format_int = try s.read(u16);
+        const format: Subtable.Format = switch (format_int) {
+            0 => .{ .byte_encoding_table = try .parse(data) },
+            2 => .{ .high_byte_mapping_through_table = try .parse(data) },
+            4 => .{ .segment_mapping_to_delta_values = try .parse(data) },
+            6 => .{ .trimmed_table_mapping = try .parse(data) },
             8 => .mixed_coverage, // unsupported
-            10 => .{ .trimmed_array = Subtable10.parse(data) catch return null },
-            12 => .{ .segmented_coverage = Subtable12.parse(data) catch return null },
-            13 => .{ .many_to_one_range_mappings = Subtable13.parse(data) catch return null },
-            14 => .{ .unicode_variation_sequences = Subtable14.parse(data) catch return null },
-            else => return null,
+            10 => .{ .trimmed_array = try .parse(data) },
+            12 => .{ .segmented_coverage = try .parse(data) },
+            13 => .{ .many_to_one_range_mappings = try .parse(data) },
+            14 => .{ .unicode_variation_sequences = try .parse(data) },
+            else => return error.ParseFail,
         };
 
         return .{
@@ -138,6 +145,19 @@ pub const Subtable = struct {
     encoding_id: u16,
     /// A subtable format.
     format: Format,
+
+    /// A character encoding subtable variant.
+    pub const Format = union(enum) {
+        byte_encoding_table: Subtable0,
+        high_byte_mapping_through_table: Subtable2,
+        segment_mapping_to_delta_values: Subtable4,
+        trimmed_table_mapping: Subtable6,
+        mixed_coverage, // unsupported
+        trimmed_array: Subtable10,
+        segmented_coverage: Subtable12,
+        many_to_one_range_mappings: Subtable13,
+        unicode_variation_sequences: Subtable14,
+    };
 
     /// Checks that the current encoding is Unicode compatible.
     pub fn is_unicode(
@@ -230,17 +250,4 @@ pub const Subtable = struct {
             inline else => |subtable| subtable.codepoints(ctx, F),
         }
     }
-};
-
-/// A character encoding subtable variant.
-pub const Format = union(enum) {
-    byte_encoding_table: Subtable0,
-    high_byte_mapping_through_table: Subtable2,
-    segment_mapping_to_delta_values: Subtable4,
-    trimmed_table_mapping: Subtable6,
-    mixed_coverage, // unsupported
-    trimmed_array: Subtable10,
-    segmented_coverage: Subtable12,
-    many_to_one_range_mappings: Subtable13,
-    unicode_variation_sequences: Subtable14,
 };

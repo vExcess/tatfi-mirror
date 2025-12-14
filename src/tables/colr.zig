@@ -167,7 +167,7 @@ pub const Table = struct {
         _, const ret = self.base_glyphs.binary_search_by(
             glyph_id,
             BaseGlyphRecord.compare,
-        ) orelse return null;
+        ) catch return null;
         return ret;
     }
 
@@ -178,7 +178,7 @@ pub const Table = struct {
         _, const ret = self.base_glyph_paints.binary_search_by(
             glyph_id,
             BaseGlyphPaintRecord.compare,
-        ) orelse return null;
+        ) catch return null;
         return ret;
     }
 
@@ -269,7 +269,7 @@ pub const Table = struct {
     ) Error!void {
         const start = base.first_layer_index;
         const end = std.math.add(u16, start, base.num_layers) catch return error.PaintError;
-        const layers = self.layers.slice(start, end) orelse return error.PaintError;
+        const layers = self.layers.slice(start, end);
 
         var iter = layers.iterator();
         while (iter.next()) |layer| {
