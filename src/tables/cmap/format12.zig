@@ -32,7 +32,7 @@ pub const Subtable12 = struct {
         _, const group = self.groups.binary_search_by(
             code_point,
             SequentialMapGroup.compare,
-        ) orelse return null;
+        ) catch return null;
 
         const id = id: {
             const s1 = std.math.add(u32, group.start_glyph_id, code_point) catch return null;

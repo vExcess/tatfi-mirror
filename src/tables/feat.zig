@@ -68,7 +68,7 @@ pub const FeatureNames = struct {
                 return std.math.order(name.feature, f);
             }
         }.func;
-        const index, _ = self.records.binary_search_by(feature, func) orelse return null;
+        const index, _ = self.records.binary_search_by(feature, func) catch return null;
         return self.get(index);
     }
 

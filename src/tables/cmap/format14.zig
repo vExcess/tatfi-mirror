@@ -36,7 +36,7 @@ pub const Subtable14 = struct {
         _, const record = self.records.binary_search_by(
             variation,
             VariationSelectorRecord.compare,
-        ) orelse return null;
+        ) catch return null;
 
         if (record.default_uvs_offset) |offset_wrapper| {
             const offset = offset_wrapper[0];
@@ -63,7 +63,7 @@ pub const Subtable14 = struct {
             _, const mapping = uvs_mappings.binary_search_by(
                 code_point,
                 UVSMappingRecord.compare,
-            ) orelse return null;
+            ) catch return null;
 
             return .{ .found = mapping.glyph_id };
         }

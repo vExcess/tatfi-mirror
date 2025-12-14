@@ -118,7 +118,7 @@ pub const Table = struct {
         coordinates: []const lib.NormalizedCoordinate,
         points_len: u16,
         tuples: *VariationTuples,
-    ) parser.Error!void {
+    ) GvarError!void {
         tuples.clear();
 
         if (coordinates.len != self.axis_count) return error.ParseFail;
@@ -168,7 +168,8 @@ pub const Table = struct {
     ) ?lib.Rect {
         var b = glyf.Builder.new(.{}, .{}, builder);
         const glyph_data = glyf_table.get(glyph_id) orelse return null;
-        outline_var_impl(gpa, glyf_table, self, glyph_id, glyph_data, coordinates, 0, &b) catch {};
+        outline_var_impl(gpa, glyf_table, self, glyph_id, glyph_data, coordinates, 0, &b) catch |e|
+            log.err("Hit error outlining a glyph: {t}", .{e});
 
         return b.bbox.to_rect();
     }
@@ -224,10 +225,8 @@ const VariationTuples = struct {
     fn reserve(
         self: *VariationTuples,
         capacity: u16,
-    ) bool {
-        self.list.ensureTotalCapacityPrecise(self.allocator, capacity) catch
-            return false;
-        return true;
+    ) std.mem.Allocator.Error!void {
+        try self.list.ensureTotalCapacityPrecise(self.allocator, capacity);
     }
 
     /// Append a new tuple header to the list.
@@ -329,7 +328,7 @@ fn parse_variation_data_inner(
     points_len: u16,
     data: []const u8,
     tuples: *VariationTuples,
-) parser.Error!void {
+) GvarError!void {
     const SHARED_POINT_NUMBERS_FLAG: u16 = 0x8000;
     const COUNT_MASK: u16 = 0x0FFF;
 
@@ -348,15 +347,14 @@ fn parse_variation_data_inner(
 
     // Attempt to reserve space for the tuples we're about to parse.
     // If it fails, bail out.
-    if (!tuples.reserve(tuple_variation_count)) {
+    tuples.reserve(tuple_variation_count) catch |e| {
         // https://github.com/harfbuzz/ttf-parser/issues/194#issuecomment-3073862296
         log.debug(
             \\Given font has {d} vairation tuples. Maximum amount allocatable is {d}.
             \\To get this font's data pass in a working allocator.
         , .{ tuple_variation_count, cfg.gvar_max_stack_tuples_len });
-
-        return error.ParseFail;
-    }
+        return e;
+    };
 
     // A glyph variation data consists of three parts: header + variation tuples + serialized data.
     // Each tuple has it's own chunk in the serialized data.
@@ -492,7 +490,7 @@ fn parse_tuple_variation_header(
         const start = try std.math.mul(u16, tuple_index, axis_count);
         const end = try std.math.add(u16, start, axis_count);
 
-        break :pt shared_tuple_records.slice(start, end) orelse return error.ParseFail;
+        break :pt shared_tuple_records.slice(start, end);
     };
 
     const start_tuple: parser.LazyArray16(F2DOT14), const end_tuple: parser.LazyArray16(F2DOT14) =
@@ -865,7 +863,7 @@ fn outline_var_impl(
     coordinates: []const lib.NormalizedCoordinate,
     depth: u8,
     builder: *glyf.Builder,
-) parser.Error!void {
+) GvarError!void {
     if (depth >= glyf.MAX_COMPONENTS) return error.ParseFail;
 
     var s = parser.Stream.new(data);
@@ -1148,3 +1146,5 @@ fn infer_delta(
         return (1.0 - d) * prev_delta + d * next_delta;
     };
 }
+
+const GvarError = parser.Error || std.mem.Allocator.Error;

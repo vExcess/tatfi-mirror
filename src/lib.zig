@@ -1329,28 +1329,29 @@ pub const Face = struct {
     ///
     /// Since coordinates are stored on the stack, we allow only 64 of them.
     ///
-    /// Returns false when face is not variable or doesn't have such axis, retuns true otherwise.
+    /// Returns an error when face is not variable or doesn't have such axis, retuns true otherwise.
     pub fn set_variation(
         self: *Face,
         axis: Tag,
         value: f32,
-    ) bool {
+    ) !void {
         if (!cfg.variable_fonts) @compileError("set_variation needs variable_fonts enabled");
 
-        if (!self.is_variable()) return false;
-        if ((self.variation_axes().len()) >= MAX_VAR_COORDS) return false;
+        if (!self.is_variable()) return error.FontNotVariable;
+        if ((self.variation_axes().len()) >= MAX_VAR_COORDS) return error.FontTooVariable;
 
+        var failure = true;
         var iter = self.variation_axes().iterator();
         var i: usize = 0;
         while (iter.next()) |var_axis| : (i += 1) {
             if (var_axis.tag.inner != axis.inner) continue;
+            failure = false;
             self.coordinates.data[i] = var_axis.normalized_value(value);
 
             if (self.tables.variable_fonts.avar) |avar|
-                _ = avar.map_coordinate(&self.coordinates.data[0..self.coordinates.len], i);
+                avar.map_coordinate(self.coordinates.data[0..self.coordinates.len], i) catch {};
         }
-
-        return true;
+        if (failure) return error.NoAxis;
     }
 
     /// Returns the current normalized variation coordinates.
@@ -1501,7 +1502,7 @@ pub const RawFace = struct {
             }
         }.func;
 
-        _, const table_v = self.table_records.binary_search_by(tag, func) orelse return null;
+        _, const table_v = self.table_records.binary_search_by(tag, func) catch return null;
 
         const offset = table_v.offset;
         const length = table_v.length;

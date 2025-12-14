@@ -125,11 +125,11 @@ pub fn LazyArray(I: type, T: type) type {
             self: Self,
             ctx: anytype,
             F: fn (T, @TypeOf(ctx)) std.math.Order,
-        ) ?struct { I, T } {
+        ) SearchError!struct { I, T } {
             // Based on Rust std implementation.
 
             var size = self.len();
-            if (size == 0) return null;
+            if (size == 0) return error.NotFound;
 
             var base: I = 0;
             while (size > 1) {
@@ -139,17 +139,17 @@ pub fn LazyArray(I: type, T: type) type {
                 // mid >= 0: by definition
                 // mid < size: mid = size / 2 + size / 4 + size / 8 ...
                 const cmp = F(
-                    self.get(mid) orelse return null,
+                    self.get(mid) orelse return error.DataError,
                     ctx,
                 );
                 if (cmp != .gt) base = mid;
                 size -= half;
             }
 
-            const value = self.get(base) orelse return null;
+            const value = self.get(base) orelse return error.DataError;
             if (F(value, ctx) == .eq) {
                 return .{ base, value };
-            } else return null;
+            } else return error.NotFound;
         }
 
         /// Returns sub-array.
@@ -157,7 +157,7 @@ pub fn LazyArray(I: type, T: type) type {
             self: Self,
             start: I,
             end: I,
-        ) ?Self {
+        ) Self {
             const size = size_of(T);
 
             const start_t = start * size;
@@ -221,6 +221,7 @@ pub fn LazyOffsetArray16(T: type) type {
             return self.offsets.len();
         }
 
+        /// Get an iterator. Note that `null` values do not terminate it as data is not contiguous
         pub fn iterator(self: *const Self) Iterator {
             return .{ .array = self };
         }
@@ -543,6 +544,11 @@ pub fn parse_struct_from_data(
 pub const Error = error{
     ParseFail,
     Overflow,
+};
+
+pub const SearchError = error{
+    NotFound,
+    DataError,
 };
 
 inline fn has_trait(

@@ -64,7 +64,7 @@ pub const Table = struct {
         _, const record = self.records.binary_search_by(
             tag,
             func,
-        ) orelse return null;
+        ) catch return null;
 
         return self.variation_store.parse_delta(
             record.delta_set_outer_index,

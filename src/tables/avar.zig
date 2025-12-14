@@ -37,17 +37,15 @@ pub const Table = struct {
         self: Table,
         coordinates: []lib.NormalizedCoordinate,
         coordinate_index: usize,
-    ) bool {
-        if (self.segment_maps.count != coordinates.len) return false;
+    ) !void {
+        if (self.segment_maps.count != coordinates.len) return error.DataError;
 
         var iter = self.segment_maps.iterator();
         var i: usize = 0;
         while (iter.next()) |map| : (i += 1) if (i == coordinate_index) {
-            coordinates[i] = .from(map_value(&map, coordinates[i].inner) orelse return false);
+            coordinates[i] = .from(map_value(&map, coordinates[i].inner) orelse return error.MapError);
             break;
         };
-
-        return true;
     }
 };
 
