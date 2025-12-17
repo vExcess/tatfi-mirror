@@ -7,6 +7,7 @@ const std = @import("std");
 const cfg = @import("config");
 const lib = @import("../lib.zig");
 const parser = @import("../parser.zig");
+const utils = @import("../utils.zig");
 const glyf = @import("glyf.zig");
 
 const log = std.log.scoped(.gvar);
@@ -51,7 +52,6 @@ pub const Table = struct {
         const flags = try s.read(u16);
 
         const glyph_variation_data_array_offset = try s.read(Offset32);
-        if (glyph_variation_data_array_offset[0] > data.len) return error.ParseFail;
 
         const shared_tuple_records = str: {
             var sub_s = try parser.Stream.new_at(data, shared_tuples_offset[0]);
@@ -59,7 +59,7 @@ pub const Table = struct {
             break :str try sub_s.read_array(F2DOT14, count);
         };
 
-        const glyphs_variation_data = data[glyph_variation_data_array_offset[0]..];
+        const glyphs_variation_data = try utils.slice(data, glyph_variation_data_array_offset[0]);
 
         const offsets: GlyphVariationDataOffsets = o: {
             const offsets_count = try std.math.add(u16, glyph_count, 1);
@@ -143,10 +143,7 @@ pub const Table = struct {
         };
 
         if (start == end) return;
-        if (start > self.glyphs_variation_data.len or end > self.glyphs_variation_data.len)
-            return error.ParseFail;
-
-        const data = self.glyphs_variation_data[start..end];
+        const data = try utils.slice(self.glyphs_variation_data, .{ .start = start, .end = end });
 
         return try parse_variation_data_inner(
             coordinates,

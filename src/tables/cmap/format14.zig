@@ -1,5 +1,6 @@
 const std = @import("std");
 const parser = @import("../../parser.zig");
+const utils = @import("../../utils.zig");
 
 const GlyphId = @import("../../lib.zig").GlyphId;
 
@@ -40,8 +41,7 @@ pub const Subtable14 = struct {
 
         if (record.default_uvs_offset) |offset_wrapper| {
             const offset = offset_wrapper[0];
-            if (offset > self.data.len) return null;
-            const data = self.data[offset..];
+            const data = utils.slice(self.data, offset) catch return null;
             var s = parser.Stream.new(data);
             const count = s.read(u32) catch return null;
             const ranges = s.read_array(UnicodeRangeRecord, count) catch return null;
@@ -54,8 +54,7 @@ pub const Subtable14 = struct {
 
         if (record.non_default_uvs_offset) |offset_wrapper| {
             const offset = offset_wrapper[0];
-            if (offset > self.data.len) return null;
-            const data = self.data[offset..];
+            const data = utils.slice(self.data, offset) catch return null;
             var s = parser.Stream.new(data);
             const count = s.read(u32) catch return null;
             const uvs_mappings = s.read_array(UVSMappingRecord, count) catch return null;

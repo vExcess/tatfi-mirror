@@ -3,6 +3,7 @@
 
 const std = @import("std");
 const parser = @import("../parser.zig");
+const utils = @import("../utils.zig");
 
 /// A [Feature Name Table](
 /// https://developer.apple.com/fonts/TrueType-Reference-Manual/RM06/Chap6feat.html).
@@ -41,8 +42,7 @@ pub const FeatureNames = struct {
     ) ?FeatureName {
         const record = self.records.get(index) orelse return null;
 
-        if (record.setting_table_offset[0] > self.data.len) return null;
-        const data = self.data[record.setting_table_offset[0]..];
+        const data = utils.slice(self.data, record.setting_table_offset[0]) catch return null;
         var s = parser.Stream.new(data);
         const setting_names =
             s.read_array(SettingName, record.setting_table_records_count) catch return null;

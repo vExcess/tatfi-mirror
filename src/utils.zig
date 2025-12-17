@@ -33,3 +33,33 @@ pub fn f64_to_usize(f: f64) ?usize {
     const i = std.math.lossyCast(i64, f);
     return std.math.cast(usize, i);
 }
+
+/// Internal usage.
+///
+/// `range` either an int or .{ start, length }
+pub fn slice(
+    data: []const u8,
+    range: anytype,
+) error{DataError}![]const u8 {
+    const T = @TypeOf(range);
+    const start, const length, const end = switch (@typeInfo(T)) {
+        .int => .{ range, null, null },
+        .@"struct" => |s| if (s.is_tuple)
+            .{ range[0], range[1], null }
+        else
+            .{ range.start, null, range.end },
+        else => unreachable,
+    };
+
+    if (start > data.len) return error.DataError;
+
+    if (@TypeOf(length) != @TypeOf(null)) { // weirdness
+        const e = std.math.add(usize, start, length) catch return error.DataError;
+        if (e > data.len) return error.DataError;
+
+        return data[start..e];
+    } else if (@TypeOf(end) != @TypeOf(null)) {
+        if (end > data.len or end < start) return error.DataError;
+        return data[start..end];
+    } else return data[start..];
+}

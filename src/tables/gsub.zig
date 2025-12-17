@@ -6,6 +6,7 @@
 
 const lib = @import("../lib.zig");
 const parser = @import("../parser.zig");
+const utils = @import("../utils.zig");
 const ggg = @import("../ggg.zig");
 
 /// A glyph substitution
@@ -67,8 +68,7 @@ pub const SingleSubstitution = union(enum) {
         switch (try s.read(u16)) {
             1 => {
                 const offset = try s.read(parser.Offset16);
-                if (offset[0] > data.len) return error.ParseFail;
-                const coverage_var = try ggg.Coverage.parse(data[offset[0]..]);
+                const coverage_var = try ggg.Coverage.parse(try utils.slice(data, offset[0]));
                 const delta = try s.read(i16);
                 return .{ .format1 = .{
                     .coverage = coverage_var,
@@ -77,8 +77,7 @@ pub const SingleSubstitution = union(enum) {
             },
             2 => {
                 const offset = try s.read(parser.Offset16);
-                if (offset[0] > data.len) return error.ParseFail;
-                const coverage_var = try ggg.Coverage.parse(data[offset[0]..]);
+                const coverage_var = try ggg.Coverage.parse(try utils.slice(data, offset[0]));
                 const count = try s.read(u16);
                 const substitutes = try s.read_array(lib.GlyphId, count);
                 return .{ .format2 = .{
@@ -110,8 +109,7 @@ pub const MultipleSubstitution = struct {
         if (try s.read(u16) != 1) return error.ParseFail;
 
         const offset = try s.read(parser.Offset16);
-        if (offset[0] > data.len) return error.ParseFail;
-        const coverage_var = try ggg.Coverage.parse(data[offset[0]..]);
+        const coverage_var = try ggg.Coverage.parse(try utils.slice(data, offset[0]));
         const count = try s.read(u16);
         const offsets = try s.read_array(?parser.Offset16, count);
         return .{ .coverage = coverage_var, .sequences = .new(data, offsets) };
@@ -149,8 +147,7 @@ pub const AlternateSubstitution = struct {
         if (try s.read(u16) != 1) return error.ParseFail;
 
         const offset = try s.read(parser.Offset16);
-        if (offset[0] > data.len) return error.ParseFail;
-        const coverage_var = try ggg.Coverage.parse(data[offset[0]..]);
+        const coverage_var = try ggg.Coverage.parse(try utils.slice(data, offset[0]));
         const count = try s.read(u16);
         const offsets = try s.read_array(?parser.Offset16, count);
         return .{ .coverage = coverage_var, .alternate_sets = .new(data, offsets) };
@@ -188,8 +185,7 @@ pub const LigatureSubstitution = struct {
         if (try s.read(u16) != 1) return error.ParseFail;
 
         const offset = try s.read(parser.Offset16);
-        if (offset[0] > data.len) return error.ParseFail;
-        const coverage_var = try ggg.Coverage.parse(data[offset[0]..]);
+        const coverage_var = try ggg.Coverage.parse(try utils.slice(data, offset[0]));
         const count = try s.read(u16);
         const offsets = try s.read_array(?parser.Offset16, count);
         return .{ .coverage = coverage_var, .ligature_sets = .new(data, offsets) };
@@ -241,8 +237,7 @@ pub const ReverseChainSingleSubstitution = struct {
 
         const coverage = c: {
             const offset = try s.read(parser.Offset16);
-            if (offset[0] > data.len) return error.ParseFail;
-            break :c try ggg.Coverage.parse(data[offset[0]..]);
+            break :c try ggg.Coverage.parse(try utils.slice(data, offset[0]));
         };
 
         const backtrack_count = try s.read(u16);

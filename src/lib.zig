@@ -9,7 +9,7 @@ const cfg = @import("config");
 const parser = @import("parser.zig");
 pub const tables = @import("tables.zig");
 const opentype_layout = @import("ggg.zig");
-const cast = @import("numcasts.zig");
+const utils = @import("utils.zig");
 
 const LazyArray16 = parser.LazyArray16;
 
@@ -74,13 +74,7 @@ pub const Face = struct {
 
         var iterator = raw_face.table_records.iterator();
         while (iterator.next()) |record| {
-            const start: usize = record.offset;
-            if (start > raw_face.data.len) continue;
-
-            const end = std.math.add(usize, start, record.length) catch continue;
-            if (end > raw_face.data.len) continue;
-
-            const table_data = raw_face.data[start..end];
+            const table_data = utils.slice(raw_face.data, .{ record.offset, record.length }) catch continue;
 
             switch (record.tag.inner) {
                 Tag.from_bytes("bdat") => ret_tables.bdat = table_data,
@@ -983,13 +977,13 @@ pub const Face = struct {
             if (self.tables.variable_fonts.hvar) |hvar| {
                 if (hvar.advance_offset(glyph_id, self.coords())) |offset| {
                     // [ARS] bit of a hack re the TDOO in ttf_parser
-                    const offset_rounded = cast.f32_to_u16(@round(offset)) orelse
+                    const offset_rounded = utils.f32_to_u16(@round(offset)) orelse
                         return null;
                     advance += offset_rounded;
                 }
             } else if (self.glyph_phantom_points(gpa, glyph_id)) |points| {
                 // [ARS] bit of a hack re the TDOO in ttf_parser
-                const points_rounded = cast.f32_to_u16(@round(points.right.x)) orelse
+                const points_rounded = utils.f32_to_u16(@round(points.right.x)) orelse
                     return null;
                 advance += points_rounded;
             }
@@ -1018,12 +1012,12 @@ pub const Face = struct {
             if (self.tables.variable_fonts.vvar) |vvar| {
                 if (vvar.advance_offset(glyph_id, self.coords())) |offset| {
                     // [ARS] bit of a hack re the TDOO in ttf_parser
-                    const offset_rounded = cast.f32_to_u16(@round(offset)) orelse return null;
+                    const offset_rounded = utils.f32_to_u16(@round(offset)) orelse return null;
                     advance += offset_rounded;
                 }
             } else if (self.glyph_phantom_points(gpa, glyph_id)) |points| {
                 // [ARS] bit of a hack re the TDOO in ttf_parser
-                const points_rounded = cast.f32_to_u16(@round(points.bottom.x)) orelse
+                const points_rounded = utils.f32_to_u16(@round(points.bottom.x)) orelse
                     return null;
                 advance += points_rounded;
             }
@@ -1047,7 +1041,7 @@ pub const Face = struct {
                 .left_side_bearing_offset(glyph_id, self.coords())) |offset|
             {
                 // [ARS] bit of a hack re the TDOO in ttf_parser
-                const offset_rounded = cast.f32_to_i16(@round(offset)) orelse return null;
+                const offset_rounded = utils.f32_to_i16(@round(offset)) orelse return null;
                 bearing += offset_rounded;
             };
         };
@@ -1070,7 +1064,7 @@ pub const Face = struct {
                 .top_side_bearing_offset(glyph_id, self.coords())) |offset|
             {
                 // [ARS] bit of a hack re the TDOO in ttf_parser
-                const offset_rounded = cast.f32_to_i16(@round(offset)) orelse return null;
+                const offset_rounded = utils.f32_to_i16(@round(offset)) orelse return null;
                 bearing += offset_rounded;
             };
         };
@@ -1094,7 +1088,7 @@ pub const Face = struct {
                 .vertical_origin_offset(glyph_id, self.coords())) |offset|
             {
                 // [ARS] bit of a hack re the TDOO in ttf_parser
-                const offset_rounded = cast.f32_to_i16(@round(offset)) orelse return null;
+                const offset_rounded = utils.f32_to_i16(@round(offset)) orelse return null;
                 origin += offset_rounded;
             };
         };
@@ -1404,7 +1398,7 @@ pub const Face = struct {
             };
             const v: f32 = @as(f32, @floatFromInt(value)) + metrics;
             // TODO: Should probably round it, but f32::round is not available in core.
-            value = cast.f32_to_i16(v) orelse value;
+            value = utils.f32_to_i16(v) orelse value;
         };
 
         return value;
@@ -1503,13 +1497,7 @@ pub const RawFace = struct {
         }.func;
 
         _, const table_v = self.table_records.binary_search_by(tag, func) catch return null;
-
-        const offset = table_v.offset;
-        const length = table_v.length;
-        const end = std.math.add(usize, offset, length) catch return null;
-
-        if (offset > self.data.len or end > self.data.len) return null;
-        return self.data[offset..end];
+        return utils.slice(self.data, .{ table_v.offset, table_v.length }) catch null;
     }
 };
 
@@ -1808,10 +1796,10 @@ pub const RectF = struct {
         self: RectF,
     ) ?Rect {
         return .{
-            .x_min = cast.f32_to_i16(self.x_min) orelse return null,
-            .y_min = cast.f32_to_i16(self.y_min) orelse return null,
-            .x_max = cast.f32_to_i16(self.x_max) orelse return null,
-            .y_max = cast.f32_to_i16(self.y_max) orelse return null,
+            .x_min = utils.f32_to_i16(self.x_min) orelse return null,
+            .y_min = utils.f32_to_i16(self.y_min) orelse return null,
+            .x_max = utils.f32_to_i16(self.x_max) orelse return null,
+            .y_max = utils.f32_to_i16(self.y_max) orelse return null,
         };
     }
 

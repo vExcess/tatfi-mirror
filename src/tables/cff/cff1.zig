@@ -8,7 +8,7 @@
 
 const std = @import("std");
 const lib = @import("../../lib.zig");
-const cast = @import("../../numcasts.zig");
+const utils = @import("../../utils.zig");
 const parser = @import("../../parser.zig");
 const cff = @import("../cff.zig");
 
@@ -246,7 +246,7 @@ pub const Table = struct {
             break :w sid.nominal_width + w;
         };
 
-        return cast.f32_to_u16(width);
+        return utils.f32_to_u16(width);
     }
 
     /// Returns a glyph ID by a name.
@@ -385,6 +385,7 @@ const TopDict = struct {
     charset_offset: ?usize = null,
     encoding_offset: ?usize = null,
     char_strings_offset: usize = 0,
+    /// start , length
     private_dict_range: ?struct { usize, usize } = null,
     matrix: Matrix = .{},
     has_ros: bool = false,
@@ -517,10 +518,8 @@ fn parse_sid_metadata(
         return .{ .sid = metadata };
 
     const private_dict: PrivateDict = d: {
-        const start, const end = private_dict_range;
-        if (start > data.len or
-            end > data.len) return error.ParseFail;
-        break :d parse_private_dict(data[start..end]);
+        const start, const length = private_dict_range;
+        break :d parse_private_dict(try utils.slice(data, .{ start, length }));
     };
 
     metadata.default_width = private_dict.default_width orelse 0.0;
@@ -530,8 +529,7 @@ fn parse_sid_metadata(
         // 'The local subroutines offset is relative to the beginning
         // of the Private DICT data.'
         if (std.math.add(usize, private_dict_range[0], subroutines_offset)) |start| {
-            if (start > data.len) return error.ParseFail;
-            var s = parser.Stream.new(data[start..]);
+            var s = parser.Stream.new(try utils.slice(data, start));
             metadata.local_subrs = try Index.parse(u16, &s);
         } else |_| {};
 
@@ -870,20 +868,16 @@ fn parse_cid_local_subrs(
 ) parser.Error!Index {
     const font_dict_index = try cid.fd_select.font_dict_index(glyph_id);
     const font_dict_data = cid.fd_array.get(font_dict_index) orelse return error.ParseFail;
-    const private_dict_range_start, const private_dict_range_end = try parse_font_dict(font_dict_data);
+    const private_dict_range = try parse_font_dict(font_dict_data);
+    const private_dict_data = try utils.slice(data, private_dict_range);
 
-    if (private_dict_range_start > data.len or private_dict_range_end > data.len) return error.ParseFail;
-    const private_dict_data = data[private_dict_range_start..private_dict_range_end];
     const private_dict = parse_private_dict(private_dict_data);
     const subroutines_offset = private_dict.local_subroutines_offset orelse return error.ParseFail;
 
     // 'The local subroutines offset is relative to the beginning
     // of the Private DICT data.'
-
-    const start = try std.math.add(usize, private_dict_range_start, subroutines_offset);
-    if (start > data.len) return error.ParseFail;
-
-    const subrs_data = data[start..];
+    const start = try std.math.add(usize, private_dict_range[0], subroutines_offset);
+    const subrs_data = try utils.slice(data, start);
     var s = parser.Stream.new(subrs_data);
     return try Index.parse(u16, &s);
 }
@@ -903,7 +897,7 @@ fn seac_code_to_glyph_id(
     charset: Charset,
     n: f32,
 ) ?lib.GlyphId {
-    const code = cast.f32_to_u8(n) orelse return null;
+    const code = utils.f32_to_u8(n) orelse return null;
     const sid = cff.StringId{Encoding.STANDARD_ENCODING[code]};
 
     switch (charset) {

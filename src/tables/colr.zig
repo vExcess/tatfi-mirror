@@ -6,9 +6,10 @@
 
 const std = @import("std");
 const cfg = @import("config");
-const parser = @import("../parser.zig");
-const cpal = @import("cpal.zig");
 const lib = @import("../lib.zig");
+const parser = @import("../parser.zig");
+const utils = @import("../utils.zig");
+const cpal = @import("cpal.zig");
 
 const ItemVariationStore = @import("../var_store.zig");
 const DeltaSetIndexMap = @import("../delta_set.zig");
@@ -109,9 +110,7 @@ pub const Table = struct {
         if (clip_list_offset) |offset| {
             table.clip_list_offsets_offset = offset;
 
-            if (offset[0] > data.len) return error.ParseFail;
-            const clip_data = data[offset[0]..];
-
+            const clip_data = try utils.slice(data, offset[0]);
             var scl = parser.Stream.new(clip_data);
             scl.skip(u8); // Format
             const count = try scl.read(u32);
@@ -123,22 +122,16 @@ pub const Table = struct {
 
         if (cfg.variable_fonts) {
             if (item_variation_offset) |offset| {
-                if (offset[0] > data.len) return error.ParseFail;
-                const item_var_data = data[offset[0]..];
-
+                const item_var_data = try utils.slice(data, offset[0]);
                 var siv = parser.Stream.new(item_var_data);
                 table.variable_fonts.item_variation_store =
                     try ItemVariationStore.parse(&siv);
             }
 
-            if (var_index_map_offset) |offset| {
-                if (offset[0] > data.len) return error.ParseFail;
-                const var_index_map_data = data[offset[0]..];
-
+            if (var_index_map_offset) |offset|
                 table.variable_fonts.var_index_map = .{
-                    .data = var_index_map_data,
+                    .data = try utils.slice(data, offset[0]),
                 };
-            }
         }
 
         return table;
@@ -1257,10 +1250,7 @@ const ClipList = struct {
         coords: if (cfg.variable_fonts) []const lib.NormalizedCoordinate else void,
     ) ?ClipBox {
         const record = self.records.get(index) orelse return null;
-        const offset: usize = record.clip_box_offset[0];
-        if (offset > self.data.len) return null;
-
-        const data = self.data[offset..];
+        const data = utils.slice(self.data, record.clip_box_offset[0]) catch return null;
 
         var s = parser.Stream.new(data);
         const format = s.read(u8) catch return null;

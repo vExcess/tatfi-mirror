@@ -4,6 +4,7 @@
 const std = @import("std");
 const lib = @import("../lib.zig");
 const parser = @import("../parser.zig");
+const utils = @import("../utils.zig");
 
 const LazyArray16 = parser.LazyArray16;
 const LazyArray32 = parser.LazyArray32;
@@ -183,9 +184,8 @@ pub const Strikes = struct {
         self: Strikes,
         index: u32,
     ) ?Strike {
-        const offset = (self.offsets.get(index) orelse return null)[0];
-        if (offset > self.data.len) return null;
-        const data = self.data[offset..];
+        const offset = self.offsets.get(index) orelse return null;
+        const data = utils.slice(self.data, offset[0]) catch return null;
         return Strike.parse(self.number_of_glyphs, data) catch null;
     }
 

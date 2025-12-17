@@ -4,6 +4,7 @@
 const std = @import("std");
 const lib = @import("../lib.zig");
 const parser = @import("../parser.zig");
+const utils = @import("../utils.zig");
 const loca = @import("loca.zig");
 
 const F2DOT14 = parser.F2DOT14;
@@ -30,8 +31,7 @@ pub const Table = struct {
         glyph_id: lib.GlyphId,
     ) ?[]const u8 {
         const start, const end = self.loca_table.glyph_range(glyph_id) orelse return null;
-        if (start > self.data.len or end > self.data.len) return null;
-        return self.data[start..end];
+        return utils.slice(self.data, .{ .start = start, .end = end }) catch null;
     }
 
     /// Returns the number of points in this outline.
@@ -125,24 +125,15 @@ pub fn parse_simple_outline(
     s.advance(instructions_len);
 
     const flags_offset = s.offset;
-    if (flags_offset > glyph_data.len) return error.ParseFail;
-
     const x_coords_len, const y_coords_len = try resolve_coords_len(&s, points_total);
-
     const x_coords_offset = s.offset;
-    if (x_coords_offset > glyph_data.len) return error.ParseFail;
-
     const y_coords_offset = x_coords_offset + x_coords_len;
-    if (y_coords_offset > glyph_data.len) return error.ParseFail;
-
-    const y_coords_end = y_coords_offset + y_coords_len;
-    if (y_coords_end > glyph_data.len) return error.ParseFail;
 
     return .{
         .endpoints = EndpointsIter.new(endpoints) orelse return error.ParseFail,
-        .flags = .new(glyph_data[flags_offset..x_coords_offset]),
-        .x_coords = .new(glyph_data[x_coords_offset..y_coords_offset]),
-        .y_coords = .new(glyph_data[y_coords_offset..y_coords_end]),
+        .flags = .new(try utils.slice(glyph_data, .{ .start = flags_offset, .end = x_coords_offset })),
+        .x_coords = .new(try utils.slice(glyph_data, .{ x_coords_offset, x_coords_len })),
+        .y_coords = .new(try utils.slice(glyph_data, .{ y_coords_offset, y_coords_len })),
         .points_left = points_total,
     };
 }
@@ -529,9 +520,8 @@ fn outline_impl(
         var iter = CompositeGlyphIter.new(try s.tail());
         while (iter.next()) |comp| {
             const start, const end = loca_table.glyph_range(comp.glyph_id) orelse continue;
-            if (start > glyf_table.len or end > glyf_table.len) continue;
+            const glyph_data = utils.slice(glyf_table, .{ .start = start, .end = end }) catch continue;
 
-            const glyph_data = glyf_table[start..end];
             const transform = builder.transform.combine(comp.transform);
             var b = Builder.new(transform, builder.bbox, builder.builder);
             _ = try outline_impl(

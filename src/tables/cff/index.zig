@@ -1,5 +1,6 @@
 const std = @import("std");
 const parser = @import("../../parser.zig");
+const utils = @import("../../utils.zig");
 
 const Index = @This();
 
@@ -25,14 +26,11 @@ pub fn get(
     self: Index,
     index: u32,
 ) ?[]const u8 {
-    const next_index = std.math.add(u32, index, 1) catch
-        return null; // make sure we do not overflow
+    const next_index = std.math.add(u32, index, 1) catch return null; // make sure we do not overflow
     const start: usize = self.offsets.get(index) orelse return null;
     const end: usize = self.offsets.get(next_index) orelse return null;
 
-    if (start > self.data.len) return null;
-    if (end > self.data.len) return null;
-    return self.data[start..end];
+    return utils.slice(self.data, .{ .start = start, .end = end }) catch null;
 }
 
 pub fn iterator(

@@ -2,6 +2,7 @@ const std = @import("std");
 const cfg = @import("config");
 const lib = @import("../lib.zig");
 const parser = @import("../parser.zig");
+const utils = @import("../utils.zig");
 
 const LookupKind = @import("lookup.zig").LookupSubtable;
 const LookupList = @import("lookup.zig").LookupList;
@@ -32,21 +33,15 @@ pub fn LayoutTable(subtable: LookupKind) type {
 
             const scripts = s: {
                 const offset = try s.read(parser.Offset16);
-                if (offset[0] > data.len) return error.ParseFail;
-
-                break :s try ScriptList.parse(data[offset[0]..]);
+                break :s try ScriptList.parse(try utils.slice(data, offset[0]));
             };
             const features = f: {
                 const offset = try s.read(parser.Offset16);
-                if (offset[0] > data.len) return error.ParseFail;
-
-                break :f try FeatureList.parse(data[offset[0]..]);
+                break :f try FeatureList.parse(try utils.slice(data, offset[0]));
             };
             const lookups = l: {
                 const offset = try s.read(parser.Offset16);
-                if (offset[0] > data.len) return error.ParseFail;
-
-                break :l try LookupList(subtable).parse(data[offset[0]..]);
+                break :l try LookupList(subtable).parse(try utils.slice(data, offset[0]));
             };
 
             const variations = if (cfg.variable_fonts) v: {
@@ -54,9 +49,7 @@ pub fn LayoutTable(subtable: LookupKind) type {
                     if (minor_version >= 1) try s.read_optional(parser.Offset32) else null;
 
                 const offset = variations_offset orelse break :v null;
-                if (offset[0] > data.len) break :v null;
-
-                break :v FeatureVariations.parse(data[offset[0]..]) catch null;
+                break :v FeatureVariations.parse(try utils.slice(data, offset[0])) catch null;
             } else {};
 
             return .{
@@ -104,9 +97,7 @@ pub fn RecordList(T: type) type {
             idx: u16,
         ) ?T {
             const record = self.records.get(idx) orelse return null;
-            if (record.offset[0] > self.data.len) return null;
-            const data = self.data[record.offset[0]..];
-
+            const data = utils.slice(self.data, record.offset[0]) catch return null;
             return T.parse(record.tag, data) catch null;
         }
 
@@ -126,8 +117,7 @@ pub fn RecordList(T: type) type {
                 tag,
                 TagRecord.compare,
             );
-            if (record.offset[0] > self.data.len) return error.DataError;
-            const data = self.data[record.offset[0]..];
+            const data = try utils.slice(self.data, record.offset[0]);
             return try T.parse(record.tag, data);
         }
 
@@ -179,12 +169,11 @@ pub const Script = struct {
         data: []const u8,
     ) parser.Error!Script {
         var s = parser.Stream.new(data);
-        var default_language: ?LanguageSystem = null;
-        if (try s.read_optional(parser.Offset16)) |offset| {
-            if (offset[0] > data.len) return error.ParseFail;
-            const inner = lib.Tag.from_bytes("dflt");
-            default_language = try .parse(.{ .inner = inner }, data[offset[0]..]);
-        }
+        const default_language: ?LanguageSystem =
+            if (try s.read_optional(parser.Offset16)) |offset| try .parse(
+                .{ .inner = lib.Tag.from_bytes("dflt") },
+                try utils.slice(data, offset[0]),
+            ) else null;
 
         var languages: LanguageSystemList = try .parse(try s.tail());
         // Offsets are relative to this table.

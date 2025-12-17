@@ -8,6 +8,7 @@
 //! methods.
 
 const parser = @import("../parser.zig");
+const utils = @import("../utils.zig");
 
 const PlatformId = @import("name.zig").PlatformId;
 const GlyphId = @import("../lib.zig").GlyphId;
@@ -61,8 +62,7 @@ pub const Subtables = struct {
         index: u16,
     ) ?Subtable {
         const record = self.records.get(index) orelse return null;
-        if (record.offset[0] > self.data.len) return null;
-        const data = self.data[record.offset[0]..];
+        const data = utils.slice(self.data, record.offset[0]) catch return null;
 
         return get_impl(record, data) catch null;
     }

@@ -1,9 +1,10 @@
 //! An [Anchor Point Table](
 //! https://developer.apple.com/fonts/TrueType-Reference-Manual/RM06/Chap6ankr.html) implementation.
 
-const aat = @import("../aat.zig");
 const lib = @import("../lib.zig");
 const parser = @import("../parser.zig");
+const utils = @import("../utils.zig");
+const aat = @import("../aat.zig");
 
 /// An [Anchor Point Table](
 /// https://developer.apple.com/fonts/TrueType-Reference-Manual/RM06/Chap6ankr.html).
@@ -28,14 +29,12 @@ pub const Table = struct {
 
         // TODO: we should probably check that offset is larger than the header size (8)
         const lookup_table = r: {
-            const offset = (try s.read(parser.Offset32))[0];
-            if (offset > data.len) return error.ParseFail;
-            break :r data[offset..];
+            const offset = (try s.read(parser.Offset32));
+            break :r try utils.slice(data, offset[0]);
         };
         const glyphs_data = r: {
-            const offset = (try s.read(parser.Offset32))[0];
-            if (offset > data.len) return error.ParseFail;
-            break :r data[offset..];
+            const offset = (try s.read(parser.Offset32));
+            break :r try utils.slice(data, offset[0]);
         };
 
         return .{

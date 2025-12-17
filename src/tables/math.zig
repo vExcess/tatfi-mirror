@@ -1,7 +1,8 @@
 //! A [Math Table](https://docs.microsoft.com/en-us/typography/opentype/spec/math) implementation.
 
-const parser = @import("../parser.zig");
 const lib = @import("../lib.zig");
+const parser = @import("../parser.zig");
+const utils = @import("../utils.zig");
 const ggg = @import("../ggg.zig");
 
 const Device = @import("gpos.zig").Device;
@@ -525,8 +526,7 @@ pub const Constants = struct {
         self: Constants,
         offset: usize,
     ) MathValue {
-        if (offset > self.data.len) return .{};
-        const data = self.data[offset..];
+        const data = utils.slice(self.data, offset) catch return .{};
         return MathValue.parse(data, self.data) catch .{};
     }
 };
@@ -662,8 +662,8 @@ const MathValueRecord = struct {
     ) MathValue {
         const device: ?Device = d: {
             const offset = self.device_offset orelse break :d null;
-            if (offset[0] > data.len) break :d null;
-            break :d Device.parse(data[offset[0]..]) catch null;
+            const d = utils.slice(data, offset[0]) catch break :d null;
+            break :d Device.parse(d) catch null;
         };
         return .{ .value = self.value, .device = device };
     }
@@ -724,23 +724,23 @@ const KernInfoRecord = struct {
         return .{
             .top_right = f: {
                 const offset = self.top_right orelse break :f null;
-                if (offset[0] > data.len) break :f null;
-                break :f Kern.parse(data[offset[0]..]) catch null;
+                const d = utils.slice(data, offset[0]) catch break :f null;
+                break :f Kern.parse(d) catch null;
             },
             .top_left = f: {
                 const offset = self.top_left orelse break :f null;
-                if (offset[0] > data.len) break :f null;
-                break :f Kern.parse(data[offset[0]..]) catch null;
+                const d = utils.slice(data, offset[0]) catch break :f null;
+                break :f Kern.parse(d) catch null;
             },
             .bottom_right = f: {
                 const offset = self.bottom_right orelse break :f null;
-                if (offset[0] > data.len) break :f null;
-                break :f Kern.parse(data[offset[0]..]) catch null;
+                const d = utils.slice(data, offset[0]) catch break :f null;
+                break :f Kern.parse(d) catch null;
             },
             .bottom_left = f: {
                 const offset = self.bottom_left orelse break :f null;
-                if (offset[0] > data.len) break :f null;
-                break :f Kern.parse(data[offset[0]..]) catch null;
+                const d = utils.slice(data, offset[0]) catch break :f null;
+                break :f Kern.parse(d) catch null;
             },
         };
     }
@@ -893,7 +893,5 @@ fn parse_at_offset(
     data: []const u8,
 ) parser.Error!T {
     const offset = try s.read_optional(parser.Offset16) orelse return error.ParseFail;
-    if (offset[0] > data.len) return error.ParseFail;
-
-    return try T.parse(data[offset[0]..]);
+    return try T.parse(try utils.slice(data, offset[0]));
 }
