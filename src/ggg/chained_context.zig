@@ -1,6 +1,7 @@
 const std = @import("std");
 const ggg = @import("../ggg.zig");
 const parser = @import("../parser.zig");
+const utils = @import("../utils.zig");
 const ctx = @import("context.zig");
 
 /// A [Chained Contextual Lookup Subtable](
@@ -33,8 +34,7 @@ pub const ChainedContextLookup = union(enum) {
             1 => {
                 const coverage_var = c: {
                     const offset = try s.read(parser.Offset16);
-                    if (offset[0] > data.len) return error.ParseFail;
-                    break :c try ggg.Coverage.parse(data[offset[0]..]);
+                    break :c try ggg.Coverage.parse(try utils.slice(data, offset[0]));
                 };
 
                 const count = try s.read(u16);
@@ -47,24 +47,20 @@ pub const ChainedContextLookup = union(enum) {
             2 => {
                 const coverage_var = c: {
                     const offset = try s.read(parser.Offset16);
-                    if (offset[0] > data.len) return error.ParseFail;
-                    break :c try ggg.Coverage.parse(data[offset[0]..]);
+                    break :c try ggg.Coverage.parse(try utils.slice(data, offset[0]));
                 };
 
                 const backtrack_classes: ggg.ClassDefinition = p: {
                     const offset = try s.read_optional(parser.Offset16) orelse break :p .empty;
-                    if (offset[0] > data.len) return error.ParseFail;
-                    break :p try .parse(data[offset[0]..]);
+                    break :p try .parse(try utils.slice(data, offset[0]));
                 };
                 const input_classes: ggg.ClassDefinition = p: {
                     const offset = try s.read_optional(parser.Offset16) orelse break :p .empty;
-                    if (offset[0] > data.len) return error.ParseFail;
-                    break :p try .parse(data[offset[0]..]);
+                    break :p try .parse(try utils.slice(data, offset[0]));
                 };
                 const lookahead_classes: ggg.ClassDefinition = p: {
                     const offset = try s.read_optional(parser.Offset16) orelse break :p .empty;
-                    if (offset[0] > data.len) return error.ParseFail;
-                    break :p try .parse(data[offset[0]..]);
+                    break :p try .parse(try utils.slice(data, offset[0]));
                 };
 
                 const count = try s.read(u16);
@@ -85,8 +81,7 @@ pub const ChainedContextLookup = union(enum) {
                 const input_count = try s.read(u16);
                 const coverage_var = c: {
                     const offset = try s.read(parser.Offset16);
-                    if (offset[0] > data.len) return error.ParseFail;
-                    break :c try ggg.Coverage.parse(data[offset[0]..]);
+                    break :c try ggg.Coverage.parse(try utils.slice(data, offset[0]));
                 };
                 const input_coverages = try s.read_array(?parser.Offset16, input_count -| 1);
 

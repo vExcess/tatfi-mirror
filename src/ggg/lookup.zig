@@ -1,4 +1,5 @@
 const parser = @import("../parser.zig");
+const utils = @import("../utils.zig");
 
 const gpos = @import("../tables/gpos.zig");
 const gsub = @import("../tables/gsub.zig");
@@ -97,8 +98,7 @@ pub fn LookupSubtables(kind: LookupSubtable) type {
             index: u16,
         ) ?T {
             const offset = self.offsets.get(index) orelse return null;
-            if (offset[0] > self.data.len) return null;
-            const data = self.data[offset[0]..];
+            const data = utils.slice(self.data, offset[0]) catch return null;
             return T.parse(data, self.kind) catch null;
         }
 
@@ -135,7 +135,5 @@ pub fn parse_extension_lookup(
 
     const kind = try s.read(u16);
     const offset = try s.read(parser.Offset32);
-    if (offset[0] > data.len) return error.ParseFail;
-
-    return T.parse(data[offset[0]..], kind);
+    return T.parse(try utils.slice(data, offset[0]), kind);
 }

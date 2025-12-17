@@ -4,7 +4,7 @@
 const std = @import("std");
 const lib = @import("../lib.zig");
 const parser = @import("../parser.zig");
-const cast = @import("../numcasts.zig");
+const utils = @import("../utils.zig");
 
 const LazyArray16 = parser.LazyArray16;
 const Offset16 = parser.Offset16;

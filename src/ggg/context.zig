@@ -1,5 +1,6 @@
 const std = @import("std");
 const parser = @import("../parser.zig");
+const utils = @import("../utils.zig");
 const ggg = @import("../ggg.zig");
 const lt = @import("layout_table.zig");
 
@@ -25,8 +26,7 @@ pub const ContextLookup = union(enum) {
             1 => {
                 const coverage_var = c: {
                     const offset = try s.read(parser.Offset16);
-                    if (offset[0] > data.len) return error.ParseFail;
-                    break :c try ggg.Coverage.parse(data[offset[0]..]);
+                    break :c try ggg.Coverage.parse(try utils.slice(data, offset[0]));
                 };
 
                 const count = try s.read(u16);
@@ -39,13 +39,11 @@ pub const ContextLookup = union(enum) {
             2 => {
                 const coverage_var = c: {
                     const offset = try s.read(parser.Offset16);
-                    if (offset[0] > data.len) return error.ParseFail;
-                    break :c try ggg.Coverage.parse(data[offset[0]..]);
+                    break :c try ggg.Coverage.parse(try utils.slice(data, offset[0]));
                 };
                 const classes = c: {
                     const offset = try s.read(parser.Offset16);
-                    if (offset[0] > data.len) return error.ParseFail;
-                    break :c try ggg.ClassDefinition.parse(data[offset[0]..]);
+                    break :c try ggg.ClassDefinition.parse(try utils.slice(data, offset[0]));
                 };
 
                 const count = try s.read(u16);
@@ -61,8 +59,7 @@ pub const ContextLookup = union(enum) {
                 const lookup_count = try s.read(u16);
                 const coverage_var = c: {
                     const offset = try s.read(parser.Offset16);
-                    if (offset[0] > data.len) return error.ParseFail;
-                    break :c try ggg.Coverage.parse(data[offset[0]..]);
+                    break :c try ggg.Coverage.parse(try utils.slice(data, offset[0]));
                 };
                 const coverage_count = try std.math.sub(u16, input_count, 1);
                 const coverages = try s.read_array(?parser.Offset16, coverage_count);

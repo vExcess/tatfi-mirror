@@ -128,9 +128,8 @@ pub fn parse_range(
         return error.ParseFail;
     const start = std.math.cast(usize, std.math.lossyCast(i32, operands[1])) orelse
         return error.ParseFail;
-    const end = try std.math.add(usize, start, len);
 
-    return .{ start, end };
+    return .{ start, len };
 }
 
 pub fn operands_slice(

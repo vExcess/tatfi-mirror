@@ -9,6 +9,7 @@
 const std = @import("std");
 const lib = @import("../lib.zig");
 const parser = @import("../parser.zig");
+const utils = @import("../utils.zig");
 const aat = @import("../aat.zig");
 
 const kern = lib.tables.kern;
@@ -238,8 +239,7 @@ pub const Subtable1 = struct {
         // Actions offset is from the start of the state table and not from the start of subtable.
         // And since we don't know the length of the actions data,
         // simply store all the data after the offset.
-        if (actions_offset[0] > data.len) return error.ParseFail;
-        const actions_data = data[actions_offset[0]..];
+        const actions_data = try utils.slice(data, actions_offset[0]);
 
         return .{
             .state_table = state_table,
@@ -352,16 +352,12 @@ pub const Subtable4 = struct {
             action_type: u2, // 0xC0000000 >> 30
         });
 
-        const action_type = flags.action_type;
-        const points_offset = flags.points_offset;
-        if (points_offset > data.len) return error.ParseFail;
-
         // We support only Anchor Point Actions.
-        if (action_type != 1) return error.ParseFail;
+        if (flags.action_type != 1) return error.ParseFail;
 
         return .{
             .state_table = state_table,
-            .anchor_points = .{ .data = data[points_offset..] },
+            .anchor_points = .{ .data = try utils.slice(data, flags.points_offset) },
         };
     }
 };
@@ -409,15 +405,10 @@ pub const Subtable6 = struct {
         const kerning_array_offset = try std.math.sub(usize, (try s.read(parser.Offset32))[0], HEADER_SIZE);
         const kerning_vector_offset = try std.math.sub(usize, (try s.read(parser.Offset32))[0], HEADER_SIZE);
 
-        if (row_index_table_offset > self.data.len or
-            column_index_table_offset > self.data.len or
-            kerning_array_offset > self.data.len or
-            kerning_vector_offset > self.data.len) return error.ParseFail;
-
-        const row_index_table_data = self.data[row_index_table_offset..];
-        const column_index_table_data = self.data[column_index_table_offset..];
-        const kerning_array_data = self.data[kerning_array_offset..];
-        const kerning_vector_data = self.data[kerning_vector_offset..];
+        const row_index_table_data = try utils.slice(self.data, row_index_table_offset);
+        const column_index_table_data = try utils.slice(self.data, column_index_table_offset);
+        const kerning_array_data = try utils.slice(self.data, kerning_array_offset);
+        const kerning_vector_data = try utils.slice(self.data, kerning_vector_offset);
 
         if (has_long_values) {
             const l: u32 = l: {

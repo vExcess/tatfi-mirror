@@ -2,6 +2,7 @@
 //! https://developer.apple.com/fonts/TrueType-Reference-Manual/RM06/Chap6trak.html) implementation.
 
 const parser = @import("../parser.zig");
+const utils = @import("../utils.zig");
 
 /// A [Tracking Table](
 /// https://developer.apple.com/fonts/TrueType-Reference-Manual/RM06/Chap6trak.html).
@@ -90,8 +91,8 @@ pub const Tracks = struct {
         index: u16,
     ) ?Track {
         const record = self.records.get(index) orelse return null;
-        if (record.offset[0] > self.data.len) return null;
-        var s = parser.Stream.new(self.data[record.offset[0]..]);
+        const data = utils.slice(self.data, record.offset[0]) catch return null;
+        var s = parser.Stream.new(data);
         return .{
             .value = record.value.value,
             .values = s.read_array(i16, self.sizes_count) catch return null,

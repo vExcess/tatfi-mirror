@@ -4,6 +4,7 @@
 const cfg = @import("config");
 const lib = @import("../lib.zig");
 const parser = @import("../parser.zig");
+const utils = @import("../utils.zig");
 const ggg = @import("../ggg.zig");
 
 const ItemVariationStore = @import("../var_store.zig");
@@ -42,19 +43,19 @@ pub const Table = struct {
         return .{
             .glyph_classes = o: {
                 const offset = glyph_class_def_offset orelse break :o null;
-                if (offset[0] > data.len) break :o null;
-                break :o ggg.ClassDefinition.parse(data[offset[0]..]) catch null;
+                break :o ggg.ClassDefinition.parse(
+                    utils.slice(data, offset[0]) catch break :o null,
+                ) catch null;
             },
             .mark_attach_classes = o: {
                 const offset = mark_attach_class_def_offset orelse break :o null;
-                if (offset[0] > data.len) break :o null;
-                break :o ggg.ClassDefinition.parse(data[offset[0]..]) catch null;
+                break :o ggg.ClassDefinition.parse(
+                    utils.slice(data, offset[0]) catch break :o null,
+                ) catch null;
             },
             .mark_glyph_coverage_offsets = o: {
                 const offset = mark_glyph_sets_def_offset orelse break :o null;
-                if (offset[0] > data.len) break :o null;
-
-                const subdata = data[offset[0]..];
+                const subdata = utils.slice(data, offset[0]) catch break :o null;
                 var sub_s = parser.Stream.new(subdata);
                 const format = try sub_s.read(u16);
 
@@ -66,9 +67,7 @@ pub const Table = struct {
             },
             .variation_store = if (cfg.variable_fonts) o: {
                 const offset = var_store_offset orelse break :o null;
-                if (offset[0] > data.len) break :o null;
-
-                const subdata = data[offset[0]..];
+                const subdata = utils.slice(data, offset[0]) catch break :o null;
                 var sub_s = parser.Stream.new(subdata);
 
                 break :o ItemVariationStore.parse(&sub_s) catch null;
@@ -120,7 +119,7 @@ pub const Table = struct {
         glyph_id: lib.GlyphId,
         set_index: ?u16,
     ) bool {
-        return is_mark_glyph_impl(self, glyph_id, set_index);
+        return is_mark_glyph_impl(self, glyph_id, set_index) catch false;
     }
 
     /// Returns glyph's variation delta at a specified index according to
@@ -150,19 +149,17 @@ fn is_mark_glyph_impl(
     self: Table,
     glyph_id: lib.GlyphId,
     set_index_maybe: ?u16,
-) bool {
+) !bool {
     const data, const offsets = self.mark_glyph_coverage_offsets orelse return false;
     if (set_index_maybe) |set_index| {
         if (offsets.get(set_index)) |offset| {
-            if (offset[0] > data.len) return false;
-            const coverage = ggg.Coverage.parse(data[offset[0]..]) catch return false;
+            const coverage = try ggg.Coverage.parse(try utils.slice(data, offset[0]));
             if (coverage.contains(glyph_id)) return true;
         }
     } else {
         var iter = offsets.iterator();
         while (iter.next()) |offset| {
-            if (offset[0] > data.len) return false;
-            const coverage = ggg.Coverage.parse(data[offset[0]..]) catch return false;
+            const coverage = try ggg.Coverage.parse(try utils.slice(data, offset[0]));
             if (coverage.contains(glyph_id)) return true;
         }
     }

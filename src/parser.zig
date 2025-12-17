@@ -544,6 +544,7 @@ pub fn parse_struct_from_data(
 pub const Error = error{
     ParseFail,
     Overflow,
+    DataError,
 };
 
 pub const SearchError = error{

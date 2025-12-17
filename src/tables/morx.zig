@@ -13,8 +13,9 @@
 
 const std = @import("std");
 const lib = @import("../lib.zig");
-const aat = @import("../aat.zig");
 const parser = @import("../parser.zig");
+const utils = @import("../utils.zig");
+const aat = @import("../aat.zig");
 
 /// An [Extended Glyph Metamorphosis Table](
 /// https://developer.apple.com/fonts/TrueType-Reference-Manual/RM06/Chap6morx.html).
@@ -305,10 +306,9 @@ pub const Subtable = struct {
                 // 'offset from the beginning of the state subtable',
                 // it's actually not. Subtable header should not be included.
                 const offset = (try s.read(parser.Offset32))[0];
-                if (offset > data.len) return error.ParseFail;
 
                 // The offsets list is unsized.
-                const offsets_data = data[offset..];
+                const offsets_data = try utils.slice(data, offset);
                 const offsets = parser.LazyArray32(parser.Offset32).new(offsets_data);
 
                 return .{
@@ -325,8 +325,7 @@ pub const Subtable = struct {
                 index: u32,
             ) ?aat.Lookup {
                 const offset = self.offsets.get(index) orelse return null;
-                if (offset[0] > self.offsets_data.len) return null;
-                const lookup_data = self.offsets_data[offset[0]..];
+                const lookup_data = utils.slice(self.offsets_data, offset[0]) catch return null;
                 return aat.Lookup.parse(self.number_of_glyphs, lookup_data) catch null;
             }
         };
@@ -355,14 +354,10 @@ pub const Subtable = struct {
                 const component_offset = (try s.read(parser.Offset32))[0];
                 const ligature_offset = (try s.read(parser.Offset32))[0];
 
-                if (ligature_action_offset > data.len or
-                    component_offset > data.len or
-                    ligature_offset > data.len) return error.ParseFail;
-
                 // All three arrays are unsized, so we're simply reading/mapping all the data past offset.
-                const ligature_actions = parser.LazyArray32(u32).new(data[ligature_action_offset..]);
-                const components = parser.LazyArray32(u16).new(data[component_offset..]);
-                const ligatures = parser.LazyArray32(lib.GlyphId).new(data[ligature_offset..]);
+                const ligature_actions = parser.LazyArray32(u32).new(try utils.slice(data, ligature_action_offset));
+                const components = parser.LazyArray32(u16).new(try utils.slice(data, component_offset));
+                const ligatures = parser.LazyArray32(lib.GlyphId).new(try utils.slice(data, ligature_offset));
 
                 return .{
                     .state = state,
@@ -407,11 +402,10 @@ pub const Subtable = struct {
                 var s = parser.Stream.new(data);
                 const state: aat.ExtendedStateTable(InsertionEntryData) = try .parse(number_of_glyphs, &s);
                 const offset = (try s.read(parser.Offset32))[0];
-                if (offset > data.len) return error.ParseFail;
 
                 // TODO: unsized array?
                 // The list is unsized.
-                const glyphs = parser.LazyArray32(lib.GlyphId).new(data[offset..]);
+                const glyphs = parser.LazyArray32(lib.GlyphId).new(try utils.slice(data, offset));
 
                 return .{
                     .state = state,

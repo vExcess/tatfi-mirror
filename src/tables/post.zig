@@ -3,6 +3,7 @@
 
 const std = @import("std");
 const parser = @import("../parser.zig");
+const utils = @import("../utils.zig");
 
 const LineMetrics = @import("../lib.zig").LineMetrics;
 const GlyphId = @import("../lib.zig").GlyphId;
@@ -237,8 +238,7 @@ pub const Names = struct {
         // An empty name is an error.
         if (len == 0) return null;
 
-        if (self.offset > self.data.len or self.offset + len > self.data.len) return null;
-        self.offset += len;
-        return self.data[self.offset..][0..len];
+        defer self.offset += len;
+        return utils.slice(self.data, .{ self.offset, len }) catch null;
     }
 };

@@ -3,7 +3,7 @@ pub const cff2 = @import("cff/cff2.zig");
 
 const std = @import("std");
 const lib = @import("../lib.zig");
-const cast = @import("../numcasts.zig");
+const utils = @import("../utils.zig");
 
 /// A type-safe wrapper for string ID.
 pub const StringId = struct { u16 };
@@ -208,7 +208,7 @@ pub inline fn conv_subroutine_index(
     index: f32,
     bias: u16,
 ) Error!u32 {
-    const index_i32 = cast.f32_to_i32(index) orelse return error.InvalidSubroutineIndex;
+    const index_i32 = utils.f32_to_i32(index) orelse return error.InvalidSubroutineIndex;
     const index_biased = std.math.add(i32, index_i32, bias) catch return error.InvalidSubroutineIndex;
     return std.math.cast(u32, index_biased) orelse return error.InvalidSubroutineIndex;
 }

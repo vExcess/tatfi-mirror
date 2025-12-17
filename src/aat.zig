@@ -3,8 +3,9 @@
 //! related types.
 
 const std = @import("std");
-const parser = @import("parser.zig");
 const lib = @import("lib.zig");
+const parser = @import("parser.zig");
+const utils = @import("utils.zig");
 
 /// Predefined classes.
 ///
@@ -330,9 +331,6 @@ pub const StateTable = struct {
         // instead of a LazyArray.
         const class_table = try s.read_bytes(number_of_glyphs);
 
-        if (state_array_offset > data.len or
-            entry_table_offset > data.len) return error.ParseFail;
-
         return .{
             .number_of_classes = number_of_classes,
             .first_glyph = first_glyph,
@@ -341,8 +339,8 @@ pub const StateTable = struct {
             // We don't know the actual data size and it's kinda expensive to calculate.
             // So we are simply storing all the data past the offset.
             // Despite the fact that they may overlap.
-            .state_array = data[state_array_offset..],
-            .entry_table = data[entry_table_offset..],
+            .state_array = try utils.slice(data, state_array_offset),
+            .entry_table = try utils.slice(data, entry_table_offset),
             // `ValueOffset` defines an offset from the start of the subtable data.
             // We do not check that the provided offset is actually after `values_offset`.
             .actions = data,
@@ -437,18 +435,14 @@ pub fn ExtendedStateTable(T: type) type {
             const state_array_offset = (try s.read(parser.Offset32))[0];
             const entry_table_offset = (try s.read(parser.Offset32))[0];
 
-            if (lookup_table_offset > data.len or
-                state_array_offset > data.len or
-                entry_table_offset > data.len) return error.ParseFail;
-
             return .{
                 .number_of_classes = number_of_classes,
-                .lookup = try .parse(number_of_glyphs, data[lookup_table_offset..]),
+                .lookup = try .parse(number_of_glyphs, try utils.slice(data, lookup_table_offset)),
                 // We don't know the actual data size and it's kinda expensive to calculate.
                 // So we are simply storing all the data past the offset.
                 // Despite the fact that they may overlap.
-                .state_array = data[state_array_offset..],
-                .entry_table = data[entry_table_offset..],
+                .state_array = try utils.slice(data, state_array_offset),
+                .entry_table = try utils.slice(data, entry_table_offset),
             };
         }
 

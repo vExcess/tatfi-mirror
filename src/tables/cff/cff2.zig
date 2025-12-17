@@ -7,7 +7,7 @@ const std = @import("std");
 const lib = @import("../../lib.zig");
 const parser = @import("../../parser.zig");
 const cff = @import("../cff.zig");
-const cast = @import("../../numcasts.zig");
+const utils = @import("../../utils.zig");
 
 const Index = @import("index.zig");
 const ItemVariationStore = @import("../../var_store.zig");
@@ -122,11 +122,10 @@ pub const Table = struct {
         var iterator = dict_data_idx.iterator();
         while (iterator.next()) |font_dict_data| {
             // private_dict_range
-            const pdr_start, const pdr_end = parse_font_dict(font_dict_data) catch continue;
+            const pdr_start, const pdr_len = parse_font_dict(font_dict_data) catch continue;
 
             // 'Private DICT size and offset, from start of the CFF2 table.'
-            if (pdr_start > data.len or pdr_end > data.len) return error.ParseFail;
-            const private_dict_data = data[pdr_start..pdr_end];
+            const private_dict_data = try utils.slice(data, .{ pdr_start, pdr_len });
 
             const subroutines_offset = parse_private_dict(private_dict_data) catch continue;
 
@@ -134,8 +133,7 @@ pub const Table = struct {
             // of the Private DICT data.'
             const start = std.math.add(usize, pdr_start, subroutines_offset) catch continue;
 
-            if (start > data.len) return error.ParseFail;
-            var s_inner = parser.Stream.new(data[start..]);
+            var s_inner = parser.Stream.new(try utils.slice(data, start));
             metadata.local_subrs = try Index.parse(u32, &s_inner);
 
             break;
@@ -201,11 +199,10 @@ fn parse_font_dict(
 
             if (operands.len != 2) return error.ParseFail;
 
-            const len = cast.f64_to_usize(operands[0]) orelse return error.ParseFail;
-            const start = cast.f64_to_usize(operands[0]) orelse return error.ParseFail;
-            const end = try std.math.add(usize, start, len);
+            const len = utils.f64_to_usize(operands[0]) orelse return error.ParseFail;
+            const start = utils.f64_to_usize(operands[0]) orelse return error.ParseFail;
 
-            return .{ start, end };
+            return .{ start, len };
         }
     }
     return error.ParseFail;
@@ -223,7 +220,7 @@ fn parse_private_dict(
             const operands = dict_parser.operands_slice();
 
             if (operands.len == 1)
-                return cast.f64_to_usize(operands[0]) orelse error.ParseFail;
+                return utils.f64_to_usize(operands[0]) orelse error.ParseFail;
 
             return error.ParseFail;
         }
@@ -376,7 +373,7 @@ fn parse_char_string_recursive(
                 if (ctx.had_blend and ctx.had_vsindex) return error.InvalidOperator;
                 if (p.stack.items.len != 1) return error.InvalidArgumentsStackLength;
 
-                const index = cast.f32_to_u16(p.stack.pop() orelse unreachable) orelse
+                const index = utils.f32_to_u16(p.stack.pop() orelse unreachable) orelse
                     return error.InvalidItemVariationDataIndex;
                 try ctx.update_scalars(index);
 
@@ -391,7 +388,7 @@ fn parse_char_string_recursive(
 
                 ctx.had_blend = true;
 
-                const n = cast.f32_to_u16((p.stack.pop() orelse unreachable)) orelse
+                const n = utils.f32_to_u16((p.stack.pop() orelse unreachable)) orelse
                     return error.InvalidNumberOfBlendOperands;
                 const k = ctx.scalars.items.len;
 

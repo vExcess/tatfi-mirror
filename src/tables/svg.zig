@@ -1,7 +1,8 @@
 //! An [SVG Table](https://docs.microsoft.com/en-us/typography/opentype/spec/svg) implementation.
 
-const parser = @import("../parser.zig");
 const lib = @import("../lib.zig");
+const parser = @import("../parser.zig");
+const utils = @import("../utils.zig");
 
 /// An [SVG Table](https://docs.microsoft.com/en-us/typography/opentype/spec/svg).
 pub const Table = struct {
@@ -21,7 +22,7 @@ pub const Table = struct {
         const records = try s.read_array(SvgDocumentRecord, count);
 
         return .{ .documents = .{
-            .data = data[doc_list_offset[0]..],
+            .data = try utils.slice(data, doc_list_offset[0]),
             .records = records,
         } };
     }
@@ -42,11 +43,9 @@ pub const SvgDocumentsList = struct {
     ) ?SvgDocument {
         const record = self.records.get(index) orelse return null;
         const offset = (record.svg_doc_offset orelse return null)[0];
-        if (offset > self.data.len or
-            offset + record.svg_doc_length > self.data.len) return null;
 
         return .{
-            .data = self.data[offset..][0..record.svg_doc_length],
+            .data = utils.slice(self.data, .{ offset, record.svg_doc_length }) catch return null,
             .start_glyph_id = record.start_glyph_id,
             .end_glyph_id = record.end_glyph_id,
         };

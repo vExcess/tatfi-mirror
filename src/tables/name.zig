@@ -3,6 +3,7 @@
 
 const std = @import("std");
 const parser = @import("../parser.zig");
+const utils = @import("../utils.zig");
 
 const Language = @import("../language.zig").Language;
 
@@ -61,19 +62,13 @@ pub const Names = struct {
         index: u16,
     ) ?Name {
         const record = self.records.get(index) orelse return null;
-        const name_start: usize = record.offset[0];
-        const name_end = name_start + @as(usize, record.length);
-
-        if (name_start > self.storage.len or
-            name_end > self.storage.len) return null;
-        const name = self.storage[name_start..name_end];
 
         return .{
             .platform_id = record.platform_id,
             .encoding_id = record.encoding_id,
             .language_id = record.language_id,
             .name_id = record.name_id,
-            .name = name,
+            .name = utils.slice(self.storage, .{ record.offset[0], record.length }) catch return null,
         };
     }
 

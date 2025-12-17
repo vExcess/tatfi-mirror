@@ -5,8 +5,9 @@
 // originally written by https://github.com/laurmaedje
 
 const std = @import("std");
-const parser = @import("../parser.zig");
 const lib = @import("../lib.zig");
+const parser = @import("../parser.zig");
+const utils = @import("../utils.zig");
 const ggg = @import("../ggg.zig");
 
 /// A [Device Table](
@@ -166,18 +167,14 @@ pub const SingleAdjustment = union(enum) {
         switch (try s.read(u16)) {
             1 => {
                 const offset = try s.read(parser.Offset16);
-                if (offset[0] > data.len) return error.ParseFail;
-
-                const coverage_var = try ggg.Coverage.parse(data[offset[0]..]);
+                const coverage_var = try ggg.Coverage.parse(try utils.slice(data, offset[0]));
                 const flags = try s.read(ValueFormatFlags);
                 const value = try ValueRecord.parse(data, &s, flags);
                 return .{ .format1 = .{ .coverage = coverage_var, .value = value } };
             },
             2 => {
                 const offset = try s.read(parser.Offset16);
-                if (offset[0] > data.len) return error.ParseFail;
-
-                const coverage_var = try ggg.Coverage.parse(data[offset[0]..]);
+                const coverage_var = try ggg.Coverage.parse(try utils.slice(data, offset[0]));
                 const flags = try s.read(ValueFormatFlags);
                 const count = try s.read(u16);
                 const values = try ValueRecordsArray.parse(data, count, flags, &s);
@@ -238,26 +235,26 @@ pub const ValueRecord = struct {
 
         if (flags.x_placement_device)
             if (try s.read_optional(parser.Offset16)) |offset| {
-                if (offset[0] > table_data.len) return error.ParseFail;
-                record.x_placement_device = Device.parse(table_data[offset[0]..]) catch null;
+                const data = try utils.slice(table_data, offset[0]);
+                record.x_placement_device = Device.parse(data) catch null;
             };
 
         if (flags.y_placement_device)
             if (try s.read_optional(parser.Offset16)) |offset| {
-                if (offset[0] > table_data.len) return error.ParseFail;
-                record.y_placement_device = Device.parse(table_data[offset[0]..]) catch null;
+                const data = try utils.slice(table_data, offset[0]);
+                record.y_placement_device = Device.parse(data) catch null;
             };
 
         if (flags.x_advance_device)
             if (try s.read_optional(parser.Offset16)) |offset| {
-                if (offset[0] > table_data.len) return error.ParseFail;
-                record.x_advance_device = Device.parse(table_data[offset[0]..]) catch null;
+                const data = try utils.slice(table_data, offset[0]);
+                record.x_advance_device = Device.parse(data) catch null;
             };
 
         if (flags.y_advance_device)
             if (try s.read_optional(parser.Offset16)) |offset| {
-                if (offset[0] > table_data.len) return error.ParseFail;
-                record.y_advance_device = Device.parse(table_data[offset[0]..]) catch null;
+                const data = try utils.slice(table_data, offset[0]);
+                record.y_advance_device = Device.parse(data) catch null;
             };
 
         return record;
@@ -300,9 +297,7 @@ pub const ValueRecordsArray = struct {
         index: u16,
     ) ?ValueRecord {
         const start = index * self.value_len;
-        const end = start + self.value_len;
-        if (start > self.data.len or end > self.data.len) return null;
-        const data = self.data[start..end];
+        const data = utils.slice(self.data, .{ start, self.value_len }) catch return null;
 
         var s = parser.Stream.new(data);
         return .parse(self.table_data, &s, self.flags) catch null;
@@ -363,9 +358,7 @@ pub const PairAdjustment = union(enum) {
         switch (try s.read(u16)) {
             1 => {
                 const offset = try s.read(parser.Offset16);
-                if (offset[0] > data.len) return error.ParseFail;
-
-                const coverage_v = try ggg.Coverage.parse(data[offset[0]..]);
+                const coverage_v = try ggg.Coverage.parse(try utils.slice(data, offset[0]));
                 const flags = .{
                     try s.read(ValueFormatFlags),
                     try s.read(ValueFormatFlags),
@@ -379,23 +372,18 @@ pub const PairAdjustment = union(enum) {
             },
             2 => {
                 const offset = try s.read(parser.Offset16);
-                if (offset[0] > data.len) return error.ParseFail;
-
-                const coverage_v = try ggg.Coverage.parse(data[offset[0]..]);
+                const coverage_v = try ggg.Coverage.parse(try utils.slice(data, offset[0]));
                 const flags = .{
                     try s.read(ValueFormatFlags),
                     try s.read(ValueFormatFlags),
                 };
                 const classes = classes: {
                     const offset_1 = try s.read(parser.Offset16);
-                    if (offset_1[0] > data.len) return error.ParseFail;
-
                     const offset_2 = try s.read(parser.Offset16);
-                    if (offset_2[0] > data.len) return error.ParseFail;
 
                     break :classes .{
-                        try ggg.ClassDefinition.parse(data[offset_1[0]..]),
-                        try ggg.ClassDefinition.parse(data[offset_2[0]..]),
+                        try ggg.ClassDefinition.parse(try utils.slice(data, offset_1[0])),
+                        try ggg.ClassDefinition.parse(try utils.slice(data, offset_2[0])),
                     };
                 };
                 const counts = .{ try s.read(u16), try s.read(u16) };
@@ -441,8 +429,7 @@ pub const PairSets = struct {
         index: u16,
     ) ?PairSet {
         const offset = self.offsets.get_optional(index) orelse return null;
-        if (offset[0] > self.data.len) return null;
-        const data = self.data[offset[0]..];
+        const data = utils.slice(self.data, offset[0]) catch return null;
         return PairSet.parse(data, self.flags) catch null;
     }
 };
@@ -483,9 +470,7 @@ pub const PairSet = struct {
                 set: PairSet,
             ) ?[]const u8 {
                 const start = index * set.record_len;
-                const end = start + set.record_len;
-                if (start > set.data.len or end > set.data.len) return null;
-                return set.data[start..end];
+                return utils.slice(set.data, .{ start, set.record_len }) catch null;
             }
         }.func;
 
@@ -572,8 +557,8 @@ pub const ClassMatrix = struct {
 
         const idx = @as(usize, classes[0]) * @as(usize, self.counts[1]) + @as(usize, classes[1]);
         const record_index = idx * @as(usize, self.record_len);
-        if (record_index > self.matrix.len) return null;
-        const record = self.matrix[record_index..];
+
+        const record = utils.slice(self.matrix, record_index) catch return null;
 
         var s = parser.Stream.new(record);
         return .{
@@ -596,9 +581,7 @@ pub const CursiveAdjustment = struct {
         if ((try s.read(u16)) != 1) return error.ParseFail;
 
         const offset = try s.read(parser.Offset16);
-        if (offset[0] > data.len) return error.ParseFail;
-
-        const coverage = try ggg.Coverage.parse(data[offset[0]..]);
+        const coverage = try ggg.Coverage.parse(try utils.slice(data, offset[0]));
         const count = try s.read(u16);
         const records = try s.read_array(EntryExitRecord, count);
         return .{
@@ -651,27 +634,23 @@ pub const MarkToBaseAdjustment = struct {
 
         const mark_coverage = c: {
             const offset = try s.read(parser.Offset16);
-            if (offset[0] > data.len) return error.ParseFail;
-            break :c try ggg.Coverage.parse(data[offset[0]..]);
+            break :c try ggg.Coverage.parse(try utils.slice(data, offset[0]));
         };
         const base_coverage = c: {
             const offset = try s.read(parser.Offset16);
-            if (offset[0] > data.len) return error.ParseFail;
-            break :c try ggg.Coverage.parse(data[offset[0]..]);
+            break :c try ggg.Coverage.parse(try utils.slice(data, offset[0]));
         };
 
         const class_count = try s.read(u16);
 
         const marks = m: {
             const offset = try s.read(parser.Offset16);
-            if (offset[0] > data.len) return error.ParseFail;
-            break :m try MarkArray.parse(data[offset[0]..]);
+            break :m try MarkArray.parse(try utils.slice(data, offset[0]));
         };
 
         const anchors = m: {
             const offset = try s.read(parser.Offset16);
-            if (offset[0] > data.len) return error.ParseFail;
-            break :m try AnchorMatrix.parse(data[offset[0]..], class_count);
+            break :m try AnchorMatrix.parse(try utils.slice(data, offset[0]), class_count);
         };
 
         return .{
@@ -703,9 +682,7 @@ pub const MarkArray = struct {
         index: u16,
     ) ?struct { ggg.Class, Anchor } {
         const record = self.array.get(index) orelse return null;
-        if (record.mark_anchor[0] > self.data.len) return null;
-
-        const data = self.data[record.mark_anchor[0]..];
+        const data = utils.slice(self.data, record.mark_anchor[0]) catch return null;
         const anchor = Anchor.parse(data) catch return null;
 
         return .{ record.class, anchor };
@@ -762,8 +739,8 @@ pub const AnchorMatrix = struct {
     ) ?Anchor {
         const idx = @as(u32, row) * @as(u32, self.cols) + @as(u32, col);
         const offset = self.matrix.get(idx) orelse return null orelse return null;
-        if (offset[0] > self.data.len) return null;
-        return Anchor.parse(self.data[offset[0]..]) catch null;
+        const data = try utils.slice(self.data, offset[0]) catch return null;
+        return Anchor.parse(data) catch null;
     }
 };
 
@@ -783,27 +760,23 @@ pub const MarkToLigatureAdjustment = struct {
 
         const mark_coverage = c: {
             const offset = try s.read(parser.Offset16);
-            if (offset[0] > data.len) return error.ParseFail;
-            break :c try ggg.Coverage.parse(data[offset[0]..]);
+            break :c try ggg.Coverage.parse(try utils.slice(data, offset[0]));
         };
         const ligature_coverage = c: {
             const offset = try s.read(parser.Offset16);
-            if (offset[0] > data.len) return error.ParseFail;
-            break :c try ggg.Coverage.parse(data[offset[0]..]);
+            break :c try ggg.Coverage.parse(try utils.slice(data, offset[0]));
         };
 
         const class_count = try s.read(u16);
 
         const marks = m: {
             const offset = try s.read(parser.Offset16);
-            if (offset[0] > data.len) return error.ParseFail;
-            break :m try MarkArray.parse(data[offset[0]..]);
+            break :m try MarkArray.parse(try utils.slice(data, offset[0]));
         };
 
         const ligature_array = m: {
             const offset = try s.read(parser.Offset16);
-            if (offset[0] > data.len) return error.ParseFail;
-            break :m try LigatureArray.parse(data[offset[0]..], class_count);
+            break :m try LigatureArray.parse(try utils.slice(data, offset[0]), class_count);
         };
 
         return .{
@@ -841,9 +814,7 @@ pub const LigatureArray = struct {
         index: u16,
     ) ?AnchorMatrix {
         const offset = self.offsets.get(index) orelse return null;
-        if (offset[0] > self.data.len) return null;
-
-        const data = self.data[offset[0]..];
+        const data = utils.slice(self.data, offset[0]) catch return null;
         return AnchorMatrix.parse(data, self.class_count) catch null;
     }
 };
@@ -864,27 +835,23 @@ pub const MarkToMarkAdjustment = struct {
 
         const mark1_coverage = c: {
             const offset = try s.read(parser.Offset16);
-            if (offset[0] > data.len) return error.ParseFail;
-            break :c try ggg.Coverage.parse(data[offset[0]..]);
+            break :c try ggg.Coverage.parse(try utils.slice(data, offset[0]));
         };
         const mark2_coverage = c: {
             const offset = try s.read(parser.Offset16);
-            if (offset[0] > data.len) return error.ParseFail;
-            break :c try ggg.Coverage.parse(data[offset[0]..]);
+            break :c try ggg.Coverage.parse(try utils.slice(data, offset[0]));
         };
 
         const class_count = try s.read(u16);
 
         const marks = m: {
             const offset = try s.read(parser.Offset16);
-            if (offset[0] > data.len) return error.ParseFail;
-            break :m try MarkArray.parse(data[offset[0]..]);
+            break :m try MarkArray.parse(try utils.slice(data, offset[0]));
         };
 
         const mark2_matrix = m: {
             const offset = try s.read(parser.Offset16);
-            if (offset[0] > data.len) return error.ParseFail;
-            break :m try AnchorMatrix.parse(data[offset[0]..], class_count);
+            break :m try AnchorMatrix.parse(try utils.slice(data, offset[0]), class_count);
         };
 
         return .{
@@ -929,14 +896,12 @@ pub const Anchor = struct {
         if (format == 3) {
             x: {
                 const offset = try s.read_optional(parser.Offset16) orelse break :x;
-                if (offset[0] > data.len) break :x;
-                const device_data = data[offset[0]..];
+                const device_data = utils.slice(data, offset[0]) catch break :x;
                 table.x_device = Device.parse(device_data) catch null;
             }
             y: {
                 const offset = try s.read_optional(parser.Offset16) orelse break :y;
-                if (offset[0] > data.len) break :y;
-                const device_data = data[offset[0]..];
+                const device_data = utils.slice(data, offset[0]) catch break :y;
                 table.y_device = Device.parse(device_data) catch null;
             }
         }

@@ -2,6 +2,7 @@
 //! https://docs.microsoft.com/en-us/typography/opentype/spec/hvar) implementation.
 
 const parser = @import("../parser.zig");
+const utils = @import("../utils.zig");
 
 const DeltaSetIndexMap = @import("../delta_set.zig");
 const ItemVariationStore = @import("../var_store.zig");
@@ -51,8 +52,7 @@ pub const Table = struct {
     ) ?f32 {
         const outer_idx, const inner_idx =
             if (self.advance_height_mapping_offset) |offset| o: {
-                if (offset[0] > self.data.len) return null;
-                const data = self.data[offset[0]..];
+                const data = utils.slice(self.data, offset[0]) catch return null;
 
                 break :o DeltaSetIndexMap.new(data).map(glyph_id[0]) orelse return null;
             } else
@@ -72,8 +72,7 @@ pub const Table = struct {
         coordinates: []const NormalizedCoordinate,
     ) ?f32 {
         const offset = self.tsb_mapping_offset orelse return null;
-        if (offset[0] > self.data.len) return null;
-        const set_data = self.data[offset[0]..];
+        const set_data = utils.slice(self.data, offset[0]) catch return null;
         return self.side_bearing_offset(glyph_id, coordinates, set_data);
     }
 
@@ -84,8 +83,7 @@ pub const Table = struct {
         coordinates: []const NormalizedCoordinate,
     ) ?f32 {
         const offset = self.bsb_mapping_offset orelse return null;
-        if (offset[0] > self.data.len) return null;
-        const set_data = self.data[offset[0]..];
+        const set_data = utils.slice(self.data, offset[0]) catch return null;
         return self.side_bearing_offset(glyph_id, coordinates, set_data);
     }
 
@@ -96,8 +94,7 @@ pub const Table = struct {
         coordinates: []const NormalizedCoordinate,
     ) ?f32 {
         const offset = self.vorg_mapping_offset orelse return null;
-        if (offset[0] > self.data.len) return null;
-        const set_data = self.data[offset[0]..];
+        const set_data = utils.slice(self.data, offset[0]) catch return null;
         return self.side_bearing_offset(glyph_id, coordinates, set_data);
     }
 
