@@ -14,11 +14,11 @@ Almost the entire Rust ecosystem depends on [`ttf_parser`](https://docs.rs/ttf-p
 
 ## Status
 
-`tatfi` is still a work in progress. The API surface is not completely replicated yet. However, with the current API surface it is possible to, at least, build a rasterizer or a shaper on top of it.
+`tatfi` is still a work in progress. The API surface is fairly complete. It is possible to build a rasterizer or a shaper on top of `tatfi`.
 
-Also, the tests are not ported yet. Note, however, that even with all `ttf_parser` tests ported, the crate actually depended on `rustybuzz` (and from there, the `HarfBuzz` test suite), for testing. Without actual real use of this library it is not possible to test exhaustively.
+However, `ttf_parser` tests are not ported yet. Note that even with all `ttf_parser` tests ported, the crate actually depended on `rustybuzz` (and from there, the `HarfBuzz` test suite), for testing. Without actual real use of this library it is not possible to test exhaustively.
 
-You can see the currenty progress (as well as the exposed API surface) on `main.zig`. If you'd like to help, please see any of the following topics.
+You can see the API surface on `main.zig`. If you'd like to help, please see any of the following topics.
 
 ### Tests and Benchmarks
 
