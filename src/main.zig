@@ -290,7 +290,6 @@ pub fn main() !void {
         var iter = trak.horizontal.tracks.iterator();
         while (iter.next()) |_| {}
     }
-    // TODO: Fill out the rest
     _ = tables.variable_fonts.avar;
     _ = tables.variable_fonts.cff2;
     _ = tables.variable_fonts.fvar;

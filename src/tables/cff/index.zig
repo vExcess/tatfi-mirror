@@ -36,15 +36,12 @@ pub fn get(
 pub fn iterator(
     data: *const Index,
 ) Iterator {
-    return .{
-        .data = data,
-        .offset_index = 0,
-    };
+    return .{ .data = data };
 }
 
 pub const Iterator = struct {
     data: *const Index,
-    offset_index: u32,
+    offset_index: u32 = 0,
 
     pub fn next(
         self: *Iterator,
