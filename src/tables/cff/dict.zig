@@ -40,7 +40,9 @@ pub const Operator = struct { u16 };
 
 pub fn parse_next(
     self: *DictionaryParser,
-) ?Operator {
+    T: type,
+) ?T {
+    std.debug.assert(!@typeInfo(T).@"enum".is_exhaustive);
     var s = parser.Stream.new_at(self.data, self.offset) catch return null;
     self.operands_offset = self.offset;
 
@@ -58,7 +60,7 @@ pub fn parse_next(
             }
 
             self.offset = s.offset;
-            return .{operator};
+            return @enumFromInt(operator);
         } else skip_number(b, &s) catch return null;
     }
 

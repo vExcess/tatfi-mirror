@@ -47,11 +47,11 @@ pub const FeatureNames = struct {
         return .{
             .feature = record.feature,
             .setting_names = setting_names,
-            .default_setting_index = if (record.flags & 0x40 != 0)
+            .default_setting_index = if (record.flags.default_setting_index)
                 record.default_setting_index
             else
                 0,
-            .exclusive = record.flags & 0x80 != 0,
+            .exclusive = record.flags.exclusive,
             .name_index = record.name_index,
         };
     }
@@ -96,7 +96,11 @@ const FeatureNameRecord = struct {
     setting_table_records_count: u16,
     // Offset from the beginning of the table.
     setting_table_offset: parser.Offset32,
-    flags: u8,
+    flags: packed struct(u8) {
+        _0: u6 = 0,
+        default_setting_index: bool,
+        exclusive: bool,
+    },
     default_setting_index: u8,
     name_index: u16,
 
