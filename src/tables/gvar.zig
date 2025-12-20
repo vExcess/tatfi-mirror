@@ -553,7 +553,7 @@ fn parse_tuple_variation_header(
 // This structure will be used by the `VariationTuples` stack buffer,
 // so it has to be as small as possible.
 // Therefore we cannot use `Stream` and other abstractions.
-pub const PackedPointsIter = struct {
+const PackedPointsIter = struct {
     data: []const u8,
     // u16 is enough, since the maximum number of points is 32767.
     offset: u16,
@@ -576,7 +576,7 @@ pub const PackedPointsIter = struct {
         fn run_count(
             self: Control,
         ) u8 {
-            return self.run_count_mask + 1;
+            return @as(u8, self.run_count_mask) + 1;
         }
     };
 
@@ -586,11 +586,13 @@ pub const PackedPointsIter = struct {
     // so we will convert it once again into:
     // false true false true false false false true
     // This way we can iterate glyph points and point numbers in parallel.
-    pub const SetPointsIter = struct {
+    const SetPointsIter = struct {
         iter: PackedPointsIter,
         unref_count: u16,
 
-        pub fn new(iter: PackedPointsIter) SetPointsIter {
+        fn new(
+            iter: PackedPointsIter,
+        ) SetPointsIter {
             var iterator = iter;
             const unref_count = iterator.next() orelse 0;
             return .{
@@ -635,7 +637,7 @@ pub const PackedPointsIter = struct {
         }
     };
 
-    pub fn new(
+    fn new(
         s: *parser.Stream,
     ) parser.Error!?PackedPointsIter {
         // The total amount of points can be set as one or two bytes
@@ -717,12 +719,217 @@ pub const PackedPointsIter = struct {
             return point;
         }
     }
+
+    // Trsts
+    const t = std.testing;
+    fn gen_control(control: struct {
+        points_are_words: bool,
+        run_count: u7,
+    }) !u8 {
+        if (!@import("builtin").is_test) unreachable;
+        try t.expect(control.run_count > 0); // run count cannot be zero
+
+        const c: Control = .{
+            .points_are_words = control.points_are_words,
+            .run_count_mask = control.run_count - 1,
+        };
+
+        return @bitCast(c);
+    }
+
+    test "empty" {
+        var s = parser.Stream.new(&.{});
+        try t.expectError(error.ParseFail, PackedPointsIter.new(&s));
+    }
+
+    test "single zero control" {
+        var s = parser.Stream.new(&.{0});
+        try t.expectEqual(null, try PackedPointsIter.new(&s));
+    }
+
+    test "single point" {
+        var s = parser.Stream.new(&.{
+            1, // total count
+            try gen_control(.{ .points_are_words = false, .run_count = 1 }),
+            1,
+        });
+
+        const points_iter = try PackedPointsIter.new(&s);
+        var iter = SetPointsIter.new(points_iter.?);
+        try t.expectEqual(false, iter.next());
+        try t.expectEqual(true, iter.next());
+        try t.expectEqual(true, iter.next()); // endlessly true
+    }
+
+    test "set 0 and 2" {
+        var s = parser.Stream.new(&.{
+            2, // total count
+            try gen_control(.{ .points_are_words = false, .run_count = 2 }),
+            0,
+            2,
+        });
+
+        const points_iter = try PackedPointsIter.new(&s);
+        var iter = SetPointsIter.new(points_iter.?);
+        try t.expectEqual(true, iter.next());
+        try t.expectEqual(false, iter.next());
+        try t.expectEqual(true, iter.next());
+        try t.expectEqual(true, iter.next()); // Endlessly true.
+    }
+
+    test "set 1 and 2" {
+        var s = parser.Stream.new(&.{
+            2, // total count
+            try gen_control(.{ .points_are_words = false, .run_count = 2 }),
+            1,
+            1,
+        });
+
+        const points_iter = try PackedPointsIter.new(&s);
+        var iter = SetPointsIter.new(points_iter.?);
+        try t.expectEqual(false, iter.next());
+        try t.expectEqual(true, iter.next());
+        try t.expectEqual(true, iter.next());
+        try t.expectEqual(true, iter.next()); // Endlessly true.
+    }
+
+    test "set 1 and 3" {
+        var s = parser.Stream.new(&.{
+            2, // total count
+            try gen_control(.{ .points_are_words = false, .run_count = 2 }),
+            1,
+            2,
+        });
+
+        const points_iter = try PackedPointsIter.new(&s);
+        var iter = SetPointsIter.new(points_iter.?);
+        try t.expectEqual(false, iter.next());
+        try t.expectEqual(true, iter.next());
+        try t.expectEqual(false, iter.next());
+        try t.expectEqual(true, iter.next());
+        try t.expectEqual(true, iter.next()); // Endlessly true.
+    }
+
+    test "set 2 5 7" {
+        var s = parser.Stream.new(&.{
+            3, // total count
+            try gen_control(.{ .points_are_words = false, .run_count = 3 }),
+            2,
+            3,
+            2,
+        });
+
+        const points_iter = try PackedPointsIter.new(&s);
+        var iter = SetPointsIter.new(points_iter.?);
+        try t.expectEqual(false, iter.next());
+        try t.expectEqual(false, iter.next());
+        try t.expectEqual(true, iter.next());
+        try t.expectEqual(false, iter.next());
+        try t.expectEqual(false, iter.next());
+        try t.expectEqual(true, iter.next());
+        try t.expectEqual(false, iter.next());
+        try t.expectEqual(true, iter.next());
+        try t.expectEqual(true, iter.next()); // Endlessly true.
+    }
+
+    test "more than 127 points" {
+        var data: std.ArrayList(u8) = .empty;
+        defer data.deinit(t.allocator);
+
+        // total count
+        try data.append(t.allocator, 0x80); // Control.POINTS_ARE_WORDS_FLAG
+        try data.append(t.allocator, 150);
+
+        try data.append(t.allocator, try gen_control(.{
+            .points_are_words = false,
+            .run_count = 100,
+        }));
+        for (0..100) |_| try data.append(t.allocator, 2);
+
+        try data.append(t.allocator, try gen_control(.{
+            .points_are_words = false,
+            .run_count = 50,
+        }));
+        for (0..50) |_| try data.append(t.allocator, 2);
+
+        var s = parser.Stream.new(data.items);
+        const points_iter = try PackedPointsIter.new(&s);
+        var iter = SetPointsIter.new(points_iter.?);
+        try t.expectEqual(false, iter.next());
+        for (0..150) |_| {
+            try t.expectEqual(false, iter.next());
+            try t.expectEqual(true, iter.next());
+        }
+        try t.expectEqual(true, iter.next());
+        try t.expectEqual(true, iter.next()); // Endlessly true.
+    }
+
+    test "long points" {
+        var s = parser.Stream.new(&.{
+            2, // total count
+            try gen_control(.{ .points_are_words = true, .run_count = 2 }),
+            0,
+            2,
+            0,
+            3,
+        });
+
+        const points_iter = try PackedPointsIter.new(&s);
+        var iter = SetPointsIter.new(points_iter.?);
+        try t.expectEqual(false, iter.next());
+        try t.expectEqual(false, iter.next());
+        try t.expectEqual(true, iter.next());
+        try t.expectEqual(false, iter.next());
+        try t.expectEqual(false, iter.next());
+        try t.expectEqual(true, iter.next());
+        try t.expectEqual(true, iter.next()); // Endlessly true.
+    }
+
+    test "multiple runs" {
+        var s = parser.Stream.new(&.{
+            5, // total count
+            try gen_control(.{ .points_are_words = true, .run_count = 2 }),
+            0,
+            2,
+            0,
+            3,
+            try gen_control(.{ .points_are_words = false, .run_count = 3 }),
+            2,
+            3,
+            2,
+        });
+
+        const points_iter = try PackedPointsIter.new(&s);
+        var iter = SetPointsIter.new(points_iter.?);
+        try t.expectEqual(false, iter.next());
+        try t.expectEqual(false, iter.next());
+        try t.expectEqual(true, iter.next());
+        try t.expectEqual(false, iter.next());
+        try t.expectEqual(false, iter.next());
+        try t.expectEqual(true, iter.next());
+        try t.expectEqual(false, iter.next());
+        try t.expectEqual(true, iter.next());
+        try t.expectEqual(false, iter.next());
+        try t.expectEqual(false, iter.next());
+        try t.expectEqual(true, iter.next());
+        try t.expectEqual(false, iter.next());
+        try t.expectEqual(true, iter.next());
+        try t.expectEqual(true, iter.next()); // Endlessly true.
+    }
+
+    test "runs overflow" {
+        // TrueType allows up to 32767 points.
+        const data: [0xFFFF * 2]u8 = @splat(0xFF);
+        var s = parser.Stream.new(&data);
+
+        try t.expectError(error.ParseFail, PackedPointsIter.new(&s));
+    }
 };
 
 // This structure will be used by the `VariationTuples` stack buffer,
 // so it has to be as small as possible.
 // Therefore we cannot use `Stream` and other abstractions.
-pub const PackedDeltasIter = struct {
+const PackedDeltasIter = struct {
     data: []const u8 = &.{},
     x_run: RunState = .{},
     y_run: RunState = .{},
@@ -800,12 +1007,12 @@ pub const PackedDeltasIter = struct {
         fn run_count(
             self: Control,
         ) u8 {
-            return self.delta_run_count_mask + 1;
+            return @as(u8, self.delta_run_count_mask) + 1;
         }
     };
 
     /// `count` indicates a number of delta pairs.
-    pub fn new(
+    fn new(
         scalar: f32,
         count: u16,
         data: []const u8,
@@ -831,7 +1038,7 @@ pub const PackedDeltasIter = struct {
         return iter;
     }
 
-    pub fn next(
+    fn next(
         self: *PackedDeltasIter,
     ) ?struct { f32, f32 } {
         const x = self.x_run.next(self.data, self.scalar) orelse return null;
@@ -839,8 +1046,373 @@ pub const PackedDeltasIter = struct {
         return .{ x, y };
     }
 
-    pub fn restart(self: PackedDeltasIter) PackedDeltasIter {
+    fn restart(
+        self: PackedDeltasIter,
+    ) PackedDeltasIter {
         return .new(self.scalar, self.total_count, self.data);
+    }
+
+    // Tests
+    const t = std.testing;
+
+    fn gen_control(control: struct {
+        deltas_are_zero: bool,
+        deltas_are_words: bool,
+        run_count: u6,
+    }) !u8 {
+        if (!@import("builtin").is_test) unreachable;
+        try t.expect(control.run_count > 0); // run count cannot be zero
+
+        const c: Control = .{
+            .delta_are_words_flag = control.deltas_are_words,
+            .deltas_are_zero_flag = control.deltas_are_zero,
+            .delta_run_count_mask = control.run_count - 1,
+        };
+
+        return @bitCast(c);
+    }
+
+    test "empty" {
+        var iter = PackedDeltasIter.new(1.0, 1, &.{});
+        try t.expectEqual(null, iter.next());
+    }
+
+    test "single delta" {
+        const data: []const u8 = &.{
+            try gen_control(.{
+                .deltas_are_zero = false,
+                .deltas_are_words = false,
+                .run_count = 2,
+            }),
+            2,
+            3,
+        };
+
+        var iter = PackedDeltasIter.new(1.0, 1, data);
+        try t.expectEqual(.{ 2.0, 3.0 }, iter.next().?);
+        try t.expectEqual(null, iter.next());
+    }
+
+    test "two deltas" {
+        const data: []const u8 = &.{
+            try gen_control(.{
+                .deltas_are_zero = false,
+                .deltas_are_words = false,
+                .run_count = 4,
+            }),
+            2,
+            3,
+            4,
+            5,
+        };
+
+        var iter = PackedDeltasIter.new(1.0, 2, data);
+        // Remember that X deltas are defined first.
+        try t.expectEqual(.{ 2.0, 4.0 }, iter.next().?);
+        try t.expectEqual(.{ 3.0, 5.0 }, iter.next().?);
+        try t.expectEqual(null, iter.next());
+    }
+
+    test "single long delta" {
+        const data: []const u8 = &.{
+            try gen_control(.{
+                .deltas_are_zero = false,
+                .deltas_are_words = true,
+                .run_count = 2,
+            }),
+            0,
+            2,
+            0,
+            3,
+        };
+
+        var iter = PackedDeltasIter.new(1.0, 1, data);
+        try t.expectEqual(.{ 2.0, 3.0 }, iter.next().?);
+        try t.expectEqual(null, iter.next());
+    }
+
+    test "zeros" {
+        const data: []const u8 = &.{
+            try gen_control(.{
+                .deltas_are_zero = true,
+                .deltas_are_words = false,
+                .run_count = 4,
+            }),
+        };
+
+        var iter = PackedDeltasIter.new(1.0, 2, data);
+        try t.expectEqual(.{ 0.0, 0.0 }, iter.next().?);
+        try t.expectEqual(.{ 0.0, 0.0 }, iter.next().?);
+        try t.expectEqual(null, iter.next());
+    }
+
+    test "zero words" {
+        // When `deltas_are_zero` is set, `deltas_are_words` should be ignored.
+
+        const data: []const u8 = &.{try gen_control(.{
+            .deltas_are_zero = true,
+            .deltas_are_words = true,
+            .run_count = 4,
+        })};
+
+        var iter = PackedDeltasIter.new(1.0, 2, data);
+        try t.expectEqual(.{ 0.0, 0.0 }, iter.next().?);
+        try t.expectEqual(.{ 0.0, 0.0 }, iter.next().?);
+        try t.expectEqual(null, iter.next());
+    }
+
+    test "zero runs" {
+        const data: []const u8 = &.{
+            try gen_control(.{
+                .deltas_are_zero = true,
+                .deltas_are_words = false,
+                .run_count = 2,
+            }),
+            try gen_control(.{
+                .deltas_are_zero = true,
+                .deltas_are_words = false,
+                .run_count = 4,
+            }),
+            try gen_control(.{
+                .deltas_are_zero = true,
+                .deltas_are_words = false,
+                .run_count = 6,
+            }),
+        };
+
+        var iter = PackedDeltasIter.new(1.0, 6, data);
+        // First run.
+        try t.expectEqual(.{ 0.0, 0.0 }, iter.next().?);
+        // Second run.
+        try t.expectEqual(.{ 0.0, 0.0 }, iter.next().?);
+        try t.expectEqual(.{ 0.0, 0.0 }, iter.next().?);
+        // Third run.
+        try t.expectEqual(.{ 0.0, 0.0 }, iter.next().?);
+        try t.expectEqual(.{ 0.0, 0.0 }, iter.next().?);
+        try t.expectEqual(.{ 0.0, 0.0 }, iter.next().?);
+        try t.expectEqual(null, iter.next());
+    }
+
+    test "delta after zeros" {
+        const data: []const u8 = &.{
+            try gen_control(.{
+                .deltas_are_zero = true,
+                .deltas_are_words = false,
+                .run_count = 2,
+            }),
+            try gen_control(.{
+                .deltas_are_zero = false,
+                .deltas_are_words = false,
+                .run_count = 2,
+            }),
+            2,
+            3,
+        };
+
+        var iter = PackedDeltasIter.new(1.0, 2, data);
+        try t.expectEqual(.{ 0.0, 2.0 }, iter.next().?);
+        try t.expectEqual(.{ 0.0, 3.0 }, iter.next().?);
+        try t.expectEqual(null, iter.next());
+    }
+
+    test "unexpected end of data 1" {
+        const data: []const u8 = &.{try gen_control(.{
+            .deltas_are_zero = false,
+            .deltas_are_words = false,
+            .run_count = 2,
+        })};
+
+        var iter = PackedDeltasIter.new(1.0, 1, data);
+        try t.expectEqual(null, iter.next());
+    }
+
+    test "unexpected end of data 2" {
+        // Only X is set.
+
+        const data: []const u8 = &.{
+            try gen_control(.{
+                .deltas_are_zero = false,
+                .deltas_are_words = false,
+                .run_count = 2,
+            }),
+            1,
+        };
+
+        var iter = PackedDeltasIter.new(1.0, 1, data);
+        try t.expectEqual(null, iter.next());
+    }
+
+    test "unexpected end of data 3" {
+        const data: []const u8 = &.{try gen_control(.{
+            .deltas_are_zero = false,
+            .deltas_are_words = true,
+            .run_count = 2,
+        })};
+
+        var iter = PackedDeltasIter.new(1.0, 1, data);
+        try t.expectEqual(null, iter.next());
+    }
+
+    test "unexpected end of data 4" {
+        // X data is too short.
+
+        const data: []const u8 = &.{
+            try gen_control(.{
+                .deltas_are_zero = false,
+                .deltas_are_words = true,
+                .run_count = 2,
+            }),
+            1,
+        };
+
+        var iter = PackedDeltasIter.new(1.0, 1, data);
+        try t.expectEqual(null, iter.next());
+    }
+
+    test "unexpected end of data 6" {
+        // Only X is set.
+
+        const data: []const u8 = &.{
+            try gen_control(.{
+                .deltas_are_zero = false,
+                .deltas_are_words = true,
+                .run_count = 2,
+            }),
+            0,
+            1,
+        };
+
+        var iter = PackedDeltasIter.new(1.0, 1, data);
+        try t.expectEqual(null, iter.next());
+    }
+
+    test "unexpected end of data 7" {
+        // Y data is too short.
+
+        const data: []const u8 = &.{
+            try gen_control(.{
+                .deltas_are_zero = false,
+                .deltas_are_words = true,
+                .run_count = 2,
+            }),
+            0,
+            1,
+            0,
+        };
+
+        var iter = PackedDeltasIter.new(1.0, 1, data);
+        try t.expectEqual(null, iter.next());
+    }
+
+    test "single run" {
+        const data: []const u8 = &.{
+            try gen_control(.{
+                .deltas_are_zero = false,
+                .deltas_are_words = false,
+                .run_count = 1,
+            }),
+            2,
+            3,
+        };
+
+        var iter = PackedDeltasIter.new(1.0, 1, data);
+        try t.expectEqual(null, iter.next());
+    }
+
+    test "too many pairs" {
+        const data: []const u8 = &.{
+            try gen_control(.{
+                .deltas_are_zero = false,
+                .deltas_are_words = false,
+                .run_count = 2,
+            }),
+            2,
+            3,
+        };
+
+        // We have only one pair, not 10.
+        var iter = PackedDeltasIter.new(1.0, 10, data);
+        try t.expectEqual(null, iter.next());
+    }
+
+    test "invalid number of pairs" {
+        const data: []const u8 = &.{
+            try gen_control(.{
+                .deltas_are_zero = false,
+                .deltas_are_words = false,
+                .run_count = 2,
+            }),
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+        };
+
+        // We have 3 pairs, not 4.
+        // We don't actually check this, since it will be very expensive.
+        // And it should not happen in a well-formed font anyway.
+        // So as long as it doesn't panic - we are fine.
+        var iter = PackedDeltasIter.new(1.0, 4, data);
+        try t.expectEqual(.{ 2.0, 7.0 }, iter.next().?);
+        try t.expectEqual(null, iter.next());
+    }
+
+    test "mixed runs" {
+        const data: []const u8 = &.{
+            try gen_control(.{
+                .deltas_are_zero = false,
+                .deltas_are_words = false,
+                .run_count = 3,
+            }),
+            2,
+            3,
+            4,
+            try gen_control(.{
+                .deltas_are_zero = false,
+                .deltas_are_words = true,
+                .run_count = 2,
+            }),
+            0,
+            5,
+            0,
+            6,
+            try gen_control(.{
+                .deltas_are_zero = true,
+                .deltas_are_words = false,
+                .run_count = 1,
+            }),
+        };
+
+        var iter = PackedDeltasIter.new(1.0, 3, data);
+        try t.expectEqual(.{ 2.0, 5.0 }, iter.next().?);
+        try t.expectEqual(.{ 3.0, 6.0 }, iter.next().?);
+        try t.expectEqual(.{ 4.0, 0.0 }, iter.next().?);
+        try t.expectEqual(null, iter.next());
+    }
+
+    test "non default scalar" {
+        const data: []const u8 = &.{
+            try gen_control(.{
+                .deltas_are_zero = false,
+                .deltas_are_words = false,
+                .run_count = 2,
+            }),
+            2,
+            3,
+        };
+
+        var iter = PackedDeltasIter.new(0.5, 1, data);
+        try t.expectEqual(.{ 1.0, 1.5 }, iter.next().?);
+        try t.expectEqual(null, iter.next());
+    }
+
+    test "runs overflow" {
+        const data: [0xFFFF]u8 = @splat(0xFF);
+        var iter = PackedDeltasIter.new(1.0, 0xFFFF, &data);
+        // As long as it doesn't panic - we are fine.
+        try t.expectEqual(.{ 0.0, 0.0 }, iter.next().?);
     }
 };
 
