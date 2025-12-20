@@ -3,16 +3,13 @@
 //! <https://docs.microsoft.com/en-us/typography/opentype/spec/otvarcommonformats#item-variation-store>
 
 const std = @import("std");
+const lib = @import("lib.zig");
 const parser = @import("parser.zig");
-
-const NormalizedCoordinate = @import("lib.zig").NormalizedCoordinate;
-
-const LazyArray16 = parser.LazyArray16;
 
 const ItemVariationStore = @This();
 
 data: []const u8 = &.{},
-data_offsets: LazyArray16(u32) = .{},
+data_offsets: parser.LazyArray16(u32) = .{},
 regions: VariationRegionList = .{},
 
 pub fn parse(
@@ -55,7 +52,7 @@ pub fn parse_delta(
     self: ItemVariationStore,
     outer_index: u16,
     inner_index: u16,
-    coordinates: []const NormalizedCoordinate,
+    coordinates: []const lib.NormalizedCoordinate,
 ) parser.Error!f32 {
     const offset = self.data_offsets.get(outer_index) orelse return error.ParseFail;
 
@@ -109,12 +106,12 @@ pub fn parse_delta(
 
 pub const VariationRegionList = struct {
     axis_count: u16 = 0,
-    regions: LazyArray16(RegionAxisCoordinatesRecord) = .{},
+    regions: parser.LazyArray16(RegionAxisCoordinatesRecord) = .{},
 
     pub fn evaluate_region(
         self: VariationRegionList,
         index: u16,
-        coordinates: []const NormalizedCoordinate,
+        coordinates: []const lib.NormalizedCoordinate,
     ) f32 {
         var v: f32 = 1.0;
 
@@ -184,7 +181,7 @@ const RegionAxisCoordinatesRecord = struct {
 pub fn region_indices(
     self: ItemVariationStore,
     index: u16,
-) ?LazyArray16(u16) {
+) ?parser.LazyArray16(u16) {
     // Offsets in bytes from the start of the item variation store
     // to each item variation data subtable.
     const offset = self.data_offsets.get(index) orelse return null;

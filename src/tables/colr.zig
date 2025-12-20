@@ -9,1167 +9,1165 @@ const cfg = @import("config");
 const lib = @import("../lib.zig");
 const parser = @import("../parser.zig");
 const utils = @import("../utils.zig");
-const cpal = @import("cpal.zig");
+const cpalTable = @import("cpal.zig");
 
 const ItemVariationStore = @import("../var_store.zig");
 const DeltaSetIndexMap = @import("../delta_set.zig");
 
-/// A [Color Table](
-/// https://docs.microsoft.com/en-us/typography/opentype/spec/colr).
-pub const Table = struct {
-    palettes: cpal.Table,
+const Table = @This();
+
+palettes: cpalTable,
+data: []const u8,
+version: u8,
+
+// v0
+base_glyphs: parser.LazyArray16(BaseGlyphRecord),
+layers: parser.LazyArray16(LayerRecord),
+
+// v1
+base_glyph_paints_offset: parser.Offset32,
+base_glyph_paints: parser.LazyArray32(BaseGlyphPaintRecord),
+layer_paint_offsets_offset: parser.Offset32,
+layer_paint_offsets: parser.LazyArray32(parser.Offset32),
+clip_list_offsets_offset: parser.Offset32,
+clip_list: ClipList,
+variable_fonts: if (cfg.variable_fonts) struct {
+    var_index_map: ?DeltaSetIndexMap = null,
+    item_variation_store: ?ItemVariationStore = null,
+} else void,
+
+/// Parses a table from raw data.
+pub fn parse(
+    palettes: cpalTable,
     data: []const u8,
-    version: u8,
+) parser.Error!Table {
+    var s = parser.Stream.new(data);
 
-    // v0
-    base_glyphs: parser.LazyArray16(BaseGlyphRecord),
-    layers: parser.LazyArray16(LayerRecord),
+    const version = try s.read(u16);
+    if (version > 1) return error.ParseFail;
 
-    // v1
-    base_glyph_paints_offset: parser.Offset32,
-    base_glyph_paints: parser.LazyArray32(BaseGlyphPaintRecord),
-    layer_paint_offsets_offset: parser.Offset32,
-    layer_paint_offsets: parser.LazyArray32(parser.Offset32),
-    clip_list_offsets_offset: parser.Offset32,
-    clip_list: ClipList,
-    variable_fonts: if (cfg.variable_fonts) struct {
-        var_index_map: ?DeltaSetIndexMap = null,
-        item_variation_store: ?ItemVariationStore = null,
-    } else void,
+    const num_base_glyphs = try s.read(u16);
+    const base_glyphs_offset = try s.read(parser.Offset32);
+    const layers_offset = try s.read(parser.Offset32);
+    const num_layers = try s.read(u16);
 
-    /// Parses a table from raw data.
-    pub fn parse(
-        palettes: cpal.Table,
-        data: []const u8,
-    ) parser.Error!Table {
-        var s = parser.Stream.new(data);
+    const base_glyphs = bg: {
+        var sbg = try parser.Stream.new_at(data, base_glyphs_offset[0]);
+        break :bg try sbg.read_array(BaseGlyphRecord, num_base_glyphs);
+    };
 
-        const version = try s.read(u16);
-        if (version > 1) return error.ParseFail;
+    const layers = l: {
+        var sl = try parser.Stream.new_at(data, layers_offset[0]);
+        break :l try sl.read_array(LayerRecord, num_layers);
+    };
 
-        const num_base_glyphs = try s.read(u16);
-        const base_glyphs_offset = try s.read(parser.Offset32);
-        const layers_offset = try s.read(parser.Offset32);
-        const num_layers = try s.read(u16);
+    var table: Table = .{
+        .version = @truncate(version),
+        .data = data,
+        .palettes = palettes,
+        .base_glyphs = base_glyphs,
+        .layers = layers,
 
-        const base_glyphs = bg: {
-            var sbg = try parser.Stream.new_at(data, base_glyphs_offset[0]);
-            break :bg try sbg.read_array(BaseGlyphRecord, num_base_glyphs);
+        .base_glyph_paints_offset = .{0}, // the actual value doesn't matter
+        .base_glyph_paints = .{},
+        .layer_paint_offsets_offset = .{0},
+        .layer_paint_offsets = .{},
+        .clip_list_offsets_offset = .{0},
+        .clip_list = .{},
+        .variable_fonts = if (cfg.variable_fonts) .{},
+    };
+
+    if (version == 0) return table;
+
+    table.base_glyph_paints_offset = try s.read(parser.Offset32);
+    const layer_list_offset = try s.read_optional(parser.Offset32);
+    const clip_list_offset = try s.read_optional(parser.Offset32);
+
+    const var_index_map_offset = if (cfg.variable_fonts)
+        try s.read_optional(parser.Offset32)
+    else {};
+
+    const item_variation_offset = if (cfg.variable_fonts)
+        try s.read_optional(parser.Offset32)
+    else {};
+
+    table.base_glyph_paints = bgp: {
+        var sbg = try parser.Stream.new_at(data, table.base_glyph_paints_offset[0]);
+        const count = try sbg.read(u32);
+        break :bgp try sbg.read_array(BaseGlyphPaintRecord, count);
+    };
+
+    if (layer_list_offset) |offset| {
+        table.layer_paint_offsets_offset = offset;
+
+        var sll = try parser.Stream.new_at(data, offset[0]);
+        const count = try sll.read(u32);
+
+        table.layer_paint_offsets = try sll.read_array(parser.Offset32, count);
+    }
+
+    if (clip_list_offset) |offset| {
+        table.clip_list_offsets_offset = offset;
+
+        const clip_data = try utils.slice(data, offset[0]);
+        var scl = parser.Stream.new(clip_data);
+        scl.skip(u8); // Format
+        const count = try scl.read(u32);
+        table.clip_list = .{
+            .data = clip_data,
+            .records = try scl.read_array(ClipRecord, count),
         };
+    }
 
-        const layers = l: {
-            var sl = try parser.Stream.new_at(data, layers_offset[0]);
-            break :l try sl.read_array(LayerRecord, num_layers);
-        };
-
-        var table: Table = .{
-            .version = @truncate(version),
-            .data = data,
-            .palettes = palettes,
-            .base_glyphs = base_glyphs,
-            .layers = layers,
-
-            .base_glyph_paints_offset = .{0}, // the actual value doesn't matter
-            .base_glyph_paints = .{},
-            .layer_paint_offsets_offset = .{0},
-            .layer_paint_offsets = .{},
-            .clip_list_offsets_offset = .{0},
-            .clip_list = .{},
-            .variable_fonts = if (cfg.variable_fonts) .{},
-        };
-
-        if (version == 0) return table;
-
-        table.base_glyph_paints_offset = try s.read(parser.Offset32);
-        const layer_list_offset = try s.read_optional(parser.Offset32);
-        const clip_list_offset = try s.read_optional(parser.Offset32);
-
-        const var_index_map_offset = if (cfg.variable_fonts)
-            try s.read_optional(parser.Offset32)
-        else {};
-
-        const item_variation_offset = if (cfg.variable_fonts)
-            try s.read_optional(parser.Offset32)
-        else {};
-
-        table.base_glyph_paints = bgp: {
-            var sbg = try parser.Stream.new_at(data, table.base_glyph_paints_offset[0]);
-            const count = try sbg.read(u32);
-            break :bgp try sbg.read_array(BaseGlyphPaintRecord, count);
-        };
-
-        if (layer_list_offset) |offset| {
-            table.layer_paint_offsets_offset = offset;
-
-            var sll = try parser.Stream.new_at(data, offset[0]);
-            const count = try sll.read(u32);
-
-            table.layer_paint_offsets = try sll.read_array(parser.Offset32, count);
+    if (cfg.variable_fonts) {
+        if (item_variation_offset) |offset| {
+            const item_var_data = try utils.slice(data, offset[0]);
+            var siv = parser.Stream.new(item_var_data);
+            table.variable_fonts.item_variation_store =
+                try ItemVariationStore.parse(&siv);
         }
 
-        if (clip_list_offset) |offset| {
-            table.clip_list_offsets_offset = offset;
-
-            const clip_data = try utils.slice(data, offset[0]);
-            var scl = parser.Stream.new(clip_data);
-            scl.skip(u8); // Format
-            const count = try scl.read(u32);
-            table.clip_list = .{
-                .data = clip_data,
-                .records = try scl.read_array(ClipRecord, count),
+        if (var_index_map_offset) |offset|
+            table.variable_fonts.var_index_map = .{
+                .data = try utils.slice(data, offset[0]),
             };
-        }
-
-        if (cfg.variable_fonts) {
-            if (item_variation_offset) |offset| {
-                const item_var_data = try utils.slice(data, offset[0]);
-                var siv = parser.Stream.new(item_var_data);
-                table.variable_fonts.item_variation_store =
-                    try ItemVariationStore.parse(&siv);
-            }
-
-            if (var_index_map_offset) |offset|
-                table.variable_fonts.var_index_map = .{
-                    .data = try utils.slice(data, offset[0]),
-                };
-        }
-
-        return table;
     }
 
-    /// Returns `true` if the current table has version 0.
-    ///
-    /// A simple table can only emit `outline_glyph`, `paint`, `push_clip`, and
-    /// `pop_clip` `Painter` methods.
-    pub fn is_simple(self: Table) bool {
-        return self.version == 0;
-    }
+    return table;
+}
 
-    /// Whether the table contains a definition for the given glyph.
-    pub fn contains(
-        self: Table,
-        glyph_id: lib.GlyphId,
-    ) bool {
-        return self.get_v1(glyph_id) != null or self.get_v0(glyph_id) != null;
-    }
+/// Returns `true` if the current table has version 0.
+///
+/// A simple table can only emit `outline_glyph`, `paint`, `push_clip`, and
+/// `pop_clip` `Painter` methods.
+pub fn is_simple(self: Table) bool {
+    return self.version == 0;
+}
 
-    fn get_v0(
-        self: Table,
-        glyph_id: lib.GlyphId,
-    ) ?BaseGlyphRecord {
-        _, const ret = self.base_glyphs.binary_search_by(
-            glyph_id,
-            BaseGlyphRecord.compare,
-        ) catch return null;
-        return ret;
-    }
+/// Whether the table contains a definition for the given glyph.
+pub fn contains(
+    self: Table,
+    glyph_id: lib.GlyphId,
+) bool {
+    return self.get_v1(glyph_id) != null or self.get_v0(glyph_id) != null;
+}
 
-    fn get_v1(
-        self: Table,
-        glyph_id: lib.GlyphId,
-    ) ?BaseGlyphPaintRecord {
-        _, const ret = self.base_glyph_paints.binary_search_by(
-            glyph_id,
-            BaseGlyphPaintRecord.compare,
-        ) catch return null;
-        return ret;
-    }
+fn get_v0(
+    self: Table,
+    glyph_id: lib.GlyphId,
+) ?BaseGlyphRecord {
+    _, const ret = self.base_glyphs.binary_search_by(
+        glyph_id,
+        BaseGlyphRecord.compare,
+    ) catch return null;
+    return ret;
+}
 
-    /// Returns the clip box for a glyph.
-    pub fn clip_box(
-        self: Table,
-        glyph_id: lib.GlyphId,
-        coords: if (cfg.variable_fonts) []const lib.NormalizedCoordinate else void,
-    ) ?ClipBox {
-        const v = self.variation_data();
-        return self.clip_list.find(
-            glyph_id,
-            &v,
-            coords,
-        );
-    }
+fn get_v1(
+    self: Table,
+    glyph_id: lib.GlyphId,
+) ?BaseGlyphPaintRecord {
+    _, const ret = self.base_glyph_paints.binary_search_by(
+        glyph_id,
+        BaseGlyphPaintRecord.compare,
+    ) catch return null;
+    return ret;
+}
 
-    fn variation_data(
-        self: Table,
-    ) VariationData {
-        return .{
-            .variation_store = self.variable_fonts.item_variation_store,
-            .delta_map = self.variable_fonts.var_index_map,
-        };
-    }
+/// Returns the clip box for a glyph.
+pub fn clip_box(
+    self: Table,
+    glyph_id: lib.GlyphId,
+    coords: if (cfg.variable_fonts) []const lib.NormalizedCoordinate else void,
+) ?ClipBox {
+    const v = self.variation_data();
+    return self.clip_list.find(
+        glyph_id,
+        &v,
+        coords,
+    );
+}
 
-    // This method should only be called from outside, not from within `colr.rs`.
-    // From inside, you always should call paint_impl, so that the recursion stack can
-    // be passed on and any kind of recursion can be prevented.
-    /// Paints the color glyph.
-    pub fn paint(
-        self: Table,
-        glyph_id: lib.GlyphId,
-        palette: u16,
-        painter: Painter,
-        coords: if (cfg.variable_fonts) []const lib.NormalizedCoordinate else void,
-        foreground_color: lib.RgbaColor,
-    ) Error!void {
-        // The limit of 64 is chosen arbitrarily and not from the spec. But we have to stop somewhere...
-        var recursion_stack_buffer: [64]usize = @splat(0);
-        var recursion_stack: std.ArrayList(usize) = .initBuffer(&recursion_stack_buffer);
+fn variation_data(
+    self: Table,
+) VariationData {
+    return .{
+        .variation_store = self.variable_fonts.item_variation_store,
+        .delta_map = self.variable_fonts.var_index_map,
+    };
+}
 
-        return try self.paint_impl(
-            glyph_id,
+// This method should only be called from outside, not from within `colr.rs`.
+// From inside, you always should call paint_impl, so that the recursion stack can
+// be passed on and any kind of recursion can be prevented.
+/// Paints the color glyph.
+pub fn paint(
+    self: Table,
+    glyph_id: lib.GlyphId,
+    palette: u16,
+    painter: Painter,
+    coords: if (cfg.variable_fonts) []const lib.NormalizedCoordinate else void,
+    foreground_color: lib.RgbaColor,
+) Error!void {
+    // The limit of 64 is chosen arbitrarily and not from the spec. But we have to stop somewhere...
+    var recursion_stack_buffer: [64]usize = @splat(0);
+    var recursion_stack: std.ArrayList(usize) = .initBuffer(&recursion_stack_buffer);
+
+    return try self.paint_impl(
+        glyph_id,
+        palette,
+        painter,
+        &recursion_stack,
+        coords,
+        foreground_color,
+    );
+}
+
+fn paint_impl(
+    self: Table,
+    glyph_id: lib.GlyphId,
+    palette: u16,
+    painter: Painter,
+    recursion_stack: *std.ArrayList(usize),
+    coords: if (cfg.variable_fonts) []const lib.NormalizedCoordinate else void,
+    foreground_color: lib.RgbaColor,
+) Error!void {
+    if (self.get_v1(glyph_id)) |base|
+        return try self.paint_v1(
+            base,
             palette,
             painter,
-            &recursion_stack,
+            recursion_stack,
             coords,
             foreground_color,
-        );
-    }
+        )
+    else if (self.get_v0(glyph_id)) |base|
+        return try self.paint_v0(
+            base,
+            palette,
+            painter,
+            foreground_color,
+        )
+    else
+        return error.PaintError;
+}
 
-    fn paint_impl(
-        self: Table,
-        glyph_id: lib.GlyphId,
-        palette: u16,
-        painter: Painter,
-        recursion_stack: *std.ArrayList(usize),
-        coords: if (cfg.variable_fonts) []const lib.NormalizedCoordinate else void,
-        foreground_color: lib.RgbaColor,
-    ) Error!void {
-        if (self.get_v1(glyph_id)) |base|
-            return try self.paint_v1(
-                base,
+fn paint_v0(
+    self: Table,
+    base: BaseGlyphRecord,
+    palette: u16,
+    painter: Painter,
+    foreground_color: lib.RgbaColor,
+) Error!void {
+    const start = base.first_layer_index;
+    const end = std.math.add(u16, start, base.num_layers) catch return error.PaintError;
+    const layers = self.layers.slice(start, end);
+
+    var iter = layers.iterator();
+    while (iter.next()) |layer| {
+        painter.outline_glyph(layer.glyph_id);
+        painter.push_clip();
+        if (layer.palette_index == 0xFFFF)
+            // A special case.
+            painter.paint(.{ .solid = foreground_color })
+        else
+            painter.paint(.{
+                .solid = self.palettes.get(palette, layer.palette_index) orelse
+                    return error.PaintError,
+            });
+
+        painter.pop_clip();
+    }
+}
+
+fn paint_v1(
+    self: Table,
+    base: BaseGlyphPaintRecord,
+    palette: u16,
+    painter: Painter,
+    recursion_stack: *std.ArrayList(usize),
+    coords: if (cfg.variable_fonts) []const lib.NormalizedCoordinate else void,
+    foreground_color: lib.RgbaColor,
+) Error!void {
+    const clip_box_maybe = self.clip_box(base.glyph_id, coords);
+    if (clip_box_maybe) |box| painter.push_clip_box(box);
+    defer if (clip_box_maybe != null) painter.pop_clip();
+
+    self.parse_paint(
+        self.base_glyph_paints_offset[0] + base.paint_table_offset[0],
+        palette,
+        painter,
+        recursion_stack,
+        coords,
+        foreground_color,
+    ) catch return error.PaintError;
+}
+
+fn parse_paint(
+    self: Table,
+    offset: usize,
+    palette: u16,
+    painter: Painter,
+    recursion_stack: *std.ArrayList(usize),
+    coords: if (cfg.variable_fonts) []const lib.NormalizedCoordinate else void,
+    foreground_color: lib.RgbaColor,
+) parser.Error!void {
+    var s = try parser.Stream.new_at(self.data, offset);
+    const format = try s.read(u8);
+
+    // Cycle detected
+    if (std.mem.containsAtLeastScalar(usize, recursion_stack.items, 1, offset))
+        return error.Overflow;
+
+    recursion_stack.appendBounded(offset) catch return error.ParseFail;
+    defer _ = recursion_stack.pop();
+
+    return try self.parse_paint_impl(
+        offset,
+        palette,
+        painter,
+        recursion_stack,
+        &s,
+        format,
+        coords,
+        foreground_color,
+    );
+}
+
+fn parse_paint_impl(
+    self: Table,
+    offset: usize,
+    palette: u16,
+    painter: Painter,
+    recursion_stack: *std.ArrayList(usize),
+    s: *parser.Stream,
+    format: u8,
+    coords: if (cfg.variable_fonts) []const lib.NormalizedCoordinate else void,
+    foreground_color: lib.RgbaColor,
+) parser.Error!void {
+    switch (format) {
+        1 => { // PaintColrLayers
+            const layers_count = try s.read(u8);
+            const first_layer_index = try s.read(u32);
+
+            for (0..layers_count) |i| {
+                const index = try std.math.add(u32, first_layer_index, @truncate(i));
+                const paint_offset = self.layer_paint_offsets.get(index) orelse
+                    return error.ParseFail;
+
+                const new_offset = self.layer_paint_offsets_offset[0] + paint_offset[0];
+                try self.parse_paint(
+                    new_offset,
+                    palette,
+                    painter,
+                    recursion_stack,
+                    coords,
+                    foreground_color,
+                );
+            }
+        },
+        2 => { // PaintSolid
+            const palette_index = try s.read(u16);
+            const alpha = try s.read(parser.F2DOT14);
+
+            const color = if (palette_index == std.math.maxInt(u16))
+                foreground_color
+            else
+                self.palettes.get(palette, palette_index) orelse return error.ParseFail;
+
+            painter.paint(.{ .solid = color.apply_alpha(alpha.to_f32()) });
+        },
+        3 => if (cfg.variable_fonts) { // PaintVarSolid
+            const palette_index = try s.read(u16);
+            const alpha = try s.read(parser.F2DOT14);
+            const var_index_base = try s.read(u32);
+
+            const deltas = self
+                .variation_data()
+                .read_deltas(1, var_index_base, coords);
+
+            const color = if (palette_index == std.math.maxInt(u16))
+                foreground_color
+            else
+                self.palettes.get(palette, palette_index) orelse return error.ParseFail;
+
+            const alpha_color = color.apply_alpha(alpha.apply_float_delta(deltas[0]));
+            painter.paint(.{ .solid = alpha_color });
+        },
+        4 => { // PaintLinearGradient
+            const color_line_offset = try s.read(parser.Offset24);
+            const color_line = try self.parse_color_line(
+                offset + color_line_offset[0],
+                foreground_color,
+            );
+
+            painter.paint(.{ .linear_gradient = .{
+                .x0 = @floatFromInt(try s.read(i16)),
+                .y0 = @floatFromInt(try s.read(i16)),
+                .x1 = @floatFromInt(try s.read(i16)),
+                .y1 = @floatFromInt(try s.read(i16)),
+                .x2 = @floatFromInt(try s.read(i16)),
+                .y2 = @floatFromInt(try s.read(i16)),
+                .extend = color_line.extend,
+                .variation_data = if (cfg.variable_fonts) self.variation_data(),
+                .color_line = .{ .non_var_color_line = color_line },
+            } });
+        },
+        5 => if (cfg.variable_fonts) { // PaintVarLinearGradient
+            const var_color_line_offset = try s.read(parser.Offset24);
+            const color_line = try self.parse_var_color_line(
+                offset + var_color_line_offset[0],
+                foreground_color,
+            );
+            var var_s = s.*;
+            var_s.advance(12);
+            const var_index_base = try var_s.read(u32);
+
+            const deltas = self
+                .variation_data()
+                .read_deltas(6, var_index_base, coords);
+
+            painter.paint(.{ .linear_gradient = .{
+                .x0 = @as(f32, @floatFromInt(try s.read(i16))) + deltas[0],
+                .y0 = @as(f32, @floatFromInt(try s.read(i16))) + deltas[1],
+                .x1 = @as(f32, @floatFromInt(try s.read(i16))) + deltas[2],
+                .y1 = @as(f32, @floatFromInt(try s.read(i16))) + deltas[3],
+                .x2 = @as(f32, @floatFromInt(try s.read(i16))) + deltas[4],
+                .y2 = @as(f32, @floatFromInt(try s.read(i16))) + deltas[5],
+                .extend = color_line.extend,
+                .variation_data = self.variation_data(),
+                .color_line = .{ .var_color_line = color_line },
+            } });
+        },
+        6 => { // PaintRadialGradient
+            const color_line_offset = try s.read(parser.Offset24);
+            const color_line = try self.parse_color_line(
+                offset + color_line_offset[0],
+                foreground_color,
+            );
+
+            painter.paint(.{ .radial_gradient = .{
+                .x0 = @floatFromInt(try s.read(i16)),
+                .y0 = @floatFromInt(try s.read(i16)),
+                .r0 = @floatFromInt(try s.read(u16)),
+                .x1 = @floatFromInt(try s.read(i16)),
+                .y1 = @floatFromInt(try s.read(i16)),
+                .r1 = @floatFromInt(try s.read(u16)),
+                .extend = color_line.extend,
+                .variation_data = if (cfg.variable_fonts) self.variation_data(),
+                .color_line = .{ .non_var_color_line = color_line },
+            } });
+        },
+        7 => if (cfg.variable_fonts) { // PaintVarRadialGradient
+            const color_line_offset = try s.read(parser.Offset24);
+            const color_line = try self.parse_var_color_line(
+                offset + color_line_offset[0],
+                foreground_color,
+            );
+
+            var var_s = s.*;
+            var_s.advance(12);
+            const var_index_base = try var_s.read(u32);
+
+            const deltas = self
+                .variation_data()
+                .read_deltas(6, var_index_base, coords);
+
+            painter.paint(.{ .radial_gradient = .{
+                .x0 = @as(f32, @floatFromInt(try s.read(i16))) + deltas[0],
+                .y0 = @as(f32, @floatFromInt(try s.read(i16))) + deltas[1],
+                .r0 = @as(f32, @floatFromInt(try s.read(u16))) + deltas[2],
+                .x1 = @as(f32, @floatFromInt(try s.read(i16))) + deltas[3],
+                .y1 = @as(f32, @floatFromInt(try s.read(i16))) + deltas[4],
+                .r1 = @as(f32, @floatFromInt(try s.read(u16))) + deltas[5],
+                .extend = color_line.extend,
+                .variation_data = self.variation_data(),
+                .color_line = .{ .var_color_line = color_line },
+            } });
+        },
+        8 => { // PaintSweepGradient
+            const color_line_offset = try s.read(parser.Offset24);
+            const color_line = try self.parse_color_line(
+                offset + color_line_offset[0],
+                foreground_color,
+            );
+            painter.paint(.{ .sweep_gradient = .{
+                .center_x = @floatFromInt(try s.read(i16)),
+                .center_y = @floatFromInt(try s.read(i16)),
+                .start_angle = (try s.read(parser.F2DOT14)).to_f32(),
+                .end_angle = (try s.read(parser.F2DOT14)).to_f32(),
+                .extend = color_line.extend,
+                .color_line = .{ .non_var_color_line = color_line },
+                .variation_data = if (cfg.variable_fonts) self.variation_data(),
+            } });
+        },
+        9 => if (cfg.variable_fonts) { // PaintVarSweepGradient
+            const color_line_offset = try s.read(parser.Offset24);
+            const color_line = try self.parse_var_color_line(
+                offset + color_line_offset[0],
+                foreground_color,
+            );
+
+            var var_s = s.*;
+            var_s.advance(8);
+            const var_index_base = try var_s.read(u32);
+
+            const deltas = self
+                .variation_data()
+                .read_deltas(4, var_index_base, coords);
+
+            painter.paint(.{ .sweep_gradient = .{
+                .center_x = @as(f32, @floatFromInt(try s.read(i16))) + deltas[0],
+                .center_y = @as(f32, @floatFromInt(try s.read(i16))) + deltas[1],
+                .start_angle = (try s
+                    .read(parser.F2DOT14))
+                    .apply_float_delta(deltas[2]),
+                .end_angle = (try s
+                    .read(parser.F2DOT14))
+                    .apply_float_delta(deltas[3]),
+                .extend = color_line.extend,
+                .color_line = .{ .var_color_line = color_line },
+                .variation_data = self.variation_data(),
+            } });
+        },
+        10 => { // PaintGlyph
+            const paint_offset = try s.read(parser.Offset24);
+            const glyph_id = try s.read(lib.GlyphId);
+            painter.outline_glyph(glyph_id);
+            painter.push_clip();
+            defer painter.pop_clip();
+
+            try self.parse_paint(
+                offset + paint_offset[0],
                 palette,
                 painter,
                 recursion_stack,
                 coords,
                 foreground_color,
-            )
-        else if (self.get_v0(glyph_id)) |base|
-            return try self.paint_v0(
-                base,
+            );
+        },
+        11 => { // PaintColrGlyph
+            const glyph_id = try s.read(lib.GlyphId);
+            self.paint_impl(
+                glyph_id,
                 palette,
                 painter,
+                recursion_stack,
+                coords,
                 foreground_color,
-            )
-        else
-            return error.PaintError;
+            ) catch return error.ParseFail;
+        },
+        12 => { // PaintTransform
+            const paint_offset = try s.read(parser.Offset24);
+            const ts_offset = try s.read(parser.Offset24);
+            var s_12 = try parser.Stream.new_at(self.data, offset + ts_offset[0]);
+
+            painter.push_transform(.{
+                .a = (try s_12.read(parser.Fixed)).value,
+                .b = (try s_12.read(parser.Fixed)).value,
+                .c = (try s_12.read(parser.Fixed)).value,
+                .d = (try s_12.read(parser.Fixed)).value,
+                .e = (try s_12.read(parser.Fixed)).value,
+                .f = (try s_12.read(parser.Fixed)).value,
+            });
+            defer painter.pop_transform();
+
+            try self.parse_paint(
+                offset + paint_offset[0],
+                palette,
+                painter,
+                recursion_stack,
+                coords,
+                foreground_color,
+            );
+        },
+        13 => if (cfg.variable_fonts) { // PaintVarTransform
+            const paint_offset = try s.read(parser.Offset24);
+            const ts_offset = try s.read(parser.Offset24);
+            var s_13 = try parser.Stream.new_at(self.data, offset + ts_offset[0]);
+
+            var var_s = s_13;
+            var_s.advance(24);
+            const var_index_base = try var_s.read(u32);
+
+            const deltas = self
+                .variation_data()
+                .read_deltas(6, var_index_base, coords);
+
+            painter.push_transform(.{
+                .a = (try s_13.read(parser.Fixed)).apply_float_delta(deltas[0]),
+                .b = (try s_13.read(parser.Fixed)).apply_float_delta(deltas[1]),
+                .c = (try s_13.read(parser.Fixed)).apply_float_delta(deltas[2]),
+                .d = (try s_13.read(parser.Fixed)).apply_float_delta(deltas[3]),
+                .e = (try s_13.read(parser.Fixed)).apply_float_delta(deltas[4]),
+                .f = (try s_13.read(parser.Fixed)).apply_float_delta(deltas[5]),
+            });
+            defer painter.pop_transform();
+
+            try self.parse_paint(
+                offset + paint_offset[0],
+                palette,
+                painter,
+                recursion_stack,
+                coords,
+                foreground_color,
+            );
+        },
+        14 => { // PaintTranslate
+            const paint_offset = try s.read(parser.Offset24);
+            const tx: f32 = @floatFromInt(try s.read(i16));
+            const ty: f32 = @floatFromInt(try s.read(i16));
+
+            painter.push_transform(.new_translate(tx, ty));
+            defer painter.pop_transform();
+
+            try self.parse_paint(
+                offset + paint_offset[0],
+                palette,
+                painter,
+                recursion_stack,
+                coords,
+                foreground_color,
+            );
+        },
+        15 => if (cfg.variable_fonts) { // PaintVarTranslate
+            const paint_offset = try s.read(parser.Offset24);
+
+            var var_s = s.*;
+            var_s.advance(4);
+            const var_index_base = try var_s.read(u32);
+
+            const deltas = self
+                .variation_data()
+                .read_deltas(2, var_index_base, coords);
+
+            const tx = @as(f32, @floatFromInt(try s.read(i16))) + deltas[0];
+            const ty = @as(f32, @floatFromInt(try s.read(i16))) + deltas[1];
+
+            painter.push_transform(.new_translate(tx, ty));
+            defer painter.pop_transform();
+
+            try self.parse_paint(
+                offset + paint_offset[0],
+                palette,
+                painter,
+                recursion_stack,
+                coords,
+                foreground_color,
+            );
+        },
+        16 => { // PaintScale
+            const paint_offset = try s.read(parser.Offset24);
+            const sx = (try s.read(parser.F2DOT14)).to_f32();
+            const sy = (try s.read(parser.F2DOT14)).to_f32();
+
+            painter.push_transform(.new_scale(sx, sy));
+            defer painter.pop_transform();
+
+            try self.parse_paint(
+                offset + paint_offset[0],
+                palette,
+                painter,
+                recursion_stack,
+                coords,
+                foreground_color,
+            );
+        },
+        17 => if (cfg.variable_fonts) { // PaintVarScale
+            const paint_offset = try s.read(parser.Offset24);
+
+            var var_s = s.*;
+            var_s.advance(4);
+            const var_index_base = try var_s.read(u32);
+
+            const deltas = self
+                .variation_data()
+                .read_deltas(2, var_index_base, coords);
+
+            const sx = (try s.read(parser.F2DOT14)).apply_float_delta(deltas[0]);
+            const sy = (try s.read(parser.F2DOT14)).apply_float_delta(deltas[1]);
+
+            painter.push_transform(.new_scale(sx, sy));
+            defer painter.pop_transform();
+
+            try self.parse_paint(
+                offset + paint_offset[0],
+                palette,
+                painter,
+                recursion_stack,
+                coords,
+                foreground_color,
+            );
+        },
+        18 => { // PaintScaleAroundCenter
+            const paint_offset = try s.read(parser.Offset24);
+            const sx = (try s.read(parser.F2DOT14)).to_f32();
+            const sy = (try s.read(parser.F2DOT14)).to_f32();
+            const center_x: f32 = @floatFromInt(try s.read(i16));
+            const center_y: f32 = @floatFromInt(try s.read(i16));
+
+            painter.push_transform(.new_translate(
+                center_x,
+                center_y,
+            ));
+            defer painter.pop_transform();
+
+            painter.push_transform(.new_scale(sx, sy));
+            defer painter.pop_transform();
+
+            painter.push_transform(.new_translate(
+                -center_x,
+                -center_y,
+            ));
+            defer painter.pop_transform();
+
+            try self.parse_paint(
+                offset + paint_offset[0],
+                palette,
+                painter,
+                recursion_stack,
+                coords,
+                foreground_color,
+            );
+        },
+        19 => if (cfg.variable_fonts) { // PaintVarScaleAroundCenter
+            const paint_offset = try s.read(parser.Offset24);
+
+            var var_s = s.*;
+            var_s.advance(8);
+            const var_index_base = try var_s.read(u32);
+
+            const deltas = self
+                .variation_data()
+                .read_deltas(4, var_index_base, coords);
+
+            const sx = (try s.read(parser.F2DOT14)).apply_float_delta(deltas[0]);
+            const sy = (try s.read(parser.F2DOT14)).apply_float_delta(deltas[1]);
+            const center_x = @as(f32, @floatFromInt(try s.read(i16))) + deltas[2];
+            const center_y = @as(f32, @floatFromInt(try s.read(i16))) + deltas[3];
+
+            painter.push_transform(.new_translate(
+                center_x,
+                center_y,
+            ));
+            defer painter.pop_transform();
+
+            painter.push_transform(.new_scale(sx, sy));
+            defer painter.pop_transform();
+
+            painter.push_transform(.new_translate(
+                -center_x,
+                -center_y,
+            ));
+            defer painter.pop_transform();
+
+            try self.parse_paint(
+                offset + paint_offset[0],
+                palette,
+                painter,
+                recursion_stack,
+                coords,
+                foreground_color,
+            );
+        },
+        20 => { // PaintScaleUniform
+            const paint_offset = try s.read(parser.Offset24);
+            const scale = (try s.read(parser.F2DOT14)).to_f32();
+
+            painter.push_transform(.new_scale(scale, scale));
+            try self.parse_paint(
+                offset + paint_offset[0],
+                palette,
+                painter,
+                recursion_stack,
+                coords,
+                foreground_color,
+            );
+            painter.pop_transform();
+        },
+        21 => if (cfg.variable_fonts) { // PaintVarScaleUniform
+            const paint_offset = try s.read(parser.Offset24);
+
+            var var_s = s.*;
+            var_s.advance(2);
+            const var_index_base = try var_s.read(u32);
+
+            const deltas = self
+                .variation_data()
+                .read_deltas(1, var_index_base, coords);
+
+            const scale = (try s.read(parser.F2DOT14)).apply_float_delta(deltas[0]);
+
+            painter.push_transform(.new_scale(scale, scale));
+            defer painter.pop_transform();
+
+            try self.parse_paint(
+                offset + paint_offset[0],
+                palette,
+                painter,
+                recursion_stack,
+                coords,
+                foreground_color,
+            );
+        },
+        22 => { // PaintScaleUniformAroundCenter
+            const paint_offset = try s.read(parser.Offset24);
+            const scale = (try s.read(parser.F2DOT14)).to_f32();
+            const center_x: f32 = @floatFromInt(try s.read(i16));
+            const center_y: f32 = @floatFromInt(try s.read(i16));
+
+            painter.push_transform(.new_translate(
+                center_x,
+                center_y,
+            ));
+            defer painter.pop_transform();
+
+            painter.push_transform(.new_scale(scale, scale));
+            defer painter.pop_transform();
+
+            painter.push_transform(.new_translate(
+                -center_x,
+                -center_y,
+            ));
+            defer painter.pop_transform();
+
+            try self.parse_paint(
+                offset + paint_offset[0],
+                palette,
+                painter,
+                recursion_stack,
+                coords,
+                foreground_color,
+            );
+        },
+        23 => if (cfg.variable_fonts) { // PaintVarScaleUniformAroundCenter
+            const paint_offset = try s.read(parser.Offset24);
+
+            var var_s = s.*;
+            var_s.advance(6);
+            const var_index_base = try var_s.read(u32);
+
+            const deltas = self
+                .variation_data()
+                .read_deltas(3, var_index_base, coords);
+
+            const scale = (try s.read(parser.F2DOT14)).apply_float_delta(deltas[0]);
+            const center_x = @as(f32, @floatFromInt(try s.read(i16))) + deltas[1];
+            const center_y = @as(f32, @floatFromInt(try s.read(i16))) + deltas[2];
+
+            painter.push_transform(.new_translate(
+                center_x,
+                center_y,
+            ));
+            defer painter.pop_transform();
+
+            painter.push_transform(.new_scale(scale, scale));
+            defer painter.pop_transform();
+
+            painter.push_transform(.new_translate(
+                -center_x,
+                -center_y,
+            ));
+            defer painter.pop_transform();
+
+            try self.parse_paint(
+                offset + paint_offset[0],
+                palette,
+                painter,
+                recursion_stack,
+                coords,
+                foreground_color,
+            );
+        },
+        24 => { // PaintRotate
+            const paint_offset = try s.read(parser.Offset24);
+            const angle = (try s.read(parser.F2DOT14)).to_f32();
+
+            painter.push_transform(.new_rotate(angle));
+            defer painter.pop_transform();
+
+            try self.parse_paint(
+                offset + paint_offset[0],
+                palette,
+                painter,
+                recursion_stack,
+                coords,
+                foreground_color,
+            );
+        },
+        25 => if (cfg.variable_fonts) { // PaintVarRotate
+            const paint_offset = try s.read(parser.Offset24);
+
+            var var_s = s.*;
+            var_s.advance(2);
+            const var_index_base = try var_s.read(u32);
+
+            const deltas = self
+                .variation_data()
+                .read_deltas(1, var_index_base, coords);
+
+            const angle = (try s.read(parser.F2DOT14)).apply_float_delta(deltas[0]);
+
+            painter.push_transform(.new_rotate(angle));
+            defer painter.pop_transform();
+
+            try self.parse_paint(
+                offset + paint_offset[0],
+                palette,
+                painter,
+                recursion_stack,
+                coords,
+                foreground_color,
+            );
+        },
+        26 => { // PaintRotateAroundCenter
+            const paint_offset = try s.read(parser.Offset24);
+            const angle = (try s.read(parser.F2DOT14)).to_f32();
+            const center_x: f32 = @floatFromInt(try s.read(i16));
+            const center_y: f32 = @floatFromInt(try s.read(i16));
+
+            painter.push_transform(.new_translate(
+                center_x,
+                center_y,
+            ));
+            defer painter.pop_transform();
+
+            painter.push_transform(.new_rotate(angle));
+            defer painter.pop_transform();
+
+            painter.push_transform(.new_translate(
+                -center_x,
+                -center_y,
+            ));
+            defer painter.pop_transform();
+
+            try self.parse_paint(
+                offset + paint_offset[0],
+                palette,
+                painter,
+                recursion_stack,
+                coords,
+                foreground_color,
+            );
+        },
+        27 => if (cfg.variable_fonts) { // PaintVarRotateAroundCenter
+            const paint_offset = try s.read(parser.Offset24);
+
+            var var_s = s.*;
+            var_s.advance(6);
+            const var_index_base = try var_s.read(u32);
+
+            const deltas = self
+                .variation_data()
+                .read_deltas(3, var_index_base, coords);
+
+            const angle = (try s.read(parser.F2DOT14)).apply_float_delta(deltas[0]);
+            const center_x = @as(f32, @floatFromInt(try s.read(i16))) + deltas[1];
+            const center_y = @as(f32, @floatFromInt(try s.read(i16))) + deltas[2];
+
+            painter.push_transform(.new_translate(
+                center_x,
+                center_y,
+            ));
+            defer painter.pop_transform();
+
+            painter.push_transform(.new_rotate(angle));
+            defer painter.pop_transform();
+
+            painter.push_transform(.new_translate(
+                -center_x,
+                -center_y,
+            ));
+            defer painter.pop_transform();
+
+            try self.parse_paint(
+                offset + paint_offset[0],
+                palette,
+                painter,
+                recursion_stack,
+                coords,
+                foreground_color,
+            );
+        },
+        28 => { // PaintSkew
+            const paint_offset = try s.read(parser.Offset24);
+            const skew_x = (try s.read(parser.F2DOT14)).to_f32();
+            const skew_y = (try s.read(parser.F2DOT14)).to_f32();
+
+            painter.push_transform(.new_skew(skew_x, skew_y));
+            defer painter.pop_transform();
+
+            try self.parse_paint(
+                offset + paint_offset[0],
+                palette,
+                painter,
+                recursion_stack,
+                coords,
+                foreground_color,
+            );
+        },
+        29 => if (cfg.variable_fonts) { // PaintVarSkew
+            const paint_offset = try s.read(parser.Offset24);
+
+            var var_s = s.*;
+            var_s.advance(4);
+            const var_index_base = try var_s.read(u32);
+
+            const deltas = self
+                .variation_data()
+                .read_deltas(2, var_index_base, coords);
+
+            const skew_x = (try s.read(parser.F2DOT14)).apply_float_delta(deltas[0]);
+            const skew_y = (try s.read(parser.F2DOT14)).apply_float_delta(deltas[1]);
+
+            painter.push_transform(.new_skew(skew_x, skew_y));
+            defer painter.pop_transform();
+
+            try self.parse_paint(
+                offset + paint_offset[0],
+                palette,
+                painter,
+                recursion_stack,
+                coords,
+                foreground_color,
+            );
+        },
+        30 => { // PaintSkewAroundCenter
+            const paint_offset = try s.read(parser.Offset24);
+            const skew_x = (try s.read(parser.F2DOT14)).to_f32();
+            const skew_y = (try s.read(parser.F2DOT14)).to_f32();
+            const center_x: f32 = @floatFromInt(try s.read(i16));
+            const center_y: f32 = @floatFromInt(try s.read(i16));
+
+            painter.push_transform(.new_translate(
+                center_x,
+                center_y,
+            ));
+            defer painter.pop_transform();
+
+            painter.push_transform(.new_skew(skew_x, skew_y));
+            defer painter.pop_transform();
+
+            painter.push_transform(.new_translate(
+                -center_x,
+                -center_y,
+            ));
+            defer painter.pop_transform();
+
+            try self.parse_paint(
+                offset + paint_offset[0],
+                palette,
+                painter,
+                recursion_stack,
+                coords,
+                foreground_color,
+            );
+        },
+        31 => if (cfg.variable_fonts) { // PaintVarSkewAroundCenter
+            const paint_offset = try s.read(parser.Offset24);
+
+            var var_s = s.*;
+            var_s.advance(8);
+            const var_index_base = try var_s.read(u32);
+
+            const deltas = self
+                .variation_data()
+                .read_deltas(4, var_index_base, coords);
+
+            const skew_x = (try s.read(parser.F2DOT14)).apply_float_delta(deltas[0]);
+            const skew_y = (try s.read(parser.F2DOT14)).apply_float_delta(deltas[1]);
+            const center_x = @as(f32, @floatFromInt(try s.read(i16))) + deltas[2];
+            const center_y = @as(f32, @floatFromInt(try s.read(i16))) + deltas[3];
+
+            painter.push_transform(.new_translate(
+                center_x,
+                center_y,
+            ));
+            defer painter.pop_transform();
+
+            painter.push_transform(.new_skew(skew_x, skew_y));
+            defer painter.pop_transform();
+
+            painter.push_transform(.new_translate(
+                -center_x,
+                -center_y,
+            ));
+            defer painter.pop_transform();
+
+            try self.parse_paint(
+                offset + paint_offset[0],
+                palette,
+                painter,
+                recursion_stack,
+                coords,
+                foreground_color,
+            );
+        },
+        32 => { // PaintComposite
+            const source_paint_offset = try s.read(parser.Offset24);
+            const composite_mode = try s.read(CompositeMode);
+            const backdrop_paint_offset = try s.read(parser.Offset24);
+
+            painter.push_layer(.source_over);
+            defer painter.pop_layer();
+
+            try self.parse_paint(
+                offset + backdrop_paint_offset[0],
+                palette,
+                painter,
+                recursion_stack,
+                coords,
+                foreground_color,
+            );
+            painter.push_layer(composite_mode);
+            defer painter.pop_layer();
+
+            try self.parse_paint(
+                offset + source_paint_offset[0],
+                palette,
+                painter,
+                recursion_stack,
+                coords,
+                foreground_color,
+            );
+        },
+        else => {},
     }
-
-    fn paint_v0(
-        self: Table,
-        base: BaseGlyphRecord,
-        palette: u16,
-        painter: Painter,
-        foreground_color: lib.RgbaColor,
-    ) Error!void {
-        const start = base.first_layer_index;
-        const end = std.math.add(u16, start, base.num_layers) catch return error.PaintError;
-        const layers = self.layers.slice(start, end);
-
-        var iter = layers.iterator();
-        while (iter.next()) |layer| {
-            painter.outline_glyph(layer.glyph_id);
-            painter.push_clip();
-            if (layer.palette_index == 0xFFFF)
-                // A special case.
-                painter.paint(.{ .solid = foreground_color })
-            else
-                painter.paint(.{
-                    .solid = self.palettes.get(palette, layer.palette_index) orelse
-                        return error.PaintError,
-                });
-
-            painter.pop_clip();
-        }
-    }
-
-    fn paint_v1(
-        self: Table,
-        base: BaseGlyphPaintRecord,
-        palette: u16,
-        painter: Painter,
-        recursion_stack: *std.ArrayList(usize),
-        coords: if (cfg.variable_fonts) []const lib.NormalizedCoordinate else void,
-        foreground_color: lib.RgbaColor,
-    ) Error!void {
-        const clip_box_maybe = self.clip_box(base.glyph_id, coords);
-        if (clip_box_maybe) |box| painter.push_clip_box(box);
-        defer if (clip_box_maybe != null) painter.pop_clip();
-
-        self.parse_paint(
-            self.base_glyph_paints_offset[0] + base.paint_table_offset[0],
-            palette,
-            painter,
-            recursion_stack,
-            coords,
-            foreground_color,
-        ) catch return error.PaintError;
-    }
-
-    fn parse_paint(
-        self: Table,
-        offset: usize,
-        palette: u16,
-        painter: Painter,
-        recursion_stack: *std.ArrayList(usize),
-        coords: if (cfg.variable_fonts) []const lib.NormalizedCoordinate else void,
-        foreground_color: lib.RgbaColor,
-    ) parser.Error!void {
-        var s = try parser.Stream.new_at(self.data, offset);
-        const format = try s.read(u8);
-
-        // Cycle detected
-        if (std.mem.containsAtLeastScalar(usize, recursion_stack.items, 1, offset))
-            return error.Overflow;
-
-        recursion_stack.appendBounded(offset) catch return error.ParseFail;
-        defer _ = recursion_stack.pop();
-
-        return try self.parse_paint_impl(
-            offset,
-            palette,
-            painter,
-            recursion_stack,
-            &s,
-            format,
-            coords,
-            foreground_color,
-        );
-    }
-
-    fn parse_paint_impl(
-        self: Table,
-        offset: usize,
-        palette: u16,
-        painter: Painter,
-        recursion_stack: *std.ArrayList(usize),
-        s: *parser.Stream,
-        format: u8,
-        coords: if (cfg.variable_fonts) []const lib.NormalizedCoordinate else void,
-        foreground_color: lib.RgbaColor,
-    ) parser.Error!void {
-        switch (format) {
-            1 => { // PaintColrLayers
-                const layers_count = try s.read(u8);
-                const first_layer_index = try s.read(u32);
-
-                for (0..layers_count) |i| {
-                    const index = try std.math.add(u32, first_layer_index, @truncate(i));
-                    const paint_offset = self.layer_paint_offsets.get(index) orelse
-                        return error.ParseFail;
-
-                    const new_offset = self.layer_paint_offsets_offset[0] + paint_offset[0];
-                    try self.parse_paint(
-                        new_offset,
-                        palette,
-                        painter,
-                        recursion_stack,
-                        coords,
-                        foreground_color,
-                    );
-                }
-            },
-            2 => { // PaintSolid
-                const palette_index = try s.read(u16);
-                const alpha = try s.read(parser.F2DOT14);
-
-                const color = if (palette_index == std.math.maxInt(u16))
-                    foreground_color
-                else
-                    self.palettes.get(palette, palette_index) orelse return error.ParseFail;
-
-                painter.paint(.{ .solid = color.apply_alpha(alpha.to_f32()) });
-            },
-            3 => if (cfg.variable_fonts) { // PaintVarSolid
-                const palette_index = try s.read(u16);
-                const alpha = try s.read(parser.F2DOT14);
-                const var_index_base = try s.read(u32);
-
-                const deltas = self
-                    .variation_data()
-                    .read_deltas(1, var_index_base, coords);
-
-                const color = if (palette_index == std.math.maxInt(u16))
-                    foreground_color
-                else
-                    self.palettes.get(palette, palette_index) orelse return error.ParseFail;
-
-                const alpha_color = color.apply_alpha(alpha.apply_float_delta(deltas[0]));
-                painter.paint(.{ .solid = alpha_color });
-            },
-            4 => { // PaintLinearGradient
-                const color_line_offset = try s.read(parser.Offset24);
-                const color_line = try self.parse_color_line(
-                    offset + color_line_offset[0],
-                    foreground_color,
-                );
-
-                painter.paint(.{ .linear_gradient = .{
-                    .x0 = @floatFromInt(try s.read(i16)),
-                    .y0 = @floatFromInt(try s.read(i16)),
-                    .x1 = @floatFromInt(try s.read(i16)),
-                    .y1 = @floatFromInt(try s.read(i16)),
-                    .x2 = @floatFromInt(try s.read(i16)),
-                    .y2 = @floatFromInt(try s.read(i16)),
-                    .extend = color_line.extend,
-                    .variation_data = if (cfg.variable_fonts) self.variation_data(),
-                    .color_line = .{ .non_var_color_line = color_line },
-                } });
-            },
-            5 => if (cfg.variable_fonts) { // PaintVarLinearGradient
-                const var_color_line_offset = try s.read(parser.Offset24);
-                const color_line = try self.parse_var_color_line(
-                    offset + var_color_line_offset[0],
-                    foreground_color,
-                );
-                var var_s = s.*;
-                var_s.advance(12);
-                const var_index_base = try var_s.read(u32);
-
-                const deltas = self
-                    .variation_data()
-                    .read_deltas(6, var_index_base, coords);
-
-                painter.paint(.{ .linear_gradient = .{
-                    .x0 = @as(f32, @floatFromInt(try s.read(i16))) + deltas[0],
-                    .y0 = @as(f32, @floatFromInt(try s.read(i16))) + deltas[1],
-                    .x1 = @as(f32, @floatFromInt(try s.read(i16))) + deltas[2],
-                    .y1 = @as(f32, @floatFromInt(try s.read(i16))) + deltas[3],
-                    .x2 = @as(f32, @floatFromInt(try s.read(i16))) + deltas[4],
-                    .y2 = @as(f32, @floatFromInt(try s.read(i16))) + deltas[5],
-                    .extend = color_line.extend,
-                    .variation_data = self.variation_data(),
-                    .color_line = .{ .var_color_line = color_line },
-                } });
-            },
-            6 => { // PaintRadialGradient
-                const color_line_offset = try s.read(parser.Offset24);
-                const color_line = try self.parse_color_line(
-                    offset + color_line_offset[0],
-                    foreground_color,
-                );
-
-                painter.paint(.{ .radial_gradient = .{
-                    .x0 = @floatFromInt(try s.read(i16)),
-                    .y0 = @floatFromInt(try s.read(i16)),
-                    .r0 = @floatFromInt(try s.read(u16)),
-                    .x1 = @floatFromInt(try s.read(i16)),
-                    .y1 = @floatFromInt(try s.read(i16)),
-                    .r1 = @floatFromInt(try s.read(u16)),
-                    .extend = color_line.extend,
-                    .variation_data = if (cfg.variable_fonts) self.variation_data(),
-                    .color_line = .{ .non_var_color_line = color_line },
-                } });
-            },
-            7 => if (cfg.variable_fonts) { // PaintVarRadialGradient
-                const color_line_offset = try s.read(parser.Offset24);
-                const color_line = try self.parse_var_color_line(
-                    offset + color_line_offset[0],
-                    foreground_color,
-                );
-
-                var var_s = s.*;
-                var_s.advance(12);
-                const var_index_base = try var_s.read(u32);
-
-                const deltas = self
-                    .variation_data()
-                    .read_deltas(6, var_index_base, coords);
-
-                painter.paint(.{ .radial_gradient = .{
-                    .x0 = @as(f32, @floatFromInt(try s.read(i16))) + deltas[0],
-                    .y0 = @as(f32, @floatFromInt(try s.read(i16))) + deltas[1],
-                    .r0 = @as(f32, @floatFromInt(try s.read(u16))) + deltas[2],
-                    .x1 = @as(f32, @floatFromInt(try s.read(i16))) + deltas[3],
-                    .y1 = @as(f32, @floatFromInt(try s.read(i16))) + deltas[4],
-                    .r1 = @as(f32, @floatFromInt(try s.read(u16))) + deltas[5],
-                    .extend = color_line.extend,
-                    .variation_data = self.variation_data(),
-                    .color_line = .{ .var_color_line = color_line },
-                } });
-            },
-            8 => { // PaintSweepGradient
-                const color_line_offset = try s.read(parser.Offset24);
-                const color_line = try self.parse_color_line(
-                    offset + color_line_offset[0],
-                    foreground_color,
-                );
-                painter.paint(.{ .sweep_gradient = .{
-                    .center_x = @floatFromInt(try s.read(i16)),
-                    .center_y = @floatFromInt(try s.read(i16)),
-                    .start_angle = (try s.read(parser.F2DOT14)).to_f32(),
-                    .end_angle = (try s.read(parser.F2DOT14)).to_f32(),
-                    .extend = color_line.extend,
-                    .color_line = .{ .non_var_color_line = color_line },
-                    .variation_data = if (cfg.variable_fonts) self.variation_data(),
-                } });
-            },
-            9 => if (cfg.variable_fonts) { // PaintVarSweepGradient
-                const color_line_offset = try s.read(parser.Offset24);
-                const color_line = try self.parse_var_color_line(
-                    offset + color_line_offset[0],
-                    foreground_color,
-                );
-
-                var var_s = s.*;
-                var_s.advance(8);
-                const var_index_base = try var_s.read(u32);
-
-                const deltas = self
-                    .variation_data()
-                    .read_deltas(4, var_index_base, coords);
-
-                painter.paint(.{ .sweep_gradient = .{
-                    .center_x = @as(f32, @floatFromInt(try s.read(i16))) + deltas[0],
-                    .center_y = @as(f32, @floatFromInt(try s.read(i16))) + deltas[1],
-                    .start_angle = (try s
-                        .read(parser.F2DOT14))
-                        .apply_float_delta(deltas[2]),
-                    .end_angle = (try s
-                        .read(parser.F2DOT14))
-                        .apply_float_delta(deltas[3]),
-                    .extend = color_line.extend,
-                    .color_line = .{ .var_color_line = color_line },
-                    .variation_data = self.variation_data(),
-                } });
-            },
-            10 => { // PaintGlyph
-                const paint_offset = try s.read(parser.Offset24);
-                const glyph_id = try s.read(lib.GlyphId);
-                painter.outline_glyph(glyph_id);
-                painter.push_clip();
-                defer painter.pop_clip();
-
-                try self.parse_paint(
-                    offset + paint_offset[0],
-                    palette,
-                    painter,
-                    recursion_stack,
-                    coords,
-                    foreground_color,
-                );
-            },
-            11 => { // PaintColrGlyph
-                const glyph_id = try s.read(lib.GlyphId);
-                self.paint_impl(
-                    glyph_id,
-                    palette,
-                    painter,
-                    recursion_stack,
-                    coords,
-                    foreground_color,
-                ) catch return error.ParseFail;
-            },
-            12 => { // PaintTransform
-                const paint_offset = try s.read(parser.Offset24);
-                const ts_offset = try s.read(parser.Offset24);
-                var s_12 = try parser.Stream.new_at(self.data, offset + ts_offset[0]);
-
-                painter.push_transform(.{
-                    .a = (try s_12.read(parser.Fixed)).value,
-                    .b = (try s_12.read(parser.Fixed)).value,
-                    .c = (try s_12.read(parser.Fixed)).value,
-                    .d = (try s_12.read(parser.Fixed)).value,
-                    .e = (try s_12.read(parser.Fixed)).value,
-                    .f = (try s_12.read(parser.Fixed)).value,
-                });
-                defer painter.pop_transform();
-
-                try self.parse_paint(
-                    offset + paint_offset[0],
-                    palette,
-                    painter,
-                    recursion_stack,
-                    coords,
-                    foreground_color,
-                );
-            },
-            13 => if (cfg.variable_fonts) { // PaintVarTransform
-                const paint_offset = try s.read(parser.Offset24);
-                const ts_offset = try s.read(parser.Offset24);
-                var s_13 = try parser.Stream.new_at(self.data, offset + ts_offset[0]);
-
-                var var_s = s_13;
-                var_s.advance(24);
-                const var_index_base = try var_s.read(u32);
-
-                const deltas = self
-                    .variation_data()
-                    .read_deltas(6, var_index_base, coords);
-
-                painter.push_transform(.{
-                    .a = (try s_13.read(parser.Fixed)).apply_float_delta(deltas[0]),
-                    .b = (try s_13.read(parser.Fixed)).apply_float_delta(deltas[1]),
-                    .c = (try s_13.read(parser.Fixed)).apply_float_delta(deltas[2]),
-                    .d = (try s_13.read(parser.Fixed)).apply_float_delta(deltas[3]),
-                    .e = (try s_13.read(parser.Fixed)).apply_float_delta(deltas[4]),
-                    .f = (try s_13.read(parser.Fixed)).apply_float_delta(deltas[5]),
-                });
-                defer painter.pop_transform();
-
-                try self.parse_paint(
-                    offset + paint_offset[0],
-                    palette,
-                    painter,
-                    recursion_stack,
-                    coords,
-                    foreground_color,
-                );
-            },
-            14 => { // PaintTranslate
-                const paint_offset = try s.read(parser.Offset24);
-                const tx: f32 = @floatFromInt(try s.read(i16));
-                const ty: f32 = @floatFromInt(try s.read(i16));
-
-                painter.push_transform(.new_translate(tx, ty));
-                defer painter.pop_transform();
-
-                try self.parse_paint(
-                    offset + paint_offset[0],
-                    palette,
-                    painter,
-                    recursion_stack,
-                    coords,
-                    foreground_color,
-                );
-            },
-            15 => if (cfg.variable_fonts) { // PaintVarTranslate
-                const paint_offset = try s.read(parser.Offset24);
-
-                var var_s = s.*;
-                var_s.advance(4);
-                const var_index_base = try var_s.read(u32);
-
-                const deltas = self
-                    .variation_data()
-                    .read_deltas(2, var_index_base, coords);
-
-                const tx = @as(f32, @floatFromInt(try s.read(i16))) + deltas[0];
-                const ty = @as(f32, @floatFromInt(try s.read(i16))) + deltas[1];
-
-                painter.push_transform(.new_translate(tx, ty));
-                defer painter.pop_transform();
-
-                try self.parse_paint(
-                    offset + paint_offset[0],
-                    palette,
-                    painter,
-                    recursion_stack,
-                    coords,
-                    foreground_color,
-                );
-            },
-            16 => { // PaintScale
-                const paint_offset = try s.read(parser.Offset24);
-                const sx = (try s.read(parser.F2DOT14)).to_f32();
-                const sy = (try s.read(parser.F2DOT14)).to_f32();
-
-                painter.push_transform(.new_scale(sx, sy));
-                defer painter.pop_transform();
-
-                try self.parse_paint(
-                    offset + paint_offset[0],
-                    palette,
-                    painter,
-                    recursion_stack,
-                    coords,
-                    foreground_color,
-                );
-            },
-            17 => if (cfg.variable_fonts) { // PaintVarScale
-                const paint_offset = try s.read(parser.Offset24);
-
-                var var_s = s.*;
-                var_s.advance(4);
-                const var_index_base = try var_s.read(u32);
-
-                const deltas = self
-                    .variation_data()
-                    .read_deltas(2, var_index_base, coords);
-
-                const sx = (try s.read(parser.F2DOT14)).apply_float_delta(deltas[0]);
-                const sy = (try s.read(parser.F2DOT14)).apply_float_delta(deltas[1]);
-
-                painter.push_transform(.new_scale(sx, sy));
-                defer painter.pop_transform();
-
-                try self.parse_paint(
-                    offset + paint_offset[0],
-                    palette,
-                    painter,
-                    recursion_stack,
-                    coords,
-                    foreground_color,
-                );
-            },
-            18 => { // PaintScaleAroundCenter
-                const paint_offset = try s.read(parser.Offset24);
-                const sx = (try s.read(parser.F2DOT14)).to_f32();
-                const sy = (try s.read(parser.F2DOT14)).to_f32();
-                const center_x: f32 = @floatFromInt(try s.read(i16));
-                const center_y: f32 = @floatFromInt(try s.read(i16));
-
-                painter.push_transform(.new_translate(
-                    center_x,
-                    center_y,
-                ));
-                defer painter.pop_transform();
-
-                painter.push_transform(.new_scale(sx, sy));
-                defer painter.pop_transform();
-
-                painter.push_transform(.new_translate(
-                    -center_x,
-                    -center_y,
-                ));
-                defer painter.pop_transform();
-
-                try self.parse_paint(
-                    offset + paint_offset[0],
-                    palette,
-                    painter,
-                    recursion_stack,
-                    coords,
-                    foreground_color,
-                );
-            },
-            19 => if (cfg.variable_fonts) { // PaintVarScaleAroundCenter
-                const paint_offset = try s.read(parser.Offset24);
-
-                var var_s = s.*;
-                var_s.advance(8);
-                const var_index_base = try var_s.read(u32);
-
-                const deltas = self
-                    .variation_data()
-                    .read_deltas(4, var_index_base, coords);
-
-                const sx = (try s.read(parser.F2DOT14)).apply_float_delta(deltas[0]);
-                const sy = (try s.read(parser.F2DOT14)).apply_float_delta(deltas[1]);
-                const center_x = @as(f32, @floatFromInt(try s.read(i16))) + deltas[2];
-                const center_y = @as(f32, @floatFromInt(try s.read(i16))) + deltas[3];
-
-                painter.push_transform(.new_translate(
-                    center_x,
-                    center_y,
-                ));
-                defer painter.pop_transform();
-
-                painter.push_transform(.new_scale(sx, sy));
-                defer painter.pop_transform();
-
-                painter.push_transform(.new_translate(
-                    -center_x,
-                    -center_y,
-                ));
-                defer painter.pop_transform();
-
-                try self.parse_paint(
-                    offset + paint_offset[0],
-                    palette,
-                    painter,
-                    recursion_stack,
-                    coords,
-                    foreground_color,
-                );
-            },
-            20 => { // PaintScaleUniform
-                const paint_offset = try s.read(parser.Offset24);
-                const scale = (try s.read(parser.F2DOT14)).to_f32();
-
-                painter.push_transform(.new_scale(scale, scale));
-                try self.parse_paint(
-                    offset + paint_offset[0],
-                    palette,
-                    painter,
-                    recursion_stack,
-                    coords,
-                    foreground_color,
-                );
-                painter.pop_transform();
-            },
-            21 => if (cfg.variable_fonts) { // PaintVarScaleUniform
-                const paint_offset = try s.read(parser.Offset24);
-
-                var var_s = s.*;
-                var_s.advance(2);
-                const var_index_base = try var_s.read(u32);
-
-                const deltas = self
-                    .variation_data()
-                    .read_deltas(1, var_index_base, coords);
-
-                const scale = (try s.read(parser.F2DOT14)).apply_float_delta(deltas[0]);
-
-                painter.push_transform(.new_scale(scale, scale));
-                defer painter.pop_transform();
-
-                try self.parse_paint(
-                    offset + paint_offset[0],
-                    palette,
-                    painter,
-                    recursion_stack,
-                    coords,
-                    foreground_color,
-                );
-            },
-            22 => { // PaintScaleUniformAroundCenter
-                const paint_offset = try s.read(parser.Offset24);
-                const scale = (try s.read(parser.F2DOT14)).to_f32();
-                const center_x: f32 = @floatFromInt(try s.read(i16));
-                const center_y: f32 = @floatFromInt(try s.read(i16));
-
-                painter.push_transform(.new_translate(
-                    center_x,
-                    center_y,
-                ));
-                defer painter.pop_transform();
-
-                painter.push_transform(.new_scale(scale, scale));
-                defer painter.pop_transform();
-
-                painter.push_transform(.new_translate(
-                    -center_x,
-                    -center_y,
-                ));
-                defer painter.pop_transform();
-
-                try self.parse_paint(
-                    offset + paint_offset[0],
-                    palette,
-                    painter,
-                    recursion_stack,
-                    coords,
-                    foreground_color,
-                );
-            },
-            23 => if (cfg.variable_fonts) { // PaintVarScaleUniformAroundCenter
-                const paint_offset = try s.read(parser.Offset24);
-
-                var var_s = s.*;
-                var_s.advance(6);
-                const var_index_base = try var_s.read(u32);
-
-                const deltas = self
-                    .variation_data()
-                    .read_deltas(3, var_index_base, coords);
-
-                const scale = (try s.read(parser.F2DOT14)).apply_float_delta(deltas[0]);
-                const center_x = @as(f32, @floatFromInt(try s.read(i16))) + deltas[1];
-                const center_y = @as(f32, @floatFromInt(try s.read(i16))) + deltas[2];
-
-                painter.push_transform(.new_translate(
-                    center_x,
-                    center_y,
-                ));
-                defer painter.pop_transform();
-
-                painter.push_transform(.new_scale(scale, scale));
-                defer painter.pop_transform();
-
-                painter.push_transform(.new_translate(
-                    -center_x,
-                    -center_y,
-                ));
-                defer painter.pop_transform();
-
-                try self.parse_paint(
-                    offset + paint_offset[0],
-                    palette,
-                    painter,
-                    recursion_stack,
-                    coords,
-                    foreground_color,
-                );
-            },
-            24 => { // PaintRotate
-                const paint_offset = try s.read(parser.Offset24);
-                const angle = (try s.read(parser.F2DOT14)).to_f32();
-
-                painter.push_transform(.new_rotate(angle));
-                defer painter.pop_transform();
-
-                try self.parse_paint(
-                    offset + paint_offset[0],
-                    palette,
-                    painter,
-                    recursion_stack,
-                    coords,
-                    foreground_color,
-                );
-            },
-            25 => if (cfg.variable_fonts) { // PaintVarRotate
-                const paint_offset = try s.read(parser.Offset24);
-
-                var var_s = s.*;
-                var_s.advance(2);
-                const var_index_base = try var_s.read(u32);
-
-                const deltas = self
-                    .variation_data()
-                    .read_deltas(1, var_index_base, coords);
-
-                const angle = (try s.read(parser.F2DOT14)).apply_float_delta(deltas[0]);
-
-                painter.push_transform(.new_rotate(angle));
-                defer painter.pop_transform();
-
-                try self.parse_paint(
-                    offset + paint_offset[0],
-                    palette,
-                    painter,
-                    recursion_stack,
-                    coords,
-                    foreground_color,
-                );
-            },
-            26 => { // PaintRotateAroundCenter
-                const paint_offset = try s.read(parser.Offset24);
-                const angle = (try s.read(parser.F2DOT14)).to_f32();
-                const center_x: f32 = @floatFromInt(try s.read(i16));
-                const center_y: f32 = @floatFromInt(try s.read(i16));
-
-                painter.push_transform(.new_translate(
-                    center_x,
-                    center_y,
-                ));
-                defer painter.pop_transform();
-
-                painter.push_transform(.new_rotate(angle));
-                defer painter.pop_transform();
-
-                painter.push_transform(.new_translate(
-                    -center_x,
-                    -center_y,
-                ));
-                defer painter.pop_transform();
-
-                try self.parse_paint(
-                    offset + paint_offset[0],
-                    palette,
-                    painter,
-                    recursion_stack,
-                    coords,
-                    foreground_color,
-                );
-            },
-            27 => if (cfg.variable_fonts) { // PaintVarRotateAroundCenter
-                const paint_offset = try s.read(parser.Offset24);
-
-                var var_s = s.*;
-                var_s.advance(6);
-                const var_index_base = try var_s.read(u32);
-
-                const deltas = self
-                    .variation_data()
-                    .read_deltas(3, var_index_base, coords);
-
-                const angle = (try s.read(parser.F2DOT14)).apply_float_delta(deltas[0]);
-                const center_x = @as(f32, @floatFromInt(try s.read(i16))) + deltas[1];
-                const center_y = @as(f32, @floatFromInt(try s.read(i16))) + deltas[2];
-
-                painter.push_transform(.new_translate(
-                    center_x,
-                    center_y,
-                ));
-                defer painter.pop_transform();
-
-                painter.push_transform(.new_rotate(angle));
-                defer painter.pop_transform();
-
-                painter.push_transform(.new_translate(
-                    -center_x,
-                    -center_y,
-                ));
-                defer painter.pop_transform();
-
-                try self.parse_paint(
-                    offset + paint_offset[0],
-                    palette,
-                    painter,
-                    recursion_stack,
-                    coords,
-                    foreground_color,
-                );
-            },
-            28 => { // PaintSkew
-                const paint_offset = try s.read(parser.Offset24);
-                const skew_x = (try s.read(parser.F2DOT14)).to_f32();
-                const skew_y = (try s.read(parser.F2DOT14)).to_f32();
-
-                painter.push_transform(.new_skew(skew_x, skew_y));
-                defer painter.pop_transform();
-
-                try self.parse_paint(
-                    offset + paint_offset[0],
-                    palette,
-                    painter,
-                    recursion_stack,
-                    coords,
-                    foreground_color,
-                );
-            },
-            29 => if (cfg.variable_fonts) { // PaintVarSkew
-                const paint_offset = try s.read(parser.Offset24);
-
-                var var_s = s.*;
-                var_s.advance(4);
-                const var_index_base = try var_s.read(u32);
-
-                const deltas = self
-                    .variation_data()
-                    .read_deltas(2, var_index_base, coords);
-
-                const skew_x = (try s.read(parser.F2DOT14)).apply_float_delta(deltas[0]);
-                const skew_y = (try s.read(parser.F2DOT14)).apply_float_delta(deltas[1]);
-
-                painter.push_transform(.new_skew(skew_x, skew_y));
-                defer painter.pop_transform();
-
-                try self.parse_paint(
-                    offset + paint_offset[0],
-                    palette,
-                    painter,
-                    recursion_stack,
-                    coords,
-                    foreground_color,
-                );
-            },
-            30 => { // PaintSkewAroundCenter
-                const paint_offset = try s.read(parser.Offset24);
-                const skew_x = (try s.read(parser.F2DOT14)).to_f32();
-                const skew_y = (try s.read(parser.F2DOT14)).to_f32();
-                const center_x: f32 = @floatFromInt(try s.read(i16));
-                const center_y: f32 = @floatFromInt(try s.read(i16));
-
-                painter.push_transform(.new_translate(
-                    center_x,
-                    center_y,
-                ));
-                defer painter.pop_transform();
-
-                painter.push_transform(.new_skew(skew_x, skew_y));
-                defer painter.pop_transform();
-
-                painter.push_transform(.new_translate(
-                    -center_x,
-                    -center_y,
-                ));
-                defer painter.pop_transform();
-
-                try self.parse_paint(
-                    offset + paint_offset[0],
-                    palette,
-                    painter,
-                    recursion_stack,
-                    coords,
-                    foreground_color,
-                );
-            },
-            31 => if (cfg.variable_fonts) { // PaintVarSkewAroundCenter
-                const paint_offset = try s.read(parser.Offset24);
-
-                var var_s = s.*;
-                var_s.advance(8);
-                const var_index_base = try var_s.read(u32);
-
-                const deltas = self
-                    .variation_data()
-                    .read_deltas(4, var_index_base, coords);
-
-                const skew_x = (try s.read(parser.F2DOT14)).apply_float_delta(deltas[0]);
-                const skew_y = (try s.read(parser.F2DOT14)).apply_float_delta(deltas[1]);
-                const center_x = @as(f32, @floatFromInt(try s.read(i16))) + deltas[2];
-                const center_y = @as(f32, @floatFromInt(try s.read(i16))) + deltas[3];
-
-                painter.push_transform(.new_translate(
-                    center_x,
-                    center_y,
-                ));
-                defer painter.pop_transform();
-
-                painter.push_transform(.new_skew(skew_x, skew_y));
-                defer painter.pop_transform();
-
-                painter.push_transform(.new_translate(
-                    -center_x,
-                    -center_y,
-                ));
-                defer painter.pop_transform();
-
-                try self.parse_paint(
-                    offset + paint_offset[0],
-                    palette,
-                    painter,
-                    recursion_stack,
-                    coords,
-                    foreground_color,
-                );
-            },
-            32 => { // PaintComposite
-                const source_paint_offset = try s.read(parser.Offset24);
-                const composite_mode = try s.read(CompositeMode);
-                const backdrop_paint_offset = try s.read(parser.Offset24);
-
-                painter.push_layer(.source_over);
-                defer painter.pop_layer();
-
-                try self.parse_paint(
-                    offset + backdrop_paint_offset[0],
-                    palette,
-                    painter,
-                    recursion_stack,
-                    coords,
-                    foreground_color,
-                );
-                painter.push_layer(composite_mode);
-                defer painter.pop_layer();
-
-                try self.parse_paint(
-                    offset + source_paint_offset[0],
-                    palette,
-                    painter,
-                    recursion_stack,
-                    coords,
-                    foreground_color,
-                );
-            },
-            else => {},
-        }
-    }
-
-    fn parse_color_line(
-        self: Table,
-        offset: usize,
-        foreground_color: lib.RgbaColor,
-    ) parser.Error!NonVarColorLine {
-        var s = try parser.Stream.new_at(self.data, offset);
-        const extend = try s.read(GradientExtend);
-        const count = try s.read(u16);
-        const colors = try s.read_array(ColorStopRaw, count);
-        return .{
-            .extend = extend,
-            .colors = colors,
-            .foreground_color = foreground_color,
-            .palettes = self.palettes,
-        };
-    }
-
-    fn parse_var_color_line(
-        self: Table,
-        offset: usize,
-        foreground_color: lib.RgbaColor,
-    ) parser.Error!VarColorLine {
-        var s = try parser.Stream.new_at(self.data, offset);
-        const extend = try s.read(GradientExtend);
-        const count = try s.read(u16);
-        const colors = try s.read_array(VarColorStopRaw, count);
-        return .{
-            .extend = extend,
-            .colors = colors,
-            .foreground_color = foreground_color,
-            .palettes = self.palettes,
-        };
-    }
-};
+}
+
+fn parse_color_line(
+    self: Table,
+    offset: usize,
+    foreground_color: lib.RgbaColor,
+) parser.Error!NonVarColorLine {
+    var s = try parser.Stream.new_at(self.data, offset);
+    const extend = try s.read(GradientExtend);
+    const count = try s.read(u16);
+    const colors = try s.read_array(ColorStopRaw, count);
+    return .{
+        .extend = extend,
+        .colors = colors,
+        .foreground_color = foreground_color,
+        .palettes = self.palettes,
+    };
+}
+
+fn parse_var_color_line(
+    self: Table,
+    offset: usize,
+    foreground_color: lib.RgbaColor,
+) parser.Error!VarColorLine {
+    var s = try parser.Stream.new_at(self.data, offset);
+    const extend = try s.read(GradientExtend);
+    const count = try s.read(u16);
+    const colors = try s.read_array(VarColorStopRaw, count);
+    return .{
+        .extend = extend,
+        .colors = colors,
+        .foreground_color = foreground_color,
+        .palettes = self.palettes,
+    };
+}
 
 /// A [base glyph](
 /// https://learn.microsoft.com/en-us/typography/opentype/spec/colr#baseglyph-and-layer-records).
@@ -1246,7 +1244,7 @@ const ClipList = struct {
     pub fn get(
         self: ClipList,
         index: u32,
-        variation_data: if (cfg.variable_fonts) *const VariationData else void,
+        var_data: if (cfg.variable_fonts) *const VariationData else void,
         coords: if (cfg.variable_fonts) []const lib.NormalizedCoordinate else void,
     ) ?ClipBox {
         const record = self.records.get(index) orelse return null;
@@ -1261,7 +1259,7 @@ const ClipList = struct {
 
             s.advance(8);
             const var_index_base = s.read(u32) catch return null;
-            break :d variation_data.read_deltas(4, var_index_base, coords);
+            break :d var_data.read_deltas(4, var_index_base, coords);
         } else @splat(0.0);
 
         return .{
@@ -1276,7 +1274,7 @@ const ClipList = struct {
     pub fn find(
         self: ClipList,
         glyph_id: lib.GlyphId,
-        variation_data: if (cfg.variable_fonts) *const VariationData else void,
+        var_data: if (cfg.variable_fonts) *const VariationData else void,
         coords: if (cfg.variable_fonts) []const lib.NormalizedCoordinate else void,
     ) ?ClipBox {
         var iter = self.records.iterator();
@@ -1289,7 +1287,7 @@ const ClipList = struct {
 
         return self.get(
             index,
-            variation_data,
+            var_data,
             coords,
         );
     }
@@ -1511,7 +1509,7 @@ const ColorLine = union(enum) {
 const VarColorLine = struct {
     extend: GradientExtend,
     colors: parser.LazyArray16(VarColorStopRaw),
-    palettes: cpal.Table,
+    palettes: cpalTable,
     foreground_color: lib.RgbaColor,
 };
 
@@ -1539,7 +1537,7 @@ const VarColorStopRaw = struct {
 const NonVarColorLine = struct {
     extend: GradientExtend,
     colors: parser.LazyArray16(ColorStopRaw),
-    palettes: cpal.Table,
+    palettes: cpalTable,
     foreground_color: lib.RgbaColor,
 };
 

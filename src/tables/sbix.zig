@@ -6,63 +6,57 @@ const lib = @import("../lib.zig");
 const parser = @import("../parser.zig");
 const utils = @import("../utils.zig");
 
-const LazyArray16 = parser.LazyArray16;
-const LazyArray32 = parser.LazyArray32;
-const Offset32 = parser.Offset32;
+const Table = @This();
 
-/// A [Standard Bitmap Graphics Table](
-/// https://docs.microsoft.com/en-us/typography/opentype/spec/sbix).
-pub const Table = struct {
-    /// A list of `Strike`s.
-    strikes: Strikes,
+/// A list of `Strike`s.
+strikes: Strikes,
 
-    /// Parses a table from raw data.
-    ///
-    /// - `number_of_glyphs` is from the `maxp` table.
-    pub fn parse(
-        number_of_glyphs: u16,
-        data: []const u8,
-    ) parser.Error!Table {
-        var s = parser.Stream.new(data);
+/// Parses a table from raw data.
+///
+/// - `number_of_glyphs` is from the `maxp` table.
+pub fn parse(
+    number_of_glyphs: u16,
+    data: []const u8,
+) parser.Error!Table {
+    var s = parser.Stream.new(data);
 
-        const version = try s.read(u16);
-        if (version != 1) return error.ParseFail;
+    const version = try s.read(u16);
+    if (version != 1) return error.ParseFail;
 
-        s.skip(u16); // flags
+    s.skip(u16); // flags
 
-        const strikes_count = try s.read(u32);
-        if (strikes_count == 0) return error.ParseFail;
+    const strikes_count = try s.read(u32);
+    if (strikes_count == 0) return error.ParseFail;
 
-        const offsets = try s.read_array(Offset32, strikes_count);
+    const offsets = try s.read_array(parser.Offset32, strikes_count);
 
-        return .{ .strikes = .{
-            .data = data,
-            .offsets = offsets,
-            .number_of_glyphs = number_of_glyphs +| 1,
-        } };
-    }
+    return .{ .strikes = .{
+        .data = data,
+        .offsets = offsets,
+        .number_of_glyphs = number_of_glyphs +| 1,
+    } };
+}
 
-    /// Selects the best matching `Strike` based on `pixels_per_em`.
-    pub fn best_strike(
-        self: Table,
-        pixels_per_em: u16,
-    ) ?Strike {
-        var idx: u32 = 0;
-        var max_ppem: u16 = 0;
+/// Selects the best matching `Strike` based on `pixels_per_em`.
+pub fn best_strike(
+    self: Table,
+    pixels_per_em: u16,
+) ?Strike {
+    var idx: u32 = 0;
+    var max_ppem: u16 = 0;
 
-        var iter = self.strikes.iterator();
-        var i: u32 = 0;
-        while (iter.next()) |strike| : (i += 1)
-            if ((pixels_per_em <= strike.pixels_per_em and strike.pixels_per_em < max_ppem) or
-                (pixels_per_em > max_ppem and strike.pixels_per_em > max_ppem))
-            {
-                idx = i;
-                max_ppem = strike.pixels_per_em;
-            };
+    var iter = self.strikes.iterator();
+    var i: u32 = 0;
+    while (iter.next()) |strike| : (i += 1)
+        if ((pixels_per_em <= strike.pixels_per_em and strike.pixels_per_em < max_ppem) or
+            (pixels_per_em > max_ppem and strike.pixels_per_em > max_ppem))
+        {
+            idx = i;
+            max_ppem = strike.pixels_per_em;
+        };
 
-        return self.strikes.get(idx);
-    }
-};
+    return self.strikes.get(idx);
+}
 
 /// A strike of glyphs.
 pub const Strike = struct {
@@ -70,7 +64,7 @@ pub const Strike = struct {
     pixels_per_em: u16,
     /// The device pixel density (in PPI) for which this strike was designed.
     ppi: u16,
-    offsets: LazyArray16(Offset32),
+    offsets: parser.LazyArray16(parser.Offset32),
     /// Data from the beginning of the `Strikes` table.
     data: []const u8,
 
@@ -81,7 +75,7 @@ pub const Strike = struct {
         var s = parser.Stream.new(data);
         const pixels_per_em = try s.read(u16);
         const ppi = try s.read(u16);
-        const offsets = try s.read_array(Offset32, number_of_glyphs);
+        const offsets = try s.read_array(parser.Offset32, number_of_glyphs);
         return .{
             .pixels_per_em = pixels_per_em,
             .ppi = ppi,
@@ -168,7 +162,7 @@ pub const Strikes = struct {
     /// `sbix` table data.
     data: []const u8,
     // Offsets from the beginning of the `sbix` table.
-    offsets: LazyArray32(Offset32),
+    offsets: parser.LazyArray32(parser.Offset32),
     // The total number of glyphs in the face + 1. From the `maxp` table.
     number_of_glyphs: u16,
 

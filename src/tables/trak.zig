@@ -4,43 +4,41 @@
 const parser = @import("../parser.zig");
 const utils = @import("../utils.zig");
 
-/// A [Tracking Table](
-/// https://developer.apple.com/fonts/TrueType-Reference-Manual/RM06/Chap6trak.html).
-pub const Table = struct {
-    /// Horizontal track data.
-    horizontal: TrackData,
-    /// Vertical track data.
-    vertical: TrackData,
+const Table = @This();
 
-    /// Parses a table from raw data.
-    pub fn parse(
-        data: []const u8,
-    ) parser.Error!Table {
-        var s = parser.Stream.new(data);
+/// Horizontal track data.
+horizontal: TrackData,
+/// Vertical track data.
+vertical: TrackData,
 
-        if (try s.read(u32) != 0x00010000) return error.ParseFail; // version
+/// Parses a table from raw data.
+pub fn parse(
+    data: []const u8,
+) parser.Error!Table {
+    var s = parser.Stream.new(data);
 
-        if (try s.read(u16) != 0) return error.ParseFail; // format
+    if (try s.read(u32) != 0x00010000) return error.ParseFail; // version
 
-        const hor_offset = try s.read_optional(parser.Offset16);
-        const ver_offset = try s.read_optional(parser.Offset16);
-        s.skip(u16); // reserved
+    if (try s.read(u16) != 0) return error.ParseFail; // format
 
-        const horizontal: TrackData = if (hor_offset) |offset|
-            try .parse(offset[0], data)
-        else
-            .{};
-        const vertical: TrackData = if (ver_offset) |offset|
-            try .parse(offset[0], data)
-        else
-            .{};
+    const hor_offset = try s.read_optional(parser.Offset16);
+    const ver_offset = try s.read_optional(parser.Offset16);
+    s.skip(u16); // reserved
 
-        return .{
-            .horizontal = horizontal,
-            .vertical = vertical,
-        };
-    }
-};
+    const horizontal: TrackData = if (hor_offset) |offset|
+        try .parse(offset[0], data)
+    else
+        .{};
+    const vertical: TrackData = if (ver_offset) |offset|
+        try .parse(offset[0], data)
+    else
+        .{};
+
+    return .{
+        .horizontal = horizontal,
+        .vertical = vertical,
+    };
+}
 
 /// A track data.
 pub const TrackData = struct {

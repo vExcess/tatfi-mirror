@@ -16,33 +16,31 @@ const kern = lib.tables.kern;
 
 const HEADER_SIZE: usize = 12;
 
-/// An [Extended Kerning Table](
-/// https://developer.apple.com/fonts/TrueType-Reference-Manual/RM06/Chap6kerx.html).
-pub const Table = struct {
-    /// A list of subtables.
-    subtables: Subtables,
+const Table = @This();
 
-    /// Parses a table from raw data.
-    ///
-    /// `number_of_glyphs` is from the `maxp` table.
-    pub fn parse(
-        number_of_glyphs: u16,
-        data: []const u8,
-    ) parser.Error!Table {
-        var s = parser.Stream.new(data);
-        s.skip(u16); // version
-        s.skip(u16); // padding
-        const number_of_tables = try s.read(u32);
+/// A list of subtables.
+subtables: Subtables,
 
-        return .{
-            .subtables = .{
-                .number_of_glyphs = number_of_glyphs,
-                .number_of_tables = number_of_tables,
-                .data = try s.tail(),
-            },
-        };
-    }
-};
+/// Parses a table from raw data.
+///
+/// `number_of_glyphs` is from the `maxp` table.
+pub fn parse(
+    number_of_glyphs: u16,
+    data: []const u8,
+) parser.Error!Table {
+    var s = parser.Stream.new(data);
+    s.skip(u16); // version
+    s.skip(u16); // padding
+    const number_of_tables = try s.read(u32);
+
+    return .{
+        .subtables = .{
+            .number_of_glyphs = number_of_glyphs,
+            .number_of_tables = number_of_tables,
+            .data = try s.tail(),
+        },
+    };
+}
 
 /// A list of extended kerning subtables.
 ///

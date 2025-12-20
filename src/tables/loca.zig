@@ -2,18 +2,15 @@
 //! implementation.
 
 const std = @import("std");
+const lib = @import("../lib.zig");
 const parser = @import("../parser.zig");
-
-const GlyphId = @import("../lib.zig").GlyphId;
-
-const LazyArray16 = parser.LazyArray16;
 
 /// An [Index to Location Table](https://docs.microsoft.com/en-us/typography/opentype/spec/loca).
 pub const Table = union(enum) {
     /// Short offsets.
-    short: LazyArray16(u16),
+    short: parser.LazyArray16(u16),
     /// Long offsets.
-    long: LazyArray16(u32),
+    long: parser.LazyArray16(u32),
 
     /// Parses a table from raw data.
     ///
@@ -62,7 +59,7 @@ pub const Table = union(enum) {
     /// Returns glyph's range in the `glyf` table.
     pub fn glyph_range(
         self: Table,
-        glyph_id: GlyphId,
+        glyph_id: lib.GlyphId,
     ) ?struct { usize, usize } {
         const id = glyph_id[0];
         if (id == std.math.maxInt(u16)) return null;

@@ -8,14 +8,9 @@ const cfg = @import("config");
 const lib = @import("../lib.zig");
 const parser = @import("../parser.zig");
 const utils = @import("../utils.zig");
-const glyf = @import("glyf.zig");
+const glyfTable = @import("glyf.zig");
 
 const log = std.log.scoped(.gvar);
-
-const LazyArray16 = parser.LazyArray16;
-const Offset16 = parser.Offset16;
-const Offset32 = parser.Offset32;
-const F2DOT14 = parser.F2DOT14;
 
 /// 'The TrueType rasterizer dynamically generates 'phantom' points for each glyph
 /// that represent horizontal and vertical advance widths and side bearings,
@@ -24,157 +19,155 @@ const F2DOT14 = parser.F2DOT14;
 /// We don't actually use them, but they are required during deltas parsing.
 const PHANTOM_POINTS_LEN: usize = 4;
 
-/// A [Glyph Variations Table](
-/// https://docs.microsoft.com/en-us/typography/opentype/spec/gvar).
-pub const Table = struct {
-    axis_count: u16, // nonzero
-    shared_tuple_records: LazyArray16(F2DOT14),
-    offsets: GlyphVariationDataOffsets,
-    glyphs_variation_data: []const u8,
+const Table = @This();
 
-    /// Parses a table from raw data.
-    pub fn parse(
-        data: []const u8,
-    ) parser.Error!Table {
-        var s = parser.Stream.new(data);
+axis_count: u16, // nonzero
+shared_tuple_records: parser.LazyArray16(parser.F2DOT14),
+offsets: GlyphVariationDataOffsets,
+glyphs_variation_data: []const u8,
 
-        const version = try s.read(u32);
-        if (version != 0x00010000) return error.ParseFail;
+/// Parses a table from raw data.
+pub fn parse(
+    data: []const u8,
+) parser.Error!Table {
+    var s = parser.Stream.new(data);
 
-        const axis_count = try s.read(u16);
+    const version = try s.read(u32);
+    if (version != 0x00010000) return error.ParseFail;
 
-        // The axis count cannot be zero.
-        if (axis_count == 0) return error.ParseFail;
+    const axis_count = try s.read(u16);
 
-        const shared_tuple_count = try s.read(u16);
-        const shared_tuples_offset = try s.read(Offset32);
-        const glyph_count = try s.read(u16);
-        const flags = try s.read(u16);
+    // The axis count cannot be zero.
+    if (axis_count == 0) return error.ParseFail;
 
-        const glyph_variation_data_array_offset = try s.read(Offset32);
+    const shared_tuple_count = try s.read(u16);
+    const shared_tuples_offset = try s.read(parser.Offset32);
+    const glyph_count = try s.read(u16);
+    const flags = try s.read(u16);
 
-        const shared_tuple_records = str: {
-            var sub_s = try parser.Stream.new_at(data, shared_tuples_offset[0]);
-            const count = try std.math.mul(u16, shared_tuple_count, axis_count);
-            break :str try sub_s.read_array(F2DOT14, count);
-        };
+    const glyph_variation_data_array_offset = try s.read(parser.Offset32);
 
-        const glyphs_variation_data = try utils.slice(data, glyph_variation_data_array_offset[0]);
+    const shared_tuple_records = str: {
+        var sub_s = try parser.Stream.new_at(data, shared_tuples_offset[0]);
+        const count = try std.math.mul(u16, shared_tuple_count, axis_count);
+        break :str try sub_s.read_array(parser.F2DOT14, count);
+    };
 
-        const offsets: GlyphVariationDataOffsets = o: {
-            const offsets_count = try std.math.add(u16, glyph_count, 1);
-            const is_long_format = flags & 1 == 1; // The first bit indicates a long format.
-            break :o if (is_long_format)
-                .{ .long = try s.read_array(Offset32, offsets_count) }
-            else
-                .{ .short = try s.read_array(Offset16, offsets_count) };
-        };
+    const glyphs_variation_data = try utils.slice(data, glyph_variation_data_array_offset[0]);
 
-        return .{
-            .axis_count = axis_count,
-            .shared_tuple_records = shared_tuple_records,
-            .offsets = offsets,
-            .glyphs_variation_data = glyphs_variation_data,
-        };
-    }
+    const offsets: GlyphVariationDataOffsets = o: {
+        const offsets_count = try std.math.add(u16, glyph_count, 1);
+        const is_long_format = flags & 1 == 1; // The first bit indicates a long format.
+        break :o if (is_long_format)
+            .{ .long = try s.read_array(parser.Offset32, offsets_count) }
+        else
+            .{ .short = try s.read_array(parser.Offset16, offsets_count) };
+    };
 
-    pub fn phantom_points(
-        self: Table,
-        gpa: std.mem.Allocator,
-        glyf_table: glyf.Table,
-        coordinates: []const lib.NormalizedCoordinate,
-        glyph_id: lib.GlyphId,
-    ) ?lib.PhantomPoints {
-        const outline_points = glyf_table.outline_points(glyph_id);
+    return .{
+        .axis_count = axis_count,
+        .shared_tuple_records = shared_tuple_records,
+        .offsets = offsets,
+        .glyphs_variation_data = glyphs_variation_data,
+    };
+}
 
-        var fba_state = std.heap.stackFallback(VariationTuples.STACK_ALLOCATION_SIZE, gpa);
-        const fba = fba_state.get();
+pub fn phantom_points(
+    self: Table,
+    gpa: std.mem.Allocator,
+    glyf_table: glyfTable,
+    coordinates: []const lib.NormalizedCoordinate,
+    glyph_id: lib.GlyphId,
+) ?lib.PhantomPoints {
+    const outline_points = glyf_table.outline_points(glyph_id);
 
-        var tuples = VariationTuples.init(fba) catch return null;
-        defer tuples.deinit();
+    var fba_state = std.heap.stackFallback(VariationTuples.STACK_ALLOCATION_SIZE, gpa);
+    const fba = fba_state.get();
 
-        self.parse_variation_data(
-            glyph_id,
-            coordinates,
-            outline_points,
-            &tuples,
-        ) catch
-            return null;
+    var tuples = VariationTuples.init(fba) catch return null;
+    defer tuples.deinit();
 
-        // Skip all outline deltas.
-        for (0..outline_points) |_| _ = tuples.apply_null() orelse return null;
+    self.parse_variation_data(
+        glyph_id,
+        coordinates,
+        outline_points,
+        &tuples,
+    ) catch
+        return null;
 
-        return .{
-            .left = tuples.apply_null() orelse return null,
-            .right = tuples.apply_null() orelse return null,
-            .top = tuples.apply_null() orelse return null,
-            .bottom = tuples.apply_null() orelse return null,
-        };
-    }
+    // Skip all outline deltas.
+    for (0..outline_points) |_| _ = tuples.apply_null() orelse return null;
 
-    fn parse_variation_data(
-        self: Table,
-        glyph_id: lib.GlyphId,
-        coordinates: []const lib.NormalizedCoordinate,
-        points_len: u16,
-        tuples: *VariationTuples,
-    ) GvarError!void {
-        tuples.clear();
+    return .{
+        .left = tuples.apply_null() orelse return null,
+        .right = tuples.apply_null() orelse return null,
+        .top = tuples.apply_null() orelse return null,
+        .bottom = tuples.apply_null() orelse return null,
+    };
+}
 
-        if (coordinates.len != self.axis_count) return error.ParseFail;
+fn parse_variation_data(
+    self: Table,
+    glyph_id: lib.GlyphId,
+    coordinates: []const lib.NormalizedCoordinate,
+    points_len: u16,
+    tuples: *VariationTuples,
+) GvarError!void {
+    tuples.clear();
 
-        const next_glyph_id = try std.math.add(u16, glyph_id[0], 1);
+    if (coordinates.len != self.axis_count) return error.ParseFail;
 
-        const start: usize, const end: usize = se: switch (self.offsets) {
-            .short => |array| {
-                // 'If the short format (Offset16) is used for offsets,
-                // the value stored is the offset divided by 2.'
-                const start = array.get(glyph_id[0]) orelse return error.ParseFail;
-                const end = array.get(next_glyph_id) orelse return error.ParseFail;
+    const next_glyph_id = try std.math.add(u16, glyph_id[0], 1);
 
-                break :se .{ start[0] * 2, end[0] * 2 };
-            },
-            .long => |array| {
-                const start = array.get(glyph_id[0]) orelse return error.ParseFail;
-                const end = array.get(next_glyph_id) orelse return error.ParseFail;
+    const start: usize, const end: usize = se: switch (self.offsets) {
+        .short => |array| {
+            // 'If the short format (parser.Offset16) is used for offsets,
+            // the value stored is the offset divided by 2.'
+            const start = array.get(glyph_id[0]) orelse return error.ParseFail;
+            const end = array.get(next_glyph_id) orelse return error.ParseFail;
 
-                break :se .{ start[0], end[0] };
-            },
-        };
+            break :se .{ start[0] * 2, end[0] * 2 };
+        },
+        .long => |array| {
+            const start = array.get(glyph_id[0]) orelse return error.ParseFail;
+            const end = array.get(next_glyph_id) orelse return error.ParseFail;
 
-        if (start == end) return;
-        const data = try utils.slice(self.glyphs_variation_data, .{ .start = start, .end = end });
+            break :se .{ start[0], end[0] };
+        },
+    };
 
-        return try parse_variation_data_inner(
-            coordinates,
-            self.shared_tuple_records,
-            points_len,
-            data,
-            tuples,
-        );
-    }
+    if (start == end) return;
+    const data = try utils.slice(self.glyphs_variation_data, .{ .start = start, .end = end });
 
-    /// Outlines a glyph.
-    pub fn outline(
-        self: Table,
-        gpa: std.mem.Allocator,
-        glyf_table: glyf.Table,
-        coordinates: []const lib.NormalizedCoordinate,
-        glyph_id: lib.GlyphId,
-        builder: lib.OutlineBuilder,
-    ) ?lib.Rect {
-        var b = glyf.Builder.new(.{}, .{}, builder);
-        const glyph_data = glyf_table.get(glyph_id) orelse return null;
-        outline_var_impl(gpa, glyf_table, self, glyph_id, glyph_data, coordinates, 0, &b) catch |e|
-            log.err("Hit error outlining a glyph: {t}", .{e});
+    return try parse_variation_data_inner(
+        coordinates,
+        self.shared_tuple_records,
+        points_len,
+        data,
+        tuples,
+    );
+}
 
-        return b.bbox.to_rect();
-    }
-};
+/// Outlines a glyph.
+pub fn outline(
+    self: Table,
+    gpa: std.mem.Allocator,
+    glyf_table: glyfTable,
+    coordinates: []const lib.NormalizedCoordinate,
+    glyph_id: lib.GlyphId,
+    builder: lib.OutlineBuilder,
+) ?lib.Rect {
+    var b = glyfTable.Builder.new(.{}, .{}, builder);
+    const glyph_data = glyf_table.get(glyph_id) orelse return null;
+    outline_var_impl(gpa, glyf_table, self, glyph_id, glyph_data, coordinates, 0, &b) catch |e|
+        log.err("Hit error outlining a glyph: {t}", .{e});
+
+    return b.bbox.to_rect();
+}
 
 const GlyphVariationDataOffsets = union(enum) {
-    short: LazyArray16(Offset16),
-    long: LazyArray16(Offset32),
+    short: parser.LazyArray16(parser.Offset16),
+    long: parser.LazyArray16(parser.Offset32),
 };
 
 /// A list of variation tuples, possibly stored on the heap.
@@ -238,9 +231,9 @@ const VariationTuples = struct {
 
     fn apply(
         self: *VariationTuples,
-        all_points: glyf.GlyphPointsIter,
-        points: glyf.GlyphPointsIter,
-        point: glyf.GlyphPointsIter.GlyphPoint,
+        all_points: glyfTable.GlyphPointsIter,
+        points: glyfTable.GlyphPointsIter,
+        point: glyfTable.GlyphPointsIter.GlyphPoint,
     ) ?lib.PhantomPoints.PointF {
         var x: f32 = @floatFromInt(point.x);
         var y: f32 = @floatFromInt(point.y);
@@ -321,7 +314,7 @@ const VariationTuple = struct {
 // https://docs.microsoft.com/en-us/typography/opentype/spec/otvarcommonformats#tuple-variation-store-header
 fn parse_variation_data_inner(
     coordinates: []const lib.NormalizedCoordinate,
-    shared_tuple_records: LazyArray16(F2DOT14),
+    shared_tuple_records: parser.LazyArray16(parser.F2DOT14),
     points_len: u16,
     data: []const u8,
     tuples: *VariationTuples,
@@ -331,7 +324,7 @@ fn parse_variation_data_inner(
 
     var main_stream = parser.Stream.new(data);
     const tuple_variation_count_raw = try main_stream.read(u16);
-    const data_offset = try main_stream.read(Offset16);
+    const data_offset = try main_stream.read(parser.Offset16);
 
     // 'The high 4 bits are flags, and the low 12 bits
     // are the number of tuple variation tables for this glyph.'
@@ -383,7 +376,7 @@ fn parse_variation_data_inner(
 fn parse_variation_tuples(
     count: u16,
     coordinates: []const lib.NormalizedCoordinate,
-    shared_tuple_records: LazyArray16(F2DOT14),
+    shared_tuple_records: parser.LazyArray16(parser.F2DOT14),
     shared_point_numbers: ?PackedPointsIter,
     points_len: u16,
     main_s: *parser.Stream,
@@ -462,7 +455,7 @@ const TupleVariationHeaderData = struct {
 // https://docs.microsoft.com/en-us/typography/opentype/spec/otvarcommonformats#tuplevariationheader
 fn parse_tuple_variation_header(
     coordinates: []const lib.NormalizedCoordinate,
-    shared_tuple_records: LazyArray16(F2DOT14),
+    shared_tuple_records: parser.LazyArray16(parser.F2DOT14),
     s: *parser.Stream,
 ) parser.Error!TupleVariationHeaderData {
     const EMBEDDED_PEAK_TUPLE_FLAG: u16 = 0x8000;
@@ -481,7 +474,7 @@ fn parse_tuple_variation_header(
     const axis_count: u16 = @truncate(coordinates.len);
 
     const peak_tuple = if (has_embedded_peak_tuple)
-        try s.read_array(F2DOT14, axis_count)
+        try s.read_array(parser.F2DOT14, axis_count)
     else pt: {
         // Use shared tuples.
         const start = try std.math.mul(u16, tuple_index, axis_count);
@@ -490,10 +483,10 @@ fn parse_tuple_variation_header(
         break :pt shared_tuple_records.slice(start, end);
     };
 
-    const start_tuple: parser.LazyArray16(F2DOT14), const end_tuple: parser.LazyArray16(F2DOT14) =
+    const start_tuple: parser.LazyArray16(parser.F2DOT14), const end_tuple: parser.LazyArray16(parser.F2DOT14) =
         if (has_intermediate_region) .{
-            try s.read_array(F2DOT14, axis_count),
-            try s.read_array(F2DOT14, axis_count),
+            try s.read_array(parser.F2DOT14, axis_count),
+            try s.read_array(parser.F2DOT14, axis_count),
         } else .{ .{}, .{} };
 
     var header: TupleVariationHeaderData = .{
@@ -1425,15 +1418,15 @@ const PointAndDelta = struct {
 
 fn outline_var_impl(
     gpa: std.mem.Allocator,
-    glyf_table: glyf.Table,
+    glyf_table: glyfTable,
     gvar_table: Table,
     glyph_id: lib.GlyphId,
     data: []const u8,
     coordinates: []const lib.NormalizedCoordinate,
     depth: u8,
-    builder: *glyf.Builder,
+    builder: *glyfTable.Builder,
 ) GvarError!void {
-    if (depth >= glyf.MAX_COMPONENTS) return error.ParseFail;
+    if (depth >= glyfTable.MAX_COMPONENTS) return error.ParseFail;
 
     var s = parser.Stream.new(data);
     const number_of_contours = try s.read(i16);
@@ -1454,7 +1447,7 @@ fn outline_var_impl(
     if (number_of_contours > 0) {
         // Simple glyph.
 
-        var glyph_points = try glyf.parse_simple_outline(try s.tail(), @bitCast(number_of_contours));
+        var glyph_points = try glyfTable.parse_simple_outline(try s.tail(), @bitCast(number_of_contours));
         const all_glyph_points = glyph_points; // [ARS} ].clone()
         const points_len = glyph_points.points_left;
         try gvar_table.parse_variation_data(glyph_id, coordinates, points_len, &tuples);
@@ -1478,7 +1471,7 @@ fn outline_var_impl(
         //
         // Details:
         // https://docs.microsoft.com/en-us/typography/opentype/spec/gvar#point-numbers-and-processing-for-composite-glyphs
-        var components = glyf.CompositeGlyphIter.new(try s.tail());
+        var components = glyfTable.CompositeGlyphIter.new(try s.tail());
         const components_count = cc: {
             var components_iter = components;
             var count: u16 = 0;
@@ -1505,7 +1498,7 @@ fn outline_var_impl(
 
             transform = transform.combine(component.transform);
 
-            var b = glyf.Builder.new(transform, builder.bbox, builder.builder);
+            var b = glyfTable.Builder.new(transform, builder.bbox, builder.builder);
             if (glyf_table.get(component.glyph_id)) |glyph_data| {
                 try outline_var_impl(
                     gpa,
@@ -1551,10 +1544,10 @@ fn infer_deltas(
     tuple: *const VariationTuple,
     points_set: PackedPointsIter.SetPointsIter,
     // A points iterator that starts after the current point.
-    points: glyf.GlyphPointsIter,
+    points: glyfTable.GlyphPointsIter,
     // A points iterator that starts from the first point in the glyph.
-    all_points: glyf.GlyphPointsIter,
-    curr_point: glyf.GlyphPointsIter.GlyphPoint,
+    all_points: glyfTable.GlyphPointsIter,
+    curr_point: glyfTable.GlyphPointsIter.GlyphPoint,
 ) struct { f32, f32 } {
     const current_contour = if (curr_point.last_point)
         // When we parsed the last point of a contour,

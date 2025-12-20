@@ -1,136 +1,133 @@
 //! A [Color Bitmap Location Table](
 //! https://docs.microsoft.com/en-us/typography/opentype/spec/cblc) implementation.
+///!
+///! EBLC and bloc also share the same structure, so this is re-used for them.
 
 const std = @import("std");
 const lib = @import("../lib.zig");
 const parser = @import("../parser.zig");
 
-/// A [Color Bitmap Location Table](
-/// https://docs.microsoft.com/en-us/typography/opentype/spec/cblc).
-///
-/// EBLC and bloc also share the same structure, so this is re-used for them.
-pub const Table = struct {
+const Table = @This();
+data: []const u8,
+
+/// Parses a table from raw data.
+pub fn parse(
     data: []const u8,
+) Table {
+    return .{
+        .data = data,
+    };
+}
 
-    /// Parses a table from raw data.
-    pub fn parse(
-        data: []const u8,
-    ) Table {
-        return .{
-            .data = data,
-        };
+pub fn get(
+    self: Table,
+    glyph_id: lib.GlyphId,
+    pixels_per_em: u16,
+) ?Location {
+    return self.get_impl(glyph_id, pixels_per_em) catch null;
+}
+
+fn get_impl(
+    self: Table,
+    glyph_id: lib.GlyphId,
+    pixels_per_em: u16,
+) parser.Error!Location {
+    var s = parser.Stream.new(self.data);
+
+    // The CBLC table version is a bit tricky, so we are ignoring it for now.
+    // The CBLC table is based on EBLC table, which was based on the `bloc` table.
+    // And before the CBLC table specification was finished, some fonts,
+    // notably Noto Emoji, have used version 2.0, but the final spec allows only 3.0.
+    // So there are perfectly valid fonts in the wild, which have an invalid version.
+    s.skip(u32); // version
+
+    const size_table = try select_bitmap_size_table(glyph_id, pixels_per_em, &s);
+    const info = try select_index_subtable(self.data, size_table, glyph_id);
+
+    s.offset = info.offset;
+    const index_format = try s.read(u16);
+    const image_format_raw = try s.read(u16);
+    var image_offset: usize = (try s.read(parser.Offset32))[0];
+
+    const bit_depth = size_table.bit_depth;
+    const image_format: Location.BitmapFormat = switch (image_format_raw) {
+        1 => .{ .metrics = .small, .data = .{ .byte_aligned = bit_depth } },
+        2 => .{ .metrics = .small, .data = .{ .bit_aligned = bit_depth } },
+        5 => .{ .metrics = .shared, .data = .{ .bit_aligned = bit_depth } },
+        6 => .{ .metrics = .big, .data = .{ .byte_aligned = bit_depth } },
+        7 => .{ .metrics = .big, .data = .{ .bit_aligned = bit_depth } },
+        17 => .{ .metrics = .small, .data = .png },
+        18 => .{ .metrics = .big, .data = .png },
+        19 => .{ .metrics = .shared, .data = .png },
+        else => return error.ParseFail, // Invalid format.
+    };
+
+    // [RazrFalcon] TODO: I wasn't able to find fonts with index 4 and 5, so they are untested.
+
+    const glyph_diff = try std.math.sub(u16, glyph_id[0], info.start_glyph_id[0]);
+    var metrics = std.mem.zeroes(Location.Metrics);
+
+    switch (index_format) {
+        1 => {
+            s.advance(glyph_diff * parser.size_of(parser.Offset32));
+            const offset = try s.read(parser.Offset32);
+            image_offset += offset[0];
+        },
+        2 => {
+            const image_size = try s.read(u32);
+            image_offset += try std.math.mul(usize, glyph_diff, image_size);
+            metrics.height = try s.read(u8);
+            metrics.width = try s.read(u8);
+            metrics.x = try s.read(i8);
+            metrics.y = try s.read(i8);
+        },
+        3 => {
+            s.advance(glyph_diff * parser.size_of(parser.Offset16));
+            const offset = try s.read(parser.Offset16);
+            image_offset += offset[0];
+        },
+        4 => {
+            const num_glyphs = try std.math.add(u32, try s.read(u32), 1);
+            const pairs = try s.read_array(GlyphIdOffsetPair, num_glyphs);
+            var iter = pairs.iterator();
+            const pair = while (iter.next()) |p| {
+                if (p.glyph_id[0] == glyph_id[0]) break p;
+            } else return error.ParseFail;
+
+            image_offset += pair.offset[0];
+        },
+        5 => {
+            const image_size = try s.read(u32);
+            metrics.height = try s.read(u8);
+            metrics.width = try s.read(u8);
+            metrics.x = try s.read(i8);
+            metrics.y = try s.read(i8);
+            s.skip(u8); // hor_advance
+            s.skip(i8); // ver_bearing_x
+            s.skip(i8); // ver_bearing_y
+            s.skip(u8); // ver_advance
+            const num_glyphs = try s.read(u32);
+            const glyphs = try s.read_array(lib.GlyphId, num_glyphs);
+
+            const func = struct {
+                fn func(lhs: lib.GlyphId, rhs: lib.GlyphId) std.math.Order {
+                    return std.math.order(lhs[0], rhs[0]);
+                }
+            }.func;
+            const index, _ = glyphs.binary_search_by(glyph_id, func) catch return error.ParseFail;
+
+            image_offset = try std.math.add(usize, image_offset, try std.math.mul(usize, index, image_size));
+        },
+        else => return error.ParseFail, // Invalid format.
     }
 
-    pub fn get(
-        self: Table,
-        glyph_id: lib.GlyphId,
-        pixels_per_em: u16,
-    ) ?Location {
-        return self.get_impl(glyph_id, pixels_per_em) catch null;
-    }
-
-    fn get_impl(
-        self: Table,
-        glyph_id: lib.GlyphId,
-        pixels_per_em: u16,
-    ) parser.Error!Location {
-        var s = parser.Stream.new(self.data);
-
-        // The CBLC table version is a bit tricky, so we are ignoring it for now.
-        // The CBLC table is based on EBLC table, which was based on the `bloc` table.
-        // And before the CBLC table specification was finished, some fonts,
-        // notably Noto Emoji, have used version 2.0, but the final spec allows only 3.0.
-        // So there are perfectly valid fonts in the wild, which have an invalid version.
-        s.skip(u32); // version
-
-        const size_table = try select_bitmap_size_table(glyph_id, pixels_per_em, &s);
-        const info = try select_index_subtable(self.data, size_table, glyph_id);
-
-        s.offset = info.offset;
-        const index_format = try s.read(u16);
-        const image_format_raw = try s.read(u16);
-        var image_offset: usize = (try s.read(parser.Offset32))[0];
-
-        const bit_depth = size_table.bit_depth;
-        const image_format: Location.BitmapFormat = switch (image_format_raw) {
-            1 => .{ .metrics = .small, .data = .{ .byte_aligned = bit_depth } },
-            2 => .{ .metrics = .small, .data = .{ .bit_aligned = bit_depth } },
-            5 => .{ .metrics = .shared, .data = .{ .bit_aligned = bit_depth } },
-            6 => .{ .metrics = .big, .data = .{ .byte_aligned = bit_depth } },
-            7 => .{ .metrics = .big, .data = .{ .bit_aligned = bit_depth } },
-            17 => .{ .metrics = .small, .data = .png },
-            18 => .{ .metrics = .big, .data = .png },
-            19 => .{ .metrics = .shared, .data = .png },
-            else => return error.ParseFail, // Invalid format.
-        };
-
-        // [RazrFalcon] TODO: I wasn't able to find fonts with index 4 and 5, so they are untested.
-
-        const glyph_diff = try std.math.sub(u16, glyph_id[0], info.start_glyph_id[0]);
-        var metrics = std.mem.zeroes(Location.Metrics);
-
-        switch (index_format) {
-            1 => {
-                s.advance(glyph_diff * parser.size_of(parser.Offset32));
-                const offset = try s.read(parser.Offset32);
-                image_offset += offset[0];
-            },
-            2 => {
-                const image_size = try s.read(u32);
-                image_offset += try std.math.mul(usize, glyph_diff, image_size);
-                metrics.height = try s.read(u8);
-                metrics.width = try s.read(u8);
-                metrics.x = try s.read(i8);
-                metrics.y = try s.read(i8);
-            },
-            3 => {
-                s.advance(glyph_diff * parser.size_of(parser.Offset16));
-                const offset = try s.read(parser.Offset16);
-                image_offset += offset[0];
-            },
-            4 => {
-                const num_glyphs = try std.math.add(u32, try s.read(u32), 1);
-                const pairs = try s.read_array(GlyphIdOffsetPair, num_glyphs);
-                var iter = pairs.iterator();
-                const pair = while (iter.next()) |p| {
-                    if (p.glyph_id[0] == glyph_id[0]) break p;
-                } else return error.ParseFail;
-
-                image_offset += pair.offset[0];
-            },
-            5 => {
-                const image_size = try s.read(u32);
-                metrics.height = try s.read(u8);
-                metrics.width = try s.read(u8);
-                metrics.x = try s.read(i8);
-                metrics.y = try s.read(i8);
-                s.skip(u8); // hor_advance
-                s.skip(i8); // ver_bearing_x
-                s.skip(i8); // ver_bearing_y
-                s.skip(u8); // ver_advance
-                const num_glyphs = try s.read(u32);
-                const glyphs = try s.read_array(lib.GlyphId, num_glyphs);
-
-                const func = struct {
-                    fn func(lhs: lib.GlyphId, rhs: lib.GlyphId) std.math.Order {
-                        return std.math.order(lhs[0], rhs[0]);
-                    }
-                }.func;
-                const index, _ = glyphs.binary_search_by(glyph_id, func) catch return error.ParseFail;
-
-                image_offset = try std.math.add(usize, image_offset, try std.math.mul(usize, index, image_size));
-            },
-            else => return error.ParseFail, // Invalid format.
-        }
-
-        return .{
-            .format = image_format,
-            .offset = image_offset,
-            .metrics = metrics,
-            .ppem = size_table.ppem,
-        };
-    }
-};
+    return .{
+        .format = image_format,
+        .offset = image_offset,
+        .metrics = metrics,
+        .ppem = size_table.ppem,
+    };
+}
 
 pub const Location = struct {
     format: BitmapFormat,

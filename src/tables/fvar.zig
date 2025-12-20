@@ -6,41 +6,34 @@ const lib = @import("../lib.zig");
 const parser = @import("../parser.zig");
 const utils = @import("../utils.zig");
 
-const LazyArray16 = parser.LazyArray16;
-const Offset16 = parser.Offset16;
-const Offset32 = parser.Offset32;
-const Fixed = parser.Fixed;
+const Table = @This();
 
-/// A [Font Variations Table](
-/// https://docs.microsoft.com/en-us/typography/opentype/spec/fvar).
-pub const Table = struct {
-    /// A list of variation axes.
-    axes: LazyArray16(VariationAxis),
+/// A list of variation axes.
+axes: parser.LazyArray16(VariationAxis),
 
-    /// Parses a table from raw data.
-    pub fn parse(
-        data: []const u8,
-    ) parser.Error!Table {
-        var s = parser.Stream.new(data);
+/// Parses a table from raw data.
+pub fn parse(
+    data: []const u8,
+) parser.Error!Table {
+    var s = parser.Stream.new(data);
 
-        const version = try s.read(u32);
-        if (version != 0x00010000) return error.ParseFail;
+    const version = try s.read(u32);
+    if (version != 0x00010000) return error.ParseFail;
 
-        const axes_array_offset = try s.read(Offset16);
-        s.skip(u16); // reserved
-        const axis_count = try s.read(u16);
+    const axes_array_offset = try s.read(parser.Offset16);
+    s.skip(u16); // reserved
+    const axis_count = try s.read(u16);
 
-        // 'If axisCount is zero, then the font is not functional as a variable font,
-        // and must be treated as a non-variable font;
-        // any variation-specific tables or data is ignored.'
-        if (axis_count == 0) return error.ParseFail;
+    // 'If axisCount is zero, then the font is not functional as a variable font,
+    // and must be treated as a non-variable font;
+    // any variation-specific tables or data is ignored.'
+    if (axis_count == 0) return error.ParseFail;
 
-        s.offset = axes_array_offset[0];
-        const axes = try s.read_array(VariationAxis, axis_count);
+    s.offset = axes_array_offset[0];
+    const axes = try s.read_array(VariationAxis, axis_count);
 
-        return .{ .axes = axes };
-    }
-};
+    return .{ .axes = axes };
+}
 
 /// A [variation axis](https://docs.microsoft.com/en-us/typography/opentype/spec/fvar#variationaxisrecord).
 pub const VariationAxis = struct {
@@ -63,9 +56,9 @@ pub const VariationAxis = struct {
             var s = parser.Stream.new(data);
 
             const tag = try s.read(lib.Tag);
-            const min_value = try s.read(Fixed);
-            const def_value = try s.read(Fixed);
-            const max_value = try s.read(Fixed);
+            const min_value = try s.read(parser.Fixed);
+            const def_value = try s.read(parser.Fixed);
+            const max_value = try s.read(parser.Fixed);
             const flags = try s.read(u16);
             const name_id = try s.read(u16);
 

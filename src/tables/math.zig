@@ -7,35 +7,34 @@ const ggg = @import("../ggg.zig");
 
 const Device = @import("gpos.zig").Device;
 
-/// A [Math Table](https://docs.microsoft.com/en-us/typography/opentype/spec/math).
-pub const Table = struct {
-    /// Math positioning constants.
-    constants: ?Constants,
-    /// Per-glyph positioning information.
-    glyph_info: ?GlyphInfo,
-    /// Variants and assembly recipes for growable glyphs.
-    variants: ?Variants,
+const Table = @This();
 
-    /// Parses a table from raw data.
-    pub fn parse(
-        data: []const u8,
-    ) parser.Error!Table {
-        var s = parser.Stream.new(data);
+/// Math positioning constants.
+constants: ?Constants,
+/// Per-glyph positioning information.
+glyph_info: ?GlyphInfo,
+/// Variants and assembly recipes for growable glyphs.
+variants: ?Variants,
 
-        if (try s.read(u16) != 1) return error.ParseFail; // major version
-        s.skip(u16); // minor version
+/// Parses a table from raw data.
+pub fn parse(
+    data: []const u8,
+) parser.Error!Table {
+    var s = parser.Stream.new(data);
 
-        const constants = parse_at_offset(Constants, &s, data) catch null;
-        const glyph_info = parse_at_offset(GlyphInfo, &s, data) catch null;
-        const variants = parse_at_offset(Variants, &s, data) catch null;
+    if (try s.read(u16) != 1) return error.ParseFail; // major version
+    s.skip(u16); // minor version
 
-        return .{
-            .constants = constants,
-            .glyph_info = glyph_info,
-            .variants = variants,
-        };
-    }
-};
+    const constants = parse_at_offset(Constants, &s, data) catch null;
+    const glyph_info = parse_at_offset(GlyphInfo, &s, data) catch null;
+    const variants = parse_at_offset(Variants, &s, data) catch null;
+
+    return .{
+        .constants = constants,
+        .glyph_info = glyph_info,
+        .variants = variants,
+    };
+}
 
 /// A [Math Constants Table](https://learn.microsoft.com/en-us/typography/opentype/spec/math#mathconstants-table).
 pub const Constants = struct {

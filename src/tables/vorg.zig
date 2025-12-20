@@ -2,61 +2,57 @@
 //! https://docs.microsoft.com/en-us/typography/opentype/spec/vorg) implementation.
 
 const std = @import("std");
+const lib = @import("../lib.zig");
 const parser = @import("../parser.zig");
 
-const GlyphId = @import("../lib.zig").GlyphId;
+const Table = @This();
 
-const LazyArray16 = parser.LazyArray16;
+/// Default origin.
+default_y: i16,
+/// A list of metrics for each glyph.
+///
+/// Ordered by `glyph_id`.
+metrics: parser.LazyArray16(VerticalOriginMetrics),
 
-/// A [Vertical Origin Table](https://docs.microsoft.com/en-us/typography/opentype/spec/vorg).
-pub const Table = struct {
-    /// Default origin.
-    default_y: i16,
-    /// A list of metrics for each glyph.
-    ///
-    /// Ordered by `glyph_id`.
-    metrics: LazyArray16(VerticalOriginMetrics),
+/// Parses a table from raw data.
+pub fn parse(
+    data: []const u8,
+) parser.Error!Table {
+    var s = parser.Stream.new(data);
 
-    /// Parses a table from raw data.
-    pub fn parse(
-        data: []const u8,
-    ) parser.Error!Table {
-        var s = parser.Stream.new(data);
+    const version = try s.read(u32);
+    if (version != 0x00010000) return error.ParseFail;
 
-        const version = try s.read(u32);
-        if (version != 0x00010000) return error.ParseFail;
+    const default_y = try s.read(i16);
+    const count = try s.read(u16);
+    const metrics = try s.read_array(VerticalOriginMetrics, count);
 
-        const default_y = try s.read(i16);
-        const count = try s.read(u16);
-        const metrics = try s.read_array(VerticalOriginMetrics, count);
+    return .{
+        .default_y = default_y,
+        .metrics = metrics,
+    };
+}
 
-        return .{
-            .default_y = default_y,
-            .metrics = metrics,
-        };
-    }
+/// Returns glyph's Y origin.
+pub fn glyph_y_origin(
+    self: Table,
+    glyph_id: lib.GlyphId,
+) i16 {
+    const func = struct {
+        fn func(m: VerticalOriginMetrics, gi: lib.GlyphId) std.math.Order {
+            return std.math.order(m.glyph_id[0], gi[0]);
+        }
+    }.func;
 
-    /// Returns glyph's Y origin.
-    pub fn glyph_y_origin(
-        self: Table,
-        glyph_id: GlyphId,
-    ) i16 {
-        const func = struct {
-            fn func(m: VerticalOriginMetrics, gi: GlyphId) std.math.Order {
-                return std.math.order(m.glyph_id[0], gi[0]);
-            }
-        }.func;
-
-        _, const vom = self.metrics.binary_search_by(glyph_id, func) catch return self.default_y;
-        return vom.y;
-    }
-};
+    _, const vom = self.metrics.binary_search_by(glyph_id, func) catch return self.default_y;
+    return vom.y;
+}
 
 /// Vertical origin metrics for the
 /// [Vertical Origin Table](https://docs.microsoft.com/en-us/typography/opentype/spec/vorg).
 pub const VerticalOriginMetrics = struct {
     /// Glyph ID.
-    glyph_id: GlyphId,
+    glyph_id: lib.GlyphId,
     /// Y coordinate, in the font's design coordinate system, of the vertical origin.
     y: i16,
 
