@@ -22,8 +22,6 @@ const CharStringParser = @import("charstring.zig");
 const STACK_LIMIT: u8 = 10;
 const MAX_ARGUMENTS_STACK_LEN: usize = 48;
 
-const TWO_BYTE_OPERATOR_MARK: u8 = 12;
-
 /// Enumerates Charset IDs defined in the Adobe Technical Note #5176, Table 22
 const charset_id = struct {
     pub const ISO_ADOBE: usize = 0;
@@ -35,47 +33,6 @@ const charset_id = struct {
 const encoding_id = struct {
     pub const STANDARD: usize = 0;
     pub const EXPERT: usize = 1;
-};
-
-/// Enumerates some operators defined in the Adobe Technical Note #5176,
-/// Table 23 Private DICT Operators
-const private_dict_operator = struct {
-    pub const LOCAL_SUBROUTINES_OFFSET: u16 = 19;
-    pub const DEFAULT_WIDTH: u16 = 20;
-    pub const NOMINAL_WIDTH: u16 = 21;
-};
-
-/// Enumerates some operators defined in the Adobe Technical Note #5177.
-const adobe_operator = struct {
-    pub const HORIZONTAL_STEM: u8 = 1;
-    pub const VERTICAL_STEM: u8 = 3;
-    pub const VERTICAL_MOVE_TO: u8 = 4;
-    pub const LINE_TO: u8 = 5;
-    pub const HORIZONTAL_LINE_TO: u8 = 6;
-    pub const VERTICAL_LINE_TO: u8 = 7;
-    pub const CURVE_TO: u8 = 8;
-    pub const CALL_LOCAL_SUBROUTINE: u8 = 10;
-    pub const RETURN: u8 = 11;
-    pub const ENDCHAR: u8 = 14;
-    pub const HORIZONTAL_STEM_HINT_MASK: u8 = 18;
-    pub const HINT_MASK: u8 = 19;
-    pub const COUNTER_MASK: u8 = 20;
-    pub const MOVE_TO: u8 = 21;
-    pub const HORIZONTAL_MOVE_TO: u8 = 22;
-    pub const VERTICAL_STEM_HINT_MASK: u8 = 23;
-    pub const CURVE_LINE: u8 = 24;
-    pub const LINE_CURVE: u8 = 25;
-    pub const VV_CURVE_TO: u8 = 26;
-    pub const HH_CURVE_TO: u8 = 27;
-    pub const SHORT_INT: u8 = 28;
-    pub const CALL_GLOBAL_SUBROUTINE: u8 = 29;
-    pub const VH_CURVE_TO: u8 = 30;
-    pub const HV_CURVE_TO: u8 = 31;
-    pub const HFLEX: u8 = 34;
-    pub const FLEX: u8 = 35;
-    pub const HFLEX1: u8 = 36;
-    pub const FLEX1: u8 = 37;
-    pub const FIXED_16_16: u8 = 255;
 };
 
 /// A [Compact Font Format Table](
@@ -389,23 +346,24 @@ const TopDict = struct {
     has_ros: bool = false,
     fd_array_offset: ?usize = null,
     fd_select_offset: ?usize = null,
+
+    /// Enumerates some operators defined in the Adobe Technical Note #5176,
+    /// Table 9 Top DICT Operator Entries
+    const Operator = enum(u16) {
+        charset_offset = 15,
+        encoding_offset = 16,
+        char_strings_offset = 17,
+        private_dict_size_and_offset = 18,
+        font_matrix = 1207,
+        ros = 1230,
+        fd_array = 1236,
+        fd_select = 1237,
+        _,
+    };
 };
 
 // Limits according to the Adobe Technical Note #5176, chapter 4 DICT Data.
 const MAX_OPERANDS_LEN: usize = 48;
-
-/// Enumerates some operators defined in the Adobe Technical Note #5176,
-/// Table 9 Top DICT Operator Entries
-const top_dict_operator = struct {
-    pub const CHARSET_OFFSET: u16 = 15;
-    pub const ENCODING_OFFSET: u16 = 16;
-    pub const CHAR_STRINGS_OFFSET: u16 = 17;
-    pub const PRIVATE_DICT_SIZE_AND_OFFSET: u16 = 18;
-    pub const FONT_MATRIX: u16 = 1207;
-    pub const ROS: u16 = 1230;
-    pub const FD_ARRAY: u16 = 1236;
-    pub const FD_SELECT: u16 = 1237;
-};
 
 fn parse_top_dict(
     s: *parser.Stream,
@@ -421,42 +379,28 @@ fn parse_top_dict(
     var operands_buffer: [MAX_OPERANDS_LEN]f64 = @splat(0.0);
     var dict_parser: DictionaryParser = .new(data, &operands_buffer);
 
-    while (dict_parser.parse_next()) |operator| {
-        switch (operator[0]) {
-            top_dict_operator.CHARSET_OFFSET => {
-                top_dict.charset_offset = dict_parser.parse_offset() catch null;
-            },
-            top_dict_operator.ENCODING_OFFSET => {
-                top_dict.encoding_offset = dict_parser.parse_offset() catch null;
-            },
-            top_dict_operator.CHAR_STRINGS_OFFSET => {
-                top_dict.char_strings_offset = try dict_parser.parse_offset();
-            },
-            top_dict_operator.PRIVATE_DICT_SIZE_AND_OFFSET => {
-                top_dict.private_dict_range = dict_parser.parse_range() catch null;
-            },
-            top_dict_operator.FONT_MATRIX => {
-                try dict_parser.parse_operands();
-                const operands = dict_parser.operands_slice();
-                if (operands.len == 6) top_dict.matrix = .{
-                    .sx = @floatCast(operands[0]),
-                    .ky = @floatCast(operands[1]),
-                    .kx = @floatCast(operands[2]),
-                    .sy = @floatCast(operands[3]),
-                    .tx = @floatCast(operands[4]),
-                    .ty = @floatCast(operands[5]),
-                };
-            },
-            top_dict_operator.ROS => top_dict.has_ros = true,
-            top_dict_operator.FD_ARRAY => {
-                top_dict.fd_array_offset = dict_parser.parse_offset() catch null;
-            },
-            top_dict_operator.FD_SELECT => {
-                top_dict.fd_select_offset = dict_parser.parse_offset() catch null;
-            },
-            else => {},
-        }
-    }
+    while (dict_parser.parse_next(TopDict.Operator)) |operator| switch (operator) {
+        .charset_offset => top_dict.charset_offset = dict_parser.parse_offset() catch null,
+        .encoding_offset => top_dict.encoding_offset = dict_parser.parse_offset() catch null,
+        .char_strings_offset => top_dict.char_strings_offset = try dict_parser.parse_offset(),
+        .private_dict_size_and_offset => top_dict.private_dict_range = dict_parser.parse_range() catch null,
+        .font_matrix => {
+            try dict_parser.parse_operands();
+            const operands = dict_parser.operands_slice();
+            if (operands.len == 6) top_dict.matrix = .{
+                .sx = @floatCast(operands[0]),
+                .ky = @floatCast(operands[1]),
+                .kx = @floatCast(operands[2]),
+                .sy = @floatCast(operands[3]),
+                .tx = @floatCast(operands[4]),
+                .ty = @floatCast(operands[5]),
+            };
+        },
+        .ros => top_dict.has_ros = true,
+        .fd_array => top_dict.fd_array_offset = dict_parser.parse_offset() catch null,
+        .fd_select => top_dict.fd_select_offset = dict_parser.parse_offset() catch null,
+        _ => {},
+    };
 
     return top_dict;
 }
@@ -541,17 +485,17 @@ fn parse_private_dict(
     var operands_buffer: [MAX_OPERANDS_LEN]f64 = @splat(0.0);
     var dict_parser: DictionaryParser = .new(data, &operands_buffer);
 
-    while (dict_parser.parse_next()) |operator| switch (operator[0]) {
-        private_dict_operator.LOCAL_SUBROUTINES_OFFSET => dict.local_subroutines_offset =
+    while (dict_parser.parse_next(PrivateDict.Operator)) |operator| switch (operator) {
+        .local_subroutines_offset => dict.local_subroutines_offset =
             dict_parser.parse_offset() catch null,
 
-        private_dict_operator.DEFAULT_WIDTH => dict.default_width =
+        .default_width => dict.default_width =
             dict_parser.parse_number_method(f32) catch null,
 
-        private_dict_operator.NOMINAL_WIDTH => dict.nominal_width =
+        .nominal_width => dict.nominal_width =
             dict_parser.parse_number_method(f32) catch null,
 
-        else => {},
+        _ => {},
     };
 
     return dict;
@@ -561,6 +505,15 @@ const PrivateDict = struct {
     local_subroutines_offset: ?usize = null,
     default_width: ?f32 = null,
     nominal_width: ?f32 = null,
+
+    /// Enumerates some operators defined in the Adobe Technical Note #5176,
+    /// Table 23 Private DICT Operators
+    const Operator = enum(u16) {
+        local_subroutines_offset = 19,
+        default_width = 20,
+        nominal_width = 21,
+        _,
+    };
 };
 
 const CharStringParserContext = struct {
@@ -631,6 +584,45 @@ fn parse_char_string(
     return .{ rect, ctx.width };
 }
 
+/// Enumerates some operators defined in the Adobe Technical Note #5177.
+const CharStringOperator = enum(u8) {
+    hor_stem = 1,
+    ver_stem = 3,
+    ver_move_to = 4,
+    line_to = 5,
+    hor_line_to = 6,
+    ver_line_to = 7,
+    curve_to = 8,
+    call_local_subroutine = 10,
+    @"return" = 11,
+    two_byte_operator_mark = 12,
+    endchar = 14,
+    hor_stem_hint_mask = 18,
+    hint_mask = 19,
+    counter_mask = 20,
+    move_to = 21,
+    hor_move_to = 22,
+    ver_stem_hint_mask = 23,
+    curve_line = 24,
+    line_curve = 25,
+    vv_curve_to = 26,
+    hh_curve_to = 27,
+    short_int = 28,
+    call_global_subroutine = 29,
+    vh_curve_to = 30,
+    hv_curve_to = 31,
+    fixed_16_16 = 255,
+    _,
+};
+
+const FlexOperator = enum(u8) {
+    hflex = 34,
+    flex = 35,
+    hflex1 = 36,
+    flex1 = 37,
+    _,
+};
+
 fn parse_char_string_recursive(
     ctx: *CharStringParserContext,
     char_string: []const u8,
@@ -639,14 +631,12 @@ fn parse_char_string_recursive(
 ) cff.Error!void {
     var s = parser.Stream.new(char_string);
     while (!s.at_end()) {
-        const op = s.read(u8) catch return error.ReadOutOfBounds;
+        const op = s.read(CharStringOperator) catch return error.ReadOutOfBounds;
         switch (op) {
-            // Reserved.
-            0, 2, 9, 13, 15, 16, 17 => return error.InvalidOperator,
-            adobe_operator.HORIZONTAL_STEM,
-            adobe_operator.VERTICAL_STEM,
-            adobe_operator.HORIZONTAL_STEM_HINT_MASK,
-            adobe_operator.VERTICAL_STEM_HINT_MASK,
+            .hor_stem,
+            .ver_stem,
+            .hor_stem_hint_mask,
+            .ver_stem_hint_mask,
             => {
                 // y dy {dya dyb}* hstem
                 // x dx {dxa dxb}* vstem
@@ -664,7 +654,7 @@ fn parse_char_string_recursive(
                 // We are ignoring the hint operators.
                 p.stack.clearRetainingCapacity();
             },
-            adobe_operator.VERTICAL_MOVE_TO => {
+            .ver_move_to => {
                 var i: usize = 0;
                 if (p.stack.items.len == 2) {
                     i += 1;
@@ -673,11 +663,11 @@ fn parse_char_string_recursive(
 
                 try p.parse_vertical_move_to(i);
             },
-            adobe_operator.LINE_TO => try p.parse_line_to(),
-            adobe_operator.HORIZONTAL_LINE_TO => try p.parse_horizontal_line_to(),
-            adobe_operator.VERTICAL_LINE_TO => try p.parse_vertical_line_to(),
-            adobe_operator.CURVE_TO => try p.parse_curve_to(),
-            adobe_operator.CALL_LOCAL_SUBROUTINE => {
+            .line_to => try p.parse_line_to(),
+            .hor_line_to => try p.parse_horizontal_line_to(),
+            .ver_line_to => try p.parse_vertical_line_to(),
+            .curve_to => try p.parse_curve_to(),
+            .call_local_subroutine => {
                 if (p.stack.items.len == 0) return error.InvalidArgumentsStackLength;
                 if (depth == STACK_LIMIT) return error.NestingLimitReached;
 
@@ -713,19 +703,19 @@ fn parse_char_string_recursive(
                     break;
                 }
             },
-            adobe_operator.RETURN => break,
-            TWO_BYTE_OPERATOR_MARK => {
+            .@"return" => break,
+            .two_byte_operator_mark => {
                 // flex
-                const op2 = s.read(u8) catch return error.ReadOutOfBounds;
+                const op2 = s.read(FlexOperator) catch return error.ReadOutOfBounds;
                 switch (op2) {
-                    adobe_operator.HFLEX => try p.parse_hflex(),
-                    adobe_operator.FLEX => try p.parse_flex(),
-                    adobe_operator.HFLEX1 => try p.parse_hflex1(),
-                    adobe_operator.FLEX1 => try p.parse_flex1(),
-                    else => return error.UnsupportedOperator,
+                    .hflex => try p.parse_hflex(),
+                    .flex => try p.parse_flex(),
+                    .hflex1 => try p.parse_hflex1(),
+                    .flex1 => try p.parse_flex1(),
+                    _ => return error.UnsupportedOperator,
                 }
             },
-            adobe_operator.ENDCHAR => {
+            .endchar => {
                 if (p.stack.items.len == 4 or
                     (ctx.width == null and p.stack.items.len == 5))
                 {
@@ -778,7 +768,7 @@ fn parse_char_string_recursive(
 
                 break;
             },
-            adobe_operator.HINT_MASK, adobe_operator.COUNTER_MASK => {
+            .hint_mask, .counter_mask => {
                 var len = p.stack.items.len;
 
                 // We are ignoring the hint operators.
@@ -792,7 +782,7 @@ fn parse_char_string_recursive(
                 ctx.stems_len += @as(u32, @truncate(len)) >> 1;
                 s.advance((ctx.stems_len + 7) >> 3);
             },
-            adobe_operator.MOVE_TO => {
+            .move_to => {
                 const i: usize = if (p.stack.items.len == 3) i: {
                     if (ctx.width == null) ctx.width = p.stack.items[0];
                     break :i 1;
@@ -800,7 +790,7 @@ fn parse_char_string_recursive(
 
                 try p.parse_move_to(i);
             },
-            adobe_operator.HORIZONTAL_MOVE_TO => {
+            .hor_move_to => {
                 const i: usize = if (p.stack.items.len == 2) i: {
                     if (ctx.width == null) ctx.width = p.stack.items[0];
                     break :i 1;
@@ -808,15 +798,15 @@ fn parse_char_string_recursive(
 
                 try p.parse_horizontal_move_to(i);
             },
-            adobe_operator.CURVE_LINE => try p.parse_curve_line(),
-            adobe_operator.LINE_CURVE => try p.parse_line_curve(),
-            adobe_operator.VV_CURVE_TO => try p.parse_vv_curve_to(),
-            adobe_operator.HH_CURVE_TO => try p.parse_hh_curve_to(),
-            adobe_operator.SHORT_INT => {
+            .curve_line => try p.parse_curve_line(),
+            .line_curve => try p.parse_line_curve(),
+            .vv_curve_to => try p.parse_vv_curve_to(),
+            .hh_curve_to => try p.parse_hh_curve_to(),
+            .short_int => {
                 const n = s.read(i16) catch return error.ReadOutOfBounds;
                 p.stack.appendBounded(@floatFromInt(n)) catch return error.ArgumentsStackLimitReached;
             },
-            adobe_operator.CALL_GLOBAL_SUBROUTINE => {
+            .call_global_subroutine => {
                 if (p.stack.items.len == 0) return error.InvalidArgumentsStackLength;
                 if (depth == STACK_LIMIT) return error.NestingLimitReached;
 
@@ -837,12 +827,18 @@ fn parse_char_string_recursive(
                     break;
                 }
             },
-            adobe_operator.VH_CURVE_TO => try p.parse_vh_curve_to(),
-            adobe_operator.HV_CURVE_TO => try p.parse_hv_curve_to(),
-            32...246 => try p.parse_int1(op),
-            247...250 => try p.parse_int2(op, &s),
-            251...254 => try p.parse_int3(op, &s),
-            adobe_operator.FIXED_16_16 => try p.parse_fixed(&s),
+            .vh_curve_to => try p.parse_vh_curve_to(),
+            .hv_curve_to => try p.parse_hv_curve_to(),
+            .fixed_16_16 => try p.parse_fixed(&s),
+            _ => switch (@intFromEnum(op)) {
+                // Reserved.
+                0, 2, 9, 13, 15, 16, 17 => return error.InvalidOperator,
+                32...246 => |d| try p.parse_int1(d),
+                247...250 => |d| try p.parse_int2(d, &s),
+                251...254 => |d| try p.parse_int3(d, &s),
+                else => unreachable, // exhausted
+
+            },
         }
 
         if (p.width_only and ctx.width != null) break;
@@ -885,8 +881,8 @@ fn parse_font_dict(
 ) parser.Error!struct { usize, usize } {
     var operands_buffer: [MAX_OPERANDS_LEN]f64 = @splat(0.0);
     var dict_parser = DictionaryParser.new(data, &operands_buffer);
-    while (dict_parser.parse_next()) |operator|
-        if (operator[0] == top_dict_operator.PRIVATE_DICT_SIZE_AND_OFFSET)
+    while (dict_parser.parse_next(TopDict.Operator)) |operator|
+        if (operator == .private_dict_size_and_offset)
             return try dict_parser.parse_range();
 
     return error.ParseFail;

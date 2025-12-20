@@ -59,7 +59,7 @@ pub const VariationAxis = struct {
             const min_value = try s.read(parser.Fixed);
             const def_value = try s.read(parser.Fixed);
             const max_value = try s.read(parser.Fixed);
-            const flags = try s.read(u16);
+            const flags = try s.read(packed struct(u16) { _0: u3 = 0, hidden: bool, _1: u12 = 0 });
             const name_id = try s.read(u16);
 
             return .{
@@ -68,7 +68,7 @@ pub const VariationAxis = struct {
                 .def_value = def_value.value,
                 .max_value = @max(def_value.value, max_value.value),
                 .name_id = name_id,
-                .hidden = (flags >> 3) & 1 == 1,
+                .hidden = flags.hidden,
             };
         }
     };

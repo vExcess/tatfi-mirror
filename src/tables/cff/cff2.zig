@@ -22,58 +22,6 @@ const MAX_OPERANDS_LEN: usize = 513;
 const STACK_LIMIT: u8 = 10;
 const MAX_ARGUMENTS_STACK_LEN: usize = 513;
 
-const TWO_BYTE_OPERATOR_MARK: u8 = 12;
-
-// https://docs.microsoft.com/en-us/typography/opentype/spec/cff2#table-9-top-dict-operator-entries
-const top_dict_operator = struct {
-    pub const CHAR_STRINGS_OFFSET: u16 = 17;
-    pub const VARIATION_STORE_OFFSET: u16 = 24;
-    pub const FONT_DICT_INDEX_OFFSET: u16 = 1236;
-};
-
-// https://docs.microsoft.com/en-us/typography/opentype/spec/cff2#table-10-font-dict-operator-entries
-const font_dict_operator = struct {
-    pub const PRIVATE_DICT_SIZE_AND_OFFSET: u16 = 18;
-};
-
-// https://docs.microsoft.com/en-us/typography/opentype/spec/cff2#table-16-private-dict-operators
-const private_dict_operator = struct {
-    pub const LOCAL_SUBROUTINES_OFFSET: u16 = 19;
-};
-
-// https://docs.microsoft.com/en-us/typography/opentype/spec/cff2charstr#4-charstring-operators
-const ms_operator = struct {
-    pub const HORIZONTAL_STEM: u8 = 1;
-    pub const VERTICAL_STEM: u8 = 3;
-    pub const VERTICAL_MOVE_TO: u8 = 4;
-    pub const LINE_TO: u8 = 5;
-    pub const HORIZONTAL_LINE_TO: u8 = 6;
-    pub const VERTICAL_LINE_TO: u8 = 7;
-    pub const CURVE_TO: u8 = 8;
-    pub const CALL_LOCAL_SUBROUTINE: u8 = 10;
-    pub const VS_INDEX: u8 = 15;
-    pub const BLEND: u8 = 16;
-    pub const HORIZONTAL_STEM_HINT_MASK: u8 = 18;
-    pub const HINT_MASK: u8 = 19;
-    pub const COUNTER_MASK: u8 = 20;
-    pub const MOVE_TO: u8 = 21;
-    pub const HORIZONTAL_MOVE_TO: u8 = 22;
-    pub const VERTICAL_STEM_HINT_MASK: u8 = 23;
-    pub const CURVE_LINE: u8 = 24;
-    pub const LINE_CURVE: u8 = 25;
-    pub const VV_CURVE_TO: u8 = 26;
-    pub const HH_CURVE_TO: u8 = 27;
-    pub const SHORT_INT: u8 = 28;
-    pub const CALL_GLOBAL_SUBROUTINE: u8 = 29;
-    pub const VH_CURVE_TO: u8 = 30;
-    pub const HV_CURVE_TO: u8 = 31;
-    pub const HFLEX: u8 = 34;
-    pub const FLEX: u8 = 35;
-    pub const HFLEX1: u8 = 36;
-    pub const FLEX1: u8 = 37;
-    pub const FIXED_16_16: u8 = 255;
-};
-
 const Table = @This();
 
 global_subrs: Index = .default,
@@ -156,6 +104,14 @@ const TopDictData = struct {
     font_dict_index_offset: ?usize = null,
     variation_store_offset: ?usize = null,
 
+    // https://docs.microsoft.com/en-us/typography/opentype/spec/cff2#table-9-top-dict-operator-entries
+    const Operator = enum(u16) {
+        char_strings_offset = 17,
+        variation_store_offset = 24,
+        font_dict_index_offset = 1236,
+        _,
+    };
+
     fn parse(
         data: []const u8,
     ) parser.Error!TopDictData {
@@ -164,17 +120,17 @@ const TopDictData = struct {
         var operands_buffer: [MAX_OPERANDS_LEN]f64 = @splat(0.0);
         var dict_parser: DictionaryParser = .new(data, &operands_buffer);
 
-        while (dict_parser.parse_next()) |operator| switch (operator[0]) {
-            top_dict_operator.CHAR_STRINGS_OFFSET => dict_data
+        while (dict_parser.parse_next(Operator)) |operator| switch (operator) {
+            .char_strings_offset => dict_data
                 .char_strings_offset = try dict_parser.parse_offset(),
 
-            top_dict_operator.FONT_DICT_INDEX_OFFSET => dict_data
+            .font_dict_index_offset => dict_data
                 .font_dict_index_offset = dict_parser.parse_offset() catch null,
 
-            top_dict_operator.VARIATION_STORE_OFFSET => dict_data
+            .variation_store_offset => dict_data
                 .variation_store_offset = dict_parser.parse_offset() catch null,
 
-            else => {},
+            _ => {},
         };
 
         // Must be set, otherwise there are nothing to parse.
@@ -184,14 +140,20 @@ const TopDictData = struct {
     }
 };
 
+// https://docs.microsoft.com/en-us/typography/opentype/spec/cff2#table-10-font-dict-operator-entries
+const FontDictOperator = enum(u16) {
+    private_dict_size_and_offset = 18,
+    _,
+};
+
 fn parse_font_dict(
     data: []const u8,
 ) parser.Error!struct { usize, usize } {
     var operands_buffer: [MAX_OPERANDS_LEN]f64 = @splat(0.0);
     var dict_parser: DictionaryParser = .new(data, &operands_buffer);
 
-    while (dict_parser.parse_next()) |operator| {
-        if (operator[0] == font_dict_operator.PRIVATE_DICT_SIZE_AND_OFFSET) {
+    while (dict_parser.parse_next(FontDictOperator)) |operator| {
+        if (operator == .private_dict_size_and_offset) {
             try dict_parser.parse_operands();
             const operands = dict_parser.operands_slice();
 
@@ -206,14 +168,20 @@ fn parse_font_dict(
     return error.ParseFail;
 }
 
+// https://docs.microsoft.com/en-us/typography/opentype/spec/cff2#table-16-private-dict-operators
+const PrivateDictOperator = enum(u16) {
+    local_subroutines_offset = 19,
+    _,
+};
+
 fn parse_private_dict(
     data: []const u8,
 ) parser.Error!usize {
     var operands_buffer: [MAX_OPERANDS_LEN]f64 = @splat(0.0);
     var dict_parser: DictionaryParser = .new(data, &operands_buffer);
 
-    while (dict_parser.parse_next()) |operator| {
-        if (operator[0] == private_dict_operator.LOCAL_SUBROUTINES_OFFSET) {
+    while (dict_parser.parse_next(PrivateDictOperator)) |operator| {
+        if (operator == .local_subroutines_offset) {
             try dict_parser.parse_operands();
             const operands = dict_parser.operands_slice();
 
@@ -284,7 +252,7 @@ fn parse_char_string(
 
     var inner_builder: cff.Builder = .{ .builder = builder, .bbox = .{}, .transform_tuple = null };
 
-    var stack_buffer: [MAX_ARGUMENTS_STACK_LEN]f32 = @splat(0.0);
+    var stack_buffer: [MAX_ARGUMENTS_STACK_LEN]f32 = undefined;
 
     var cs_parser: CharStringParser = .{
         .stack = .initBuffer(&stack_buffer),
@@ -305,6 +273,45 @@ fn parse_char_string(
     return bbox.to_rect() orelse error.BboxOverflow;
 }
 
+// https://docs.microsoft.com/en-us/typography/opentype/spec/cff2charstr#4-charstring-operators
+const CharStringOperator = enum(u8) {
+    hor_stem = 1,
+    ver_stem = 3,
+    ver_move_to = 4,
+    line_to = 5,
+    hor_line_to = 6,
+    ver_line_to = 7,
+    curve_to = 8,
+    call_local_subroutine = 10,
+    two_byte_operator_mark = 12,
+    vs_index = 15,
+    blend = 16,
+    hor_stem_hint_mask = 18,
+    hint_mask = 19,
+    counter_mask = 20,
+    move_to = 21,
+    hor_move_to = 22,
+    ver_stem_hint_mask = 23,
+    curve_line = 24,
+    line_curve = 25,
+    vv_curve_to = 26,
+    hh_curve_to = 27,
+    short_int = 28,
+    call_global_subroutine = 29,
+    vh_curve_to = 30,
+    hv_curve_to = 31,
+    fixed_16_16 = 255,
+    _,
+};
+
+const FlexOperator = enum(u8) {
+    hflex = 34,
+    flex = 35,
+    hflex1 = 36,
+    flex1 = 37,
+    _,
+};
+
 fn parse_char_string_recursive(
     ctx: *CharStringParserContext,
     char_string: []const u8,
@@ -313,14 +320,12 @@ fn parse_char_string_recursive(
 ) cff.Error!void {
     var s = parser.Stream.new(char_string);
     while (!s.at_end()) {
-        const op = s.read(u8) catch return error.ReadOutOfBounds;
+        const op = s.read(CharStringOperator) catch return error.ReadOutOfBounds;
         switch (op) {
-            // Reserved.
-            0, 2, 9, 11, 13, 14, 17 => return error.InvalidOperator,
-            ms_operator.HORIZONTAL_STEM,
-            ms_operator.VERTICAL_STEM,
-            ms_operator.HORIZONTAL_STEM_HINT_MASK,
-            ms_operator.VERTICAL_STEM_HINT_MASK,
+            .hor_stem,
+            .ver_stem,
+            .hor_stem_hint_mask,
+            .ver_stem_hint_mask,
             => {
                 // y dy {dya dyb}* hstem
                 // x dx {dxa dxb}* vstem
@@ -332,12 +337,12 @@ fn parse_char_string_recursive(
                 // We are ignoring the hint operators.
                 p.stack.clearRetainingCapacity();
             },
-            ms_operator.VERTICAL_MOVE_TO => try p.parse_vertical_move_to(0),
-            ms_operator.LINE_TO => try p.parse_line_to(),
-            ms_operator.HORIZONTAL_LINE_TO => try p.parse_horizontal_line_to(),
-            ms_operator.VERTICAL_LINE_TO => try p.parse_vertical_line_to(),
-            ms_operator.CURVE_TO => try p.parse_curve_to(),
-            ms_operator.CALL_LOCAL_SUBROUTINE => {
+            .ver_move_to => try p.parse_vertical_move_to(0),
+            .line_to => try p.parse_line_to(),
+            .hor_line_to => try p.parse_horizontal_line_to(),
+            .ver_line_to => try p.parse_vertical_line_to(),
+            .curve_to => try p.parse_curve_to(),
+            .call_local_subroutine => {
                 if (p.stack.items.len == 0) return error.InvalidArgumentsStackLength;
                 if (depth == STACK_LIMIT) return error.NestingLimitReached;
 
@@ -353,18 +358,18 @@ fn parse_char_string_recursive(
                     .get(index) orelse return error.InvalidSubroutineIndex;
                 try parse_char_string_recursive(ctx, local_char_string, depth + 1, p);
             },
-            TWO_BYTE_OPERATOR_MARK => {
+            .two_byte_operator_mark => {
                 // flex
-                const op2 = s.read(u8) catch return error.ReadOutOfBounds;
+                const op2 = s.read(FlexOperator) catch return error.ReadOutOfBounds;
                 switch (op2) {
-                    ms_operator.HFLEX => try p.parse_hflex(),
-                    ms_operator.FLEX => try p.parse_flex(),
-                    ms_operator.HFLEX1 => try p.parse_hflex1(),
-                    ms_operator.FLEX1 => try p.parse_flex1(),
-                    else => return error.UnsupportedOperator,
+                    .hflex => try p.parse_hflex(),
+                    .flex => try p.parse_flex(),
+                    .hflex1 => try p.parse_hflex1(),
+                    .flex1 => try p.parse_flex1(),
+                    _ => return error.UnsupportedOperator,
                 }
             },
-            ms_operator.VS_INDEX => {
+            .vs_index => {
                 // |- ivs vsindex (15) |-
 
                 // `vsindex` must precede the first `blend` operator, and may occur only once.
@@ -379,7 +384,7 @@ fn parse_char_string_recursive(
 
                 p.stack.clearRetainingCapacity();
             },
-            ms_operator.BLEND => {
+            .blend => {
                 // num(0)..num(n-1), delta(0,0)..delta(k-1,0),
                 // delta(0,1)..delta(k-1,1) .. delta(0,n-1)..delta(k-1,n-1)
                 // n blend (16) val(0)..val(n-1)
@@ -402,25 +407,25 @@ fn parse_char_string_recursive(
                     }
                 }
             },
-            ms_operator.HINT_MASK, ms_operator.COUNTER_MASK => {
+            .hint_mask, .counter_mask => {
                 ctx.stems_len += @as(u32, @truncate(p.stack.items.len)) >> 1;
                 s.advance((ctx.stems_len + 7) >> 3);
 
                 // We are ignoring the hint operators.
                 p.stack.clearRetainingCapacity();
             },
-            ms_operator.MOVE_TO => try p.parse_move_to(0),
-            ms_operator.HORIZONTAL_MOVE_TO => try p.parse_horizontal_move_to(0),
-            ms_operator.CURVE_LINE => try p.parse_curve_line(),
-            ms_operator.LINE_CURVE => try p.parse_line_curve(),
-            ms_operator.VV_CURVE_TO => try p.parse_vv_curve_to(),
-            ms_operator.HH_CURVE_TO => try p.parse_hh_curve_to(),
-            ms_operator.SHORT_INT => {
+            .move_to => try p.parse_move_to(0),
+            .hor_move_to => try p.parse_horizontal_move_to(0),
+            .curve_line => try p.parse_curve_line(),
+            .line_curve => try p.parse_line_curve(),
+            .vv_curve_to => try p.parse_vv_curve_to(),
+            .hh_curve_to => try p.parse_hh_curve_to(),
+            .short_int => {
                 const n = s.read(i16) catch return error.ReadOutOfBounds;
                 p.stack.appendBounded(@floatFromInt(n)) catch
                     return error.ArgumentsStackLimitReached;
             },
-            ms_operator.CALL_GLOBAL_SUBROUTINE => {
+            .call_global_subroutine => {
                 if (p.stack.items.len == 0) return error.InvalidArgumentsStackLength;
                 if (depth == STACK_LIMIT) return error.NestingLimitReached;
 
@@ -436,13 +441,17 @@ fn parse_char_string_recursive(
                     .get(index) orelse return error.InvalidSubroutineIndex;
                 try parse_char_string_recursive(ctx, global_char_string, depth + 1, p);
             },
-            ms_operator.VH_CURVE_TO => try p.parse_vh_curve_to(),
-            ms_operator.HV_CURVE_TO => try p.parse_hv_curve_to(),
-            32...246 => try p.parse_int1(op),
-            247...250 => try p.parse_int2(op, &s),
-            251...254 => try p.parse_int3(op, &s),
-            ms_operator.FIXED_16_16 => try p.parse_fixed(&s),
+            .vh_curve_to => try p.parse_vh_curve_to(),
+            .hv_curve_to => try p.parse_hv_curve_to(),
+            .fixed_16_16 => try p.parse_fixed(&s),
+            _ => switch (@intFromEnum(op)) {
+                // Reserved.
+                0, 2, 9, 11, 13, 14, 17 => return error.InvalidOperator,
+                32...246 => |d| try p.parse_int1(d),
+                247...250 => |d| try p.parse_int2(d, &s),
+                251...254 => |d| try p.parse_int3(d, &s),
+                else => unreachable, // exhausted
+            },
         }
-        //
     }
 }
