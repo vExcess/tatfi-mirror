@@ -1,17 +1,16 @@
-/// A high-level, safe, zero-allocation font parser for:
-/// * [TrueType](https://docs.microsoft.com/en-us/typography/truetype/),
-/// * [OpenType](https://docs.microsoft.com/en-us/typography/opentype/spec/), and
-/// * [AAT](https://developer.apple.com/fonts/TrueType-Reference-Manual/RM06/Chap6AATIntro.html).
-///
-/// Font parsing starts with a `Face`.
+//! A high-level, safe, zero-allocation font parser for:
+//! * [TrueType](https://docs.microsoft.com/en-us/typography/truetype/),
+//! * [OpenType](https://docs.microsoft.com/en-us/typography/opentype/spec/), and
+//! * [AAT](https://developer.apple.com/fonts/TrueType-Reference-Manual/RM06/Chap6AATIntro.html).
+//!
+//! Font parsing starts with a `Face`.
+
 const std = @import("std");
 const cfg = @import("config");
 const parser = @import("parser.zig");
 pub const tables = @import("tables.zig");
 const opentype_layout = @import("ggg.zig");
 const utils = @import("utils.zig");
-
-const LazyArray16 = parser.LazyArray16;
 
 /// A type-safe wrapper for glyph ID.
 pub const GlyphId = struct { u16 };
@@ -161,16 +160,16 @@ pub const Face = struct {
     fn parse_tables(
         raw_tables: RawFaceTables,
     ) FaceParsingError!FaceTables {
-        const head = tables.head.Table.parse(raw_tables.head) catch
+        const head = tables.head.parse(raw_tables.head) catch
             return error.NoHeadTable;
-        const hhea = tables.hhea.Table.parse(raw_tables.hhea) catch
+        const hhea = tables.hhea.parse(raw_tables.hhea) catch
             return error.NoHheaTable;
-        const maxp = tables.maxp.Table.parse(raw_tables.maxp) catch
+        const maxp = tables.maxp.parse(raw_tables.maxp) catch
             return error.NoMaxpTable;
 
         const hmtx = t: {
             const data = raw_tables.hmtx orelse break :t null;
-            break :t tables.hmtx.Table.parse(
+            break :t tables.hmtx.parse(
                 hhea.number_of_metrics,
                 maxp.number_of_glyphs,
                 data,
@@ -179,11 +178,11 @@ pub const Face = struct {
 
         const vhea = v: {
             const data = raw_tables.vhea orelse break :v null;
-            break :v tables.vhea.Table.parse(data) catch null;
+            break :v tables.vhea.parse(data) catch null;
         };
         const vmtx = t: {
             const data = raw_tables.vmtx orelse break :t null;
-            break :t tables.hmtx.Table.parse(
+            break :t tables.hmtx.parse(
                 (vhea orelse break :t null).number_of_metrics,
                 maxp.number_of_glyphs,
                 data,
@@ -202,39 +201,39 @@ pub const Face = struct {
         const glyf = t: {
             const loca_table = loca orelse break :t null;
             const data = raw_tables.glyf orelse break :t null;
-            break :t tables.glyf.Table.parse(loca_table, data);
+            break :t tables.glyf.parse(loca_table, data);
         };
 
         const bdat = b: {
             const bloc_data = raw_tables.bloc orelse break :b null;
-            const bloc = tables.cblc.Table.parse(bloc_data);
+            const bloc = tables.cblc.parse(bloc_data);
             const data = raw_tables.bdat orelse break :b null;
-            break :b tables.cbdt.Table.parse(bloc, data);
+            break :b tables.cbdt.parse(bloc, data);
         };
 
         const cbdt = c: {
             const cblc_data = raw_tables.cblc orelse break :c null;
-            const cblc = tables.cblc.Table.parse(cblc_data);
+            const cblc = tables.cblc.parse(cblc_data);
             const data = raw_tables.cbdt orelse break :c null;
-            break :c tables.cbdt.Table.parse(cblc, data);
+            break :c tables.cbdt.parse(cblc, data);
         };
 
         const ebdt = e: {
             const eblc_data = raw_tables.eblc orelse break :e null;
-            const eblc = tables.cblc.Table.parse(eblc_data);
+            const eblc = tables.cblc.parse(eblc_data);
             const data = raw_tables.ebdt orelse break :e null;
-            break :e tables.cbdt.Table.parse(eblc, data);
+            break :e tables.cbdt.parse(eblc, data);
         };
 
         const cpal = c: {
             const data = raw_tables.cpal orelse break :c null;
-            break :c tables.cpal.Table.parse(data) catch null;
+            break :c tables.cpal.parse(data) catch null;
         };
 
         const colr = c: {
             const cpal_table = cpal orelse break :c null;
             const data = raw_tables.colr orelse break :c null;
-            break :c tables.colr.Table.parse(cpal_table, data) catch null;
+            break :c tables.colr.parse(cpal_table, data) catch null;
         };
 
         return .{
@@ -246,14 +245,14 @@ pub const Face = struct {
             .cbdt = cbdt,
             .cff = c: {
                 const data = raw_tables.cff orelse break :c null;
-                break :c tables.cff1.Table.parse_with_upem(
+                break :c tables.cff1.parse_with_upem(
                     data,
                     head.units_per_em,
                 ) catch null;
             },
             .cmap = c: {
                 const data = raw_tables.cmap orelse break :c null;
-                break :c tables.cmap.Table.parse(data) catch null;
+                break :c tables.cmap.parse(data) catch null;
             },
             .colr = colr,
             .ebdt = ebdt,
@@ -261,45 +260,45 @@ pub const Face = struct {
             .hmtx = hmtx,
             .kern = k: {
                 const data = raw_tables.kern orelse break :k null;
-                break :k tables.kern.Table.parse(data) catch null;
+                break :k tables.kern.parse(data) catch null;
             },
             .name = n: {
                 const data = raw_tables.name orelse break :n null;
-                break :n tables.name.Table.parse(data) catch null;
+                break :n tables.name.parse(data) catch null;
             },
             .os2 = o: {
                 const data = raw_tables.os2 orelse break :o null;
-                break :o tables.os2.Table.parse(data) catch null;
+                break :o tables.os2.parse(data) catch null;
             },
             .post = p: {
                 const data = raw_tables.post orelse break :p null;
-                break :p tables.post.Table.parse(data) catch null;
+                break :p tables.post.parse(data) catch null;
             },
             .sbix = s: {
                 const data = raw_tables.sbix orelse break :s null;
-                break :s tables.sbix.Table.parse(
+                break :s tables.sbix.parse(
                     maxp.number_of_glyphs,
                     data,
                 ) catch null;
             },
             .stat = s: {
                 const data = raw_tables.stat orelse break :s null;
-                break :s tables.stat.Table.parse(data) catch null;
+                break :s tables.stat.parse(data) catch null;
             },
             .svg = s: {
                 const data = raw_tables.svg orelse break :s null;
-                break :s tables.svg.Table.parse(data) catch null;
+                break :s tables.svg.parse(data) catch null;
             },
             .vhea = vhea,
             .vmtx = vmtx,
             .vorg = v: {
                 const data = raw_tables.vorg orelse break :v null;
-                break :v tables.vorg.Table.parse(data) catch null;
+                break :v tables.vorg.parse(data) catch null;
             },
             .opentype_layout = if (cfg.opentype_layout) .{
                 .gdef = g: {
                     const data = raw_tables.opentype_layout.gdef orelse break :g null;
-                    break :g tables.gdef.Table.parse(data) catch null;
+                    break :g tables.gdef.parse(data) catch null;
                 },
                 .gpos = g: {
                     const data = raw_tables.opentype_layout.gpos orelse break :g null;
@@ -311,68 +310,68 @@ pub const Face = struct {
                 },
                 .math = m: {
                     const data = raw_tables.opentype_layout.math orelse break :m null;
-                    break :m tables.math.Table.parse(data) catch null;
+                    break :m tables.math.parse(data) catch null;
                 },
             },
             .apple_layout = if (cfg.apple_layout) .{
                 .ankr = a: {
                     const data = raw_tables.apple_layout.ankr orelse break :a null;
-                    break :a tables.ankr.Table.parse(
+                    break :a tables.ankr.parse(
                         maxp.number_of_glyphs,
                         data,
                     ) catch null;
                 },
                 .feat = f: {
                     const data = raw_tables.apple_layout.feat orelse break :f null;
-                    break :f tables.feat.Table.parse(data) catch null;
+                    break :f tables.feat.parse(data) catch null;
                 },
                 .kerx = k: {
                     const data = raw_tables.apple_layout.kerx orelse break :k null;
-                    break :k tables.kerx.Table.parse(
+                    break :k tables.kerx.parse(
                         maxp.number_of_glyphs,
                         data,
                     ) catch null;
                 },
                 .morx = m: {
                     const data = raw_tables.apple_layout.morx orelse break :m null;
-                    break :m tables.morx.Table.parse(
+                    break :m tables.morx.parse(
                         maxp.number_of_glyphs,
                         data,
                     ) catch null;
                 },
                 .trak = t: {
                     const data = raw_tables.apple_layout.trak orelse break :t null;
-                    break :t tables.trak.Table.parse(data) catch null;
+                    break :t tables.trak.parse(data) catch null;
                 },
             },
             .variable_fonts = if (cfg.variable_fonts) .{
                 .avar = a: {
                     const data = raw_tables.variable_fonts.avar orelse break :a null;
-                    break :a tables.avar.Table.parse(data) catch null;
+                    break :a tables.avar.parse(data) catch null;
                 },
                 .cff2 = c: {
                     const data = raw_tables.variable_fonts.cff2 orelse break :c null;
-                    break :c tables.cff2.Table.parse(data) catch null;
+                    break :c tables.cff2.parse(data) catch null;
                 },
                 .fvar = f: {
                     const data = raw_tables.variable_fonts.fvar orelse break :f null;
-                    break :f tables.fvar.Table.parse(data) catch null;
+                    break :f tables.fvar.parse(data) catch null;
                 },
                 .gvar = g: {
                     const data = raw_tables.variable_fonts.gvar orelse break :g null;
-                    break :g tables.gvar.Table.parse(data) catch null;
+                    break :g tables.gvar.parse(data) catch null;
                 },
                 .hvar = h: {
                     const data = raw_tables.variable_fonts.hvar orelse break :h null;
-                    break :h tables.hvar.Table.parse(data) catch null;
+                    break :h tables.hvar.parse(data) catch null;
                 },
                 .mvar = m: {
                     const data = raw_tables.variable_fonts.mvar orelse break :m null;
-                    break :m tables.mvar.Table.parse(data) catch null;
+                    break :m tables.mvar.parse(data) catch null;
                 },
                 .vvar = v: {
                     const data = raw_tables.variable_fonts.vvar orelse break :v null;
-                    break :v tables.vvar.Table.parse(data) catch null;
+                    break :v tables.vvar.parse(data) catch null;
                 },
             },
         };
@@ -403,7 +402,7 @@ pub const Face = struct {
     pub fn names(
         self: Face,
     ) tables.name.Names {
-        const t: tables.name.Table = self.tables.name orelse .{};
+        const t: tables.name = self.tables.name orelse .{};
         return t.names;
     }
 
@@ -479,7 +478,7 @@ pub const Face = struct {
         self: Face,
     ) bool {
         if (cfg.variable_fonts) {
-            // `fvar.Table.parse` already checked that `axisCount` is non-zero.
+            // `fvar.parse` already checked that `axisCount` is non-zero.
             return self.tables.variable_fonts.fvar != null;
         } else return false;
     }
@@ -1423,7 +1422,7 @@ pub const RawFace = struct {
     /// The input font file data.
     data: []const u8,
     /// An array of table records.
-    table_records: LazyArray16(TableRecord),
+    table_records: parser.LazyArray16(TableRecord),
 
     const Self = @This();
 
@@ -1510,52 +1509,52 @@ pub const RawFace = struct {
 /// A good example would be OpenType layout tables (GPOS/GSUB).
 pub const FaceTables = struct {
     // Mandatory tables.
-    head: tables.head.Table,
-    hhea: tables.hhea.Table,
-    maxp: tables.maxp.Table,
+    head: tables.head,
+    hhea: tables.hhea,
+    maxp: tables.maxp,
 
-    bdat: ?tables.cbdt.Table = null,
-    cbdt: ?tables.cbdt.Table = null,
-    cff: ?tables.cff1.Table = null,
-    cmap: ?tables.cmap.Table = null,
-    colr: ?tables.colr.Table = null,
-    ebdt: ?tables.cbdt.Table = null,
-    glyf: ?tables.glyf.Table = null,
-    hmtx: ?tables.hmtx.Table = null,
-    kern: ?tables.kern.Table = null,
-    name: ?tables.name.Table = null,
-    os2: ?tables.os2.Table = null,
-    post: ?tables.post.Table = null,
-    sbix: ?tables.sbix.Table = null,
-    stat: ?tables.stat.Table = null,
-    svg: ?tables.svg.Table = null,
-    vhea: ?tables.vhea.Table = null,
-    vmtx: ?tables.hmtx.Table = null, // [ARS] not a typo
-    vorg: ?tables.vorg.Table = null,
+    bdat: ?tables.cbdt = null,
+    cbdt: ?tables.cbdt = null,
+    cff: ?tables.cff1 = null,
+    cmap: ?tables.cmap = null,
+    colr: ?tables.colr = null,
+    ebdt: ?tables.cbdt = null,
+    glyf: ?tables.glyf = null,
+    hmtx: ?tables.hmtx = null,
+    kern: ?tables.kern = null,
+    name: ?tables.name = null,
+    os2: ?tables.os2 = null,
+    post: ?tables.post = null,
+    sbix: ?tables.sbix = null,
+    stat: ?tables.stat = null,
+    svg: ?tables.svg = null,
+    vhea: ?tables.vhea = null,
+    vmtx: ?tables.hmtx = null, // [ARS] not a typo
+    vorg: ?tables.vorg = null,
 
     opentype_layout: if (cfg.opentype_layout) struct {
-        gdef: ?tables.gdef.Table = null,
+        gdef: ?tables.gdef = null,
         gpos: ?opentype_layout.LayoutTable(.gpos) = null,
         gsub: ?opentype_layout.LayoutTable(.gsub) = null,
-        math: ?tables.math.Table = null,
+        math: ?tables.math = null,
     } else void,
 
     apple_layout: if (cfg.apple_layout) struct {
-        ankr: ?tables.ankr.Table = null,
-        feat: ?tables.feat.Table = null,
-        kerx: ?tables.kerx.Table = null,
-        morx: ?tables.morx.Table = null,
-        trak: ?tables.trak.Table = null,
+        ankr: ?tables.ankr = null,
+        feat: ?tables.feat = null,
+        kerx: ?tables.kerx = null,
+        morx: ?tables.morx = null,
+        trak: ?tables.trak = null,
     } else void,
 
     variable_fonts: if (cfg.variable_fonts) struct {
-        avar: ?tables.avar.Table = null,
-        cff2: ?tables.cff2.Table = null,
-        fvar: ?tables.fvar.Table = null,
-        gvar: ?tables.gvar.Table = null,
-        hvar: ?tables.hvar.Table = null,
-        mvar: ?tables.mvar.Table = null,
-        vvar: ?tables.vvar.Table = null,
+        avar: ?tables.avar = null,
+        cff2: ?tables.cff2 = null,
+        fvar: ?tables.fvar = null,
+        gvar: ?tables.gvar = null,
+        hvar: ?tables.hvar = null,
+        mvar: ?tables.mvar = null,
+        vvar: ?tables.vvar = null,
     } else void,
 };
 

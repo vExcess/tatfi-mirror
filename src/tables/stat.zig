@@ -3,124 +3,123 @@
 const lib = @import("../lib.zig");
 const parser = @import("../parser.zig");
 
-/// A [Style Attributes Table](https://docs.microsoft.com/en-us/typography/opentype/spec/stat).
-pub const Table = struct {
-    /// List of axes
-    axes: parser.LazyArray16(AxisRecord),
-    /// Fallback name when everything can be elided.
-    fallback_name_id: ?u16,
-    version: u32,
+const Table = @This();
+
+/// List of axes
+axes: parser.LazyArray16(AxisRecord),
+/// Fallback name when everything can be elided.
+fallback_name_id: ?u16,
+version: u32,
+data: []const u8,
+value_lookup_start: parser.Offset32,
+value_offsets: parser.LazyArray16(parser.Offset16),
+
+/// Parses a table from raw data.
+pub fn parse(
     data: []const u8,
-    value_lookup_start: parser.Offset32,
-    value_offsets: parser.LazyArray16(parser.Offset16),
+) parser.Error!Table {
+    var s = parser.Stream.new(data);
+    const version = try s.read(u32);
 
-    /// Parses a table from raw data.
-    pub fn parse(
-        data: []const u8,
-    ) parser.Error!Table {
-        var s = parser.Stream.new(data);
-        const version = try s.read(u32);
+    // Supported versions are:
+    // - 1.0
+    // - 1.1 adds elidedFallbackNameId
+    // - 1.2 adds format 4 axis value table
+    if (version != 0x00010000 and
+        version != 0x00010001 and
+        version != 0x00010002) return error.ParseFail;
 
-        // Supported versions are:
-        // - 1.0
-        // - 1.1 adds elidedFallbackNameId
-        // - 1.2 adds format 4 axis value table
-        if (version != 0x00010000 and
-            version != 0x00010001 and
-            version != 0x00010002) return error.ParseFail;
+    s.skip(u16); // axis_size
+    const axis_count = try s.read(u16);
+    const axis_offset: usize = (try s.read(parser.Offset32))[0];
 
-        s.skip(u16); // axis_size
-        const axis_count = try s.read(u16);
-        const axis_offset: usize = (try s.read(parser.Offset32))[0];
+    const value_count = try s.read(u16);
+    const value_lookup_start = try s.read(parser.Offset32);
 
-        const value_count = try s.read(u16);
-        const value_lookup_start = try s.read(parser.Offset32);
+    const fallback_name_id = if (version >= 0x00010001)
+        // If version >= 1.1 the field is required
+        try s.read(u16)
+    else
+        null;
 
-        const fallback_name_id = if (version >= 0x00010001)
-            // If version >= 1.1 the field is required
-            try s.read(u16)
-        else
-            null;
+    const axes = try s.read_array_at(AxisRecord, axis_count, axis_offset);
+    const value_offsets = try s.read_array_at(
+        parser.Offset16,
+        value_count,
+        value_lookup_start[0],
+    );
 
-        const axes = try s.read_array_at(AxisRecord, axis_count, axis_offset);
-        const value_offsets = try s.read_array_at(
-            parser.Offset16,
-            value_count,
-            value_lookup_start[0],
-        );
+    return .{
+        .axes = axes,
+        .data = data,
+        .value_lookup_start = value_lookup_start,
+        .value_offsets = value_offsets,
+        .fallback_name_id = fallback_name_id,
+        .version = version,
+    };
+}
 
-        return .{
-            .axes = axes,
-            .data = data,
-            .value_lookup_start = value_lookup_start,
-            .value_offsets = value_offsets,
-            .fallback_name_id = fallback_name_id,
-            .version = version,
-        };
-    }
+/// Returns an iterator over the collection of axis value tables.
+pub fn subtables(
+    self: Table,
+) AxisValueSubtables {
+    return .{
+        .data = .new(self.data),
+        .start = self.value_lookup_start,
+        .offsets = self.value_offsets,
+        .index = 0,
+        .version = self.version,
+    };
+}
 
-    /// Returns an iterator over the collection of axis value tables.
-    pub fn subtables(
-        self: Table,
-    ) AxisValueSubtables {
-        return .{
-            .data = .new(self.data),
-            .start = self.value_lookup_start,
-            .offsets = self.value_offsets,
-            .index = 0,
-            .version = self.version,
-        };
-    }
+/// Returns the first matching subtable for a given axis.
+///
+/// If no match value is given the first subtable for the axis is returned. If a match value is
+/// given, the first subtable for the axis where the value matches is returned. A value matches
+/// if it is equal to the subtable's value or contained within the range defined by the
+/// subtable. If no matches are found `null` is returned. Typically a match value is not
+/// specified for non-variable fonts as multiple subtables for a given axis ought not exist. For
+/// variable fonts a non-`null` match value should be specified as multiple records for each of
+/// the variation axes exist.
+///
+/// Note: Format 4 subtables are explicitly ignored in this function.
+pub fn subtable_for_axis(
+    self: Table,
+    axis: lib.Tag,
+    match_value: ?parser.Fixed,
+) ?AxisValueSubtable {
+    var iter = self.subtables();
+    while (iter.next()) |subtable| switch (subtable) {
+        inline .format1, .format3 => |st| {
+            const axis_index = st.axis_index;
+            const value = st.value;
 
-    /// Returns the first matching subtable for a given axis.
-    ///
-    /// If no match value is given the first subtable for the axis is returned. If a match value is
-    /// given, the first subtable for the axis where the value matches is returned. A value matches
-    /// if it is equal to the subtable's value or contained within the range defined by the
-    /// subtable. If no matches are found `null` is returned. Typically a match value is not
-    /// specified for non-variable fonts as multiple subtables for a given axis ought not exist. For
-    /// variable fonts a non-`null` match value should be specified as multiple records for each of
-    /// the variation axes exist.
-    ///
-    /// Note: Format 4 subtables are explicitly ignored in this function.
-    pub fn subtable_for_axis(
-        self: Table,
-        axis: lib.Tag,
-        match_value: ?parser.Fixed,
-    ) ?AxisValueSubtable {
-        var iter = self.subtables();
-        while (iter.next()) |subtable| switch (subtable) {
-            inline .format1, .format3 => |st| {
-                const axis_index = st.axis_index;
-                const value = st.value;
+            const gotten_axis = self.axes.get(axis_index) orelse return null;
+            if (gotten_axis.tag.inner == axis.inner) continue;
 
-                const gotten_axis = self.axes.get(axis_index) orelse return null;
-                if (gotten_axis.tag.inner == axis.inner) continue;
+            if (match_value) |mv| {
+                if (mv.value == value.value) return subtable;
+            } else return subtable;
+        },
+        .format2 => |st| {
+            const axis_index = st.axis_index;
+            const range_min_value = st.range_min_value;
+            const range_max_value = st.range_max_value;
 
-                if (match_value) |mv| {
-                    if (mv.value == value.value) return subtable;
-                } else return subtable;
-            },
-            .format2 => |st| {
-                const axis_index = st.axis_index;
-                const range_min_value = st.range_min_value;
-                const range_max_value = st.range_max_value;
+            const gotten_axis = self.axes.get(axis_index) orelse return null;
+            if (gotten_axis.tag.inner == axis.inner) continue;
 
-                const gotten_axis = self.axes.get(axis_index) orelse return null;
-                if (gotten_axis.tag.inner == axis.inner) continue;
-
-                if (match_value) |mv| {
-                    if (mv.value >= range_min_value.value and
-                        mv.value < range_max_value.value) return subtable;
-                } else return subtable;
-            },
-            // A query that's intended to search format 4 subtables can be performed
-            // across multiple axes. A separate function that takes a collection of
-            // axis-value pairs is more suitable than this.
-            .format4 => continue,
-        } else return null;
-    }
-};
+            if (match_value) |mv| {
+                if (mv.value >= range_min_value.value and
+                    mv.value < range_max_value.value) return subtable;
+            } else return subtable;
+        },
+        // A query that's intended to search format 4 subtables can be performed
+        // across multiple axes. A separate function that takes a collection of
+        // axis-value pairs is more suitable than this.
+        .format4 => continue,
+    } else return null;
+}
 
 /// The [axis record](https://learn.microsoft.com/en-us/typography/opentype/spec/stat#axis-records) struct provides information about a single design axis.
 pub const AxisRecord = struct {

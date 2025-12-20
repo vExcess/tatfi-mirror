@@ -7,49 +7,47 @@ const utils = @import("../utils.zig");
 
 const Language = @import("../language.zig").Language;
 
-/// A [Naming Table](
-/// https://docs.microsoft.com/en-us/typography/opentype/spec/name).
-pub const Table = struct {
-    /// A list of names.
-    names: Names = .{},
+const Table = @This();
 
-    /// Parses a table from raw data.
-    pub fn parse(
-        data: []const u8,
-    ) parser.Error!Table {
-        // https://docs.microsoft.com/en-us/typography/opentype/spec/name#naming-table-format-1
-        const LANG_TAG_RECORD_SIZE: u16 = 4;
+/// A list of names.
+names: Names = .{},
 
-        var s = parser.Stream.new(data);
+/// Parses a table from raw data.
+pub fn parse(
+    data: []const u8,
+) parser.Error!Table {
+    // https://docs.microsoft.com/en-us/typography/opentype/spec/name#naming-table-format-1
+    const LANG_TAG_RECORD_SIZE: u16 = 4;
 
-        const version = try s.read(u16);
-        const count = try s.read(u16);
-        const storage_offset: usize = (try s.read(parser.Offset16))[0];
+    var s = parser.Stream.new(data);
 
-        switch (version) {
-            0 => {}, // Do nothing.
-            1 => {
-                const lang_tag_count = try s.read(u16);
-                const lang_tag_len = try std.math.mul(u16, lang_tag_count, LANG_TAG_RECORD_SIZE);
+    const version = try s.read(u16);
+    const count = try s.read(u16);
+    const storage_offset: usize = (try s.read(parser.Offset16))[0];
 
-                s.advance(lang_tag_len); // langTagRecords
-            },
-            else => return error.ParseFail, // Unsupported version.
-        }
+    switch (version) {
+        0 => {}, // Do nothing.
+        1 => {
+            const lang_tag_count = try s.read(u16);
+            const lang_tag_len = try std.math.mul(u16, lang_tag_count, LANG_TAG_RECORD_SIZE);
 
-        const records = try s.read_array(NameRecord, count);
-
-        if (s.offset < storage_offset)
-            s.advance(storage_offset - s.offset);
-
-        const storage = try s.tail();
-
-        return .{ .names = .{
-            .records = records,
-            .storage = storage,
-        } };
+            s.advance(lang_tag_len); // langTagRecords
+        },
+        else => return error.ParseFail, // Unsupported version.
     }
-};
+
+    const records = try s.read_array(NameRecord, count);
+
+    if (s.offset < storage_offset)
+        s.advance(storage_offset - s.offset);
+
+    const storage = try s.tail();
+
+    return .{ .names = .{
+        .records = records,
+        .storage = storage,
+    } };
+}
 
 /// A list of face names.
 pub const Names = struct {

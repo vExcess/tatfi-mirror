@@ -5,30 +5,28 @@ const std = @import("std");
 const parser = @import("../parser.zig");
 const utils = @import("../utils.zig");
 
-/// A [Feature Name Table](
-/// https://developer.apple.com/fonts/TrueType-Reference-Manual/RM06/Chap6feat.html).
-pub const Table = struct {
-    /// A list of feature names. Sorted by `FeatureName.feature`.
-    names: FeatureNames,
+const Table = @This();
 
-    /// Parses a table from raw data.
-    pub fn parse(
-        data: []const u8,
-    ) parser.Error!Table {
-        var s = parser.Stream.new(data);
+/// A list of feature names. Sorted by `FeatureName.feature`.
+names: FeatureNames,
 
-        if (try s.read(u32) != 0x00010000) return error.ParseFail; // version
+/// Parses a table from raw data.
+pub fn parse(
+    data: []const u8,
+) parser.Error!Table {
+    var s = parser.Stream.new(data);
 
-        const count = try s.read(u16);
-        try s.advance_checked(6); // reserved
-        const records = try s.read_array(FeatureNameRecord, count);
+    if (try s.read(u32) != 0x00010000) return error.ParseFail; // version
 
-        return .{ .names = .{
-            .data = data,
-            .records = records,
-        } };
-    }
-};
+    const count = try s.read(u16);
+    try s.advance_checked(6); // reserved
+    const records = try s.read_array(FeatureNameRecord, count);
+
+    return .{ .names = .{
+        .data = data,
+        .records = records,
+    } };
+}
 
 /// A list of feature names.
 pub const FeatureNames = struct {

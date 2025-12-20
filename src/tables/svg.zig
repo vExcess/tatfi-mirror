@@ -4,29 +4,28 @@ const lib = @import("../lib.zig");
 const parser = @import("../parser.zig");
 const utils = @import("../utils.zig");
 
-/// An [SVG Table](https://docs.microsoft.com/en-us/typography/opentype/spec/svg).
-pub const Table = struct {
-    /// A list of SVG documents.
-    documents: SvgDocumentsList,
+const Table = @This();
 
-    /// Parses a table from raw data.
-    pub fn parse(
-        data: []const u8,
-    ) parser.Error!Table {
-        var s = parser.Stream.new(data);
-        s.skip(u16); // version
+/// A list of SVG documents.
+documents: SvgDocumentsList,
 
-        const doc_list_offset = try s.read_optional(parser.Offset32) orelse return error.ParseFail;
+/// Parses a table from raw data.
+pub fn parse(
+    data: []const u8,
+) parser.Error!Table {
+    var s = parser.Stream.new(data);
+    s.skip(u16); // version
 
-        const count = try s.read_at(u16, doc_list_offset[0]);
-        const records = try s.read_array(SvgDocumentRecord, count);
+    const doc_list_offset = try s.read_optional(parser.Offset32) orelse return error.ParseFail;
 
-        return .{ .documents = .{
-            .data = try utils.slice(data, doc_list_offset[0]),
-            .records = records,
-        } };
-    }
-};
+    const count = try s.read_at(u16, doc_list_offset[0]);
+    const records = try s.read_array(SvgDocumentRecord, count);
+
+    return .{ .documents = .{
+        .data = try utils.slice(data, doc_list_offset[0]),
+        .records = records,
+    } };
+}
 
 /// A list of [SVG documents](
 /// https://docs.microsoft.com/en-us/typography/opentype/spec/svg#svg-document-list).

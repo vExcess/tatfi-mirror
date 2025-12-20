@@ -74,84 +74,82 @@ const ms_operator = struct {
     pub const FIXED_16_16: u8 = 255;
 };
 
-/// A [Compact Font Format 2 Table](
-/// https://docs.microsoft.com/en-us/typography/opentype/spec/cff2).
-pub const Table = struct {
-    global_subrs: Index = .default,
-    local_subrs: Index = .default,
-    char_strings: Index = .default,
-    item_variation_store: ItemVariationStore = .{},
+const Table = @This();
 
-    /// Parses a table from raw data.
-    pub fn parse(
-        data: []const u8,
-    ) parser.Error!Table {
-        var s = parser.Stream.new(data);
+global_subrs: Index = .default,
+local_subrs: Index = .default,
+char_strings: Index = .default,
+item_variation_store: ItemVariationStore = .{},
 
-        // Parse Header.
-        if (try s.read(u8) != 2) return error.ParseFail; // major
-        s.skip(u8); // minor
-        const header_size = try s.read(u8);
-        const top_dict_length = try s.read(u16);
+/// Parses a table from raw data.
+pub fn parse(
+    data: []const u8,
+) parser.Error!Table {
+    var s = parser.Stream.new(data);
 
-        // Jump to Top DICT. It's not necessarily right after the header.
-        s.advance(header_size -| 5);
+    // Parse Header.
+    if (try s.read(u8) != 2) return error.ParseFail; // major
+    s.skip(u8); // minor
+    const header_size = try s.read(u8);
+    const top_dict_length = try s.read(u16);
 
-        const top_dict_data = try s.read_bytes(top_dict_length);
-        const top_dict: TopDictData = try .parse(top_dict_data);
+    // Jump to Top DICT. It's not necessarily right after the header.
+    s.advance(header_size -| 5);
 
-        var metadata: Table = .{};
+    const top_dict_data = try s.read_bytes(top_dict_length);
+    const top_dict: TopDictData = try .parse(top_dict_data);
 
-        metadata.global_subrs = try Index.parse(u32, &s);
-        metadata.char_strings = cs: {
-            var scs = try parser.Stream.new_at(data, top_dict.char_strings_offset);
-            break :cs try Index.parse(u32, &scs);
-        };
+    var metadata: Table = .{};
 
-        if (top_dict.variation_store_offset) |offset| {
-            var svs = try parser.Stream.new_at(data, offset);
-            svs.skip(u16);
-            metadata.item_variation_store = try .parse(&s);
-        }
+    metadata.global_subrs = try Index.parse(u32, &s);
+    metadata.char_strings = cs: {
+        var scs = try parser.Stream.new_at(data, top_dict.char_strings_offset);
+        break :cs try Index.parse(u32, &scs);
+    };
 
-        const offset = top_dict.font_dict_index_offset orelse return metadata;
-
-        s.offset = offset;
-
-        const dict_data_idx = try Index.parse(u32, &s);
-        var iterator = dict_data_idx.iterator();
-        while (iterator.next()) |font_dict_data| {
-            // private_dict_range
-            const pdr_start, const pdr_len = parse_font_dict(font_dict_data) catch continue;
-
-            // 'Private DICT size and offset, from start of the CFF2 table.'
-            const private_dict_data = try utils.slice(data, .{ pdr_start, pdr_len });
-
-            const subroutines_offset = parse_private_dict(private_dict_data) catch continue;
-
-            // 'The local subroutines offset is relative to the beginning
-            // of the Private DICT data.'
-            const start = std.math.add(usize, pdr_start, subroutines_offset) catch continue;
-
-            var s_inner = parser.Stream.new(try utils.slice(data, start));
-            metadata.local_subrs = try Index.parse(u32, &s_inner);
-
-            break;
-        }
-
-        return metadata;
+    if (top_dict.variation_store_offset) |offset| {
+        var svs = try parser.Stream.new_at(data, offset);
+        svs.skip(u16);
+        metadata.item_variation_store = try .parse(&s);
     }
 
-    pub fn outline(
-        self: *const Table,
-        coordinates: []const lib.NormalizedCoordinate,
-        glyph_id: lib.GlyphId,
-        builder: lib.OutlineBuilder,
-    ) cff.Error!lib.Rect {
-        const data = self.char_strings.get(glyph_id[0]) orelse return error.NoGlyph;
-        return try parse_char_string(data, self, coordinates, builder);
+    const offset = top_dict.font_dict_index_offset orelse return metadata;
+
+    s.offset = offset;
+
+    const dict_data_idx = try Index.parse(u32, &s);
+    var iterator = dict_data_idx.iterator();
+    while (iterator.next()) |font_dict_data| {
+        // private_dict_range
+        const pdr_start, const pdr_len = parse_font_dict(font_dict_data) catch continue;
+
+        // 'Private DICT size and offset, from start of the CFF2 table.'
+        const private_dict_data = try utils.slice(data, .{ pdr_start, pdr_len });
+
+        const subroutines_offset = parse_private_dict(private_dict_data) catch continue;
+
+        // 'The local subroutines offset is relative to the beginning
+        // of the Private DICT data.'
+        const start = std.math.add(usize, pdr_start, subroutines_offset) catch continue;
+
+        var s_inner = parser.Stream.new(try utils.slice(data, start));
+        metadata.local_subrs = try Index.parse(u32, &s_inner);
+
+        break;
     }
-};
+
+    return metadata;
+}
+
+pub fn outline(
+    self: *const Table,
+    coordinates: []const lib.NormalizedCoordinate,
+    glyph_id: lib.GlyphId,
+    builder: lib.OutlineBuilder,
+) cff.Error!lib.Rect {
+    const data = self.char_strings.get(glyph_id[0]) orelse return error.NoGlyph;
+    return try parse_char_string(data, self, coordinates, builder);
+}
 
 const TopDictData = struct {
     char_strings_offset: usize = 0,

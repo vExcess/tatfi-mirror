@@ -1,4 +1,3 @@
-//!
 //! A [Character to Glyph Index Mapping Table](
 //! https://docs.microsoft.com/en-us/typography/opentype/spec/cmap) implementation.
 //!
@@ -11,50 +10,47 @@ const parser = @import("../parser.zig");
 const utils = @import("../utils.zig");
 
 const PlatformId = @import("name.zig").PlatformId;
-const GlyphId = @import("../lib.zig").GlyphId;
+const lib = @import("../lib.zig");
 
-const LazyArray16 = parser.LazyArray16;
-const Offset32 = parser.Offset32;
-
-pub const Subtable0 = @import("cmap/format0.zig").Subtable0;
-pub const Subtable2 = @import("cmap/format2.zig").Subtable2;
-pub const Subtable4 = @import("cmap/format4.zig").Subtable4;
-pub const Subtable6 = @import("cmap/format6.zig").Subtable6;
-pub const Subtable10 = @import("cmap/format10.zig").Subtable10;
-pub const Subtable12 = @import("cmap/format12.zig").Subtable12;
-pub const Subtable13 = @import("cmap/format13.zig").Subtable13;
-pub const Subtable14 = @import("cmap/format14.zig").Subtable14;
+pub const Subtable0 = @import("cmap/format0.zig");
+pub const Subtable2 = @import("cmap/format2.zig");
+pub const Subtable4 = @import("cmap/format4.zig");
+pub const Subtable6 = @import("cmap/format6.zig");
+pub const Subtable10 = @import("cmap/format10.zig");
+pub const Subtable12 = @import("cmap/format12.zig");
+pub const Subtable13 = @import("cmap/format13.zig");
+pub const Subtable14 = @import("cmap/format14.zig");
 pub const GlyphVariationResult = @import("cmap/format14.zig").GlyphVariationResult;
 
 /// A [Character to Glyph Index Mapping Table](
 /// https://docs.microsoft.com/en-us/typography/opentype/spec/cmap).
-pub const Table = struct {
-    /// A list of subtables.
-    subtables: Subtables,
+const Table = @This();
 
-    /// Parses a table from raw data.
-    pub fn parse(
-        data: []const u8,
-    ) parser.Error!Table {
-        var s = parser.Stream.new(data);
-        s.skip(u16); // version
+/// A list of subtables.
+subtables: Subtables,
 
-        const count = try s.read(u16);
-        const records = try s.read_array(EncodingRecord, count);
+/// Parses a table from raw data.
+pub fn parse(
+    data: []const u8,
+) parser.Error!Table {
+    var s = parser.Stream.new(data);
+    s.skip(u16); // version
 
-        return .{
-            .subtables = .{
-                .data = data,
-                .records = records,
-            },
-        };
-    }
-};
+    const count = try s.read(u16);
+    const records = try s.read_array(EncodingRecord, count);
+
+    return .{
+        .subtables = .{
+            .data = data,
+            .records = records,
+        },
+    };
+}
 
 /// A list of subtables.
 pub const Subtables = struct {
     data: []const u8,
-    records: LazyArray16(EncodingRecord),
+    records: parser.LazyArray16(EncodingRecord),
 
     /// Returns a subtable at an index.
     pub fn get(
@@ -122,7 +118,7 @@ pub const Subtables = struct {
 const EncodingRecord = struct {
     platform_id: PlatformId,
     encoding_id: u16,
-    offset: Offset32,
+    offset: parser.Offset32,
 
     const Self = @This();
     pub const FromData = struct {
@@ -201,7 +197,7 @@ pub const Subtable = struct {
     pub fn glyph_index(
         self: Subtable,
         code_point: u21,
-    ) ?GlyphId {
+    ) ?lib.GlyphId {
         return switch (self.format) {
             .mixed_coverage => null,
             // This subtable should be accessed via glyph_variation_index().

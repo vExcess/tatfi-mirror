@@ -1,5 +1,7 @@
 //! An [Extended Glyph Metamorphosis Table](
 //! https://developer.apple.com/fonts/TrueType-Reference-Manual/RM06/Chap6morx.html) implementation.
+//!
+//! Subtable Glyph Coverage used by morx v3 is not supported.
 
 // [RazrFalcon]
 // Note: We do not have tests for this table because it has a very complicated structure.
@@ -17,24 +19,20 @@ const parser = @import("../parser.zig");
 const utils = @import("../utils.zig");
 const aat = @import("../aat.zig");
 
-/// An [Extended Glyph Metamorphosis Table](
-/// https://developer.apple.com/fonts/TrueType-Reference-Manual/RM06/Chap6morx.html).
-///
-/// Subtable Glyph Coverage used by morx v3 is not supported.
-pub const Table = struct {
-    /// A list of metamorphosis chains.
-    chains: Chains,
+const Table = @This();
 
-    /// Parses a table from raw data.
-    ///
-    /// `number_of_glyphs` is from the `maxp` table.
-    pub fn parse(
-        number_of_glyphs: u16,
-        data: []const u8,
-    ) parser.Error!Table {
-        return .{ .chains = try .parse(number_of_glyphs, data) };
-    }
-};
+/// A list of metamorphosis chains.
+chains: Chains,
+
+/// Parses a table from raw data.
+///
+/// `number_of_glyphs` is from the `maxp` table.
+pub fn parse(
+    number_of_glyphs: u16,
+    data: []const u8,
+) parser.Error!Table {
+    return .{ .chains = try .parse(number_of_glyphs, data) };
+}
 
 /// A list of metamorphosis chains.
 ///

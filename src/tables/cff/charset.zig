@@ -1,18 +1,16 @@
 const std = @import("std");
+const lib = @import("../../lib.zig");
 const parser = @import("../../parser.zig");
 
 const StringId = @import("../cff.zig").StringId;
-const GlyphId = @import("../../lib.zig").GlyphId;
-
-const LazyArray16 = parser.LazyArray16;
 
 pub const Charset = union(enum) {
     iso_adobe,
     expert,
     expert_subset,
-    format0: LazyArray16(StringId),
-    format1: LazyArray16(Format1Range),
-    format2: LazyArray16(Format2Range),
+    format0: parser.LazyArray16(StringId),
+    format1: parser.LazyArray16(Format1Range),
+    format2: parser.LazyArray16(Format2Range),
 
     pub fn parse_charset(
         number_of_glyphs: u16,
@@ -67,7 +65,7 @@ pub const Charset = union(enum) {
     pub fn sid_to_gid(
         self: Charset,
         sid: StringId,
-    ) ?GlyphId {
+    ) ?lib.GlyphId {
         if (sid[0] == 0) return .{0};
 
         switch (self) {
@@ -115,7 +113,7 @@ pub const Charset = union(enum) {
 
     pub fn gid_to_sid(
         self: Charset,
-        gid: GlyphId,
+        gid: lib.GlyphId,
     ) ?StringId {
         switch (self) {
             .iso_adobe => {

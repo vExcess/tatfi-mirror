@@ -6,7 +6,7 @@ const utils = @import("../utils.zig");
 
 const LookupKind = @import("lookup.zig").LookupSubtable;
 const LookupList = @import("lookup.zig").LookupList;
-const FeatureVariations = @import("feature_variations.zig").FeatureVariations;
+const FeatureVariations = @import("feature_variations.zig");
 
 /// A [Layout Table](https://docs.microsoft.com/en-us/typography/opentype/spec/chapter2#table-organization).
 pub fn LayoutTable(subtable: LookupKind) type {

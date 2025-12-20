@@ -1,9 +1,8 @@
 //! A [OS/2 and Windows Metrics Table](https://docs.microsoft.com/en-us/typography/opentype/spec/os2)
 //! implementation.
 
+const lib = @import("../lib.zig");
 const parser = @import("../parser.zig");
-
-const LineMetrics = @import("../lib.zig").LineMetrics;
 
 const WEIGHT_CLASS_OFFSET: usize = 4;
 const WIDTH_CLASS_OFFSET: usize = 6;
@@ -22,298 +21,297 @@ const WIN_DESCENT: usize = 76;
 const X_HEIGHT_OFFSET: usize = 86;
 const CAP_HEIGHT_OFFSET: usize = 88;
 
-/// A [OS/2 and Windows Metrics Table](https://docs.microsoft.com/en-us/typography/opentype/spec/os2).
-pub const Table = struct {
-    /// Table version.
-    version: u8,
+const Table = @This();
+
+/// Table version.
+version: u8,
+data: []const u8,
+
+/// Parses a table from raw data.
+pub fn parse(
     data: []const u8,
+) parser.Error!Table {
+    var s = parser.Stream.new(data);
+    const version = try s.read(u16);
 
-    /// Parses a table from raw data.
-    pub fn parse(
-        data: []const u8,
-    ) parser.Error!Table {
-        var s = parser.Stream.new(data);
-        const version = try s.read(u16);
+    const table_len: usize = switch (version) {
+        0 => 78,
+        1 => 86,
+        2 => 96,
+        3 => 96,
+        4 => 96,
+        5 => 100,
+        else => return error.ParseFail,
+    };
 
-        const table_len: usize = switch (version) {
-            0 => 78,
-            1 => 86,
-            2 => 96,
-            3 => 96,
-            4 => 96,
-            5 => 100,
-            else => return error.ParseFail,
-        };
+    // Do not check the exact length, because some fonts include
+    // padding in table's length in table records, which is incorrect.
+    if (data.len < table_len) return error.ParseFail;
 
-        // Do not check the exact length, because some fonts include
-        // padding in table's length in table records, which is incorrect.
-        if (data.len < table_len) return error.ParseFail;
+    return .{
+        .version = @truncate(version),
+        .data = data,
+    };
+}
 
-        return .{
-            .version = @truncate(version),
-            .data = data,
-        };
+fn fs_selection(
+    self: Table,
+) packed struct(u16) {
+    italic: bool = false,
+    _0: u4 = 0,
+    bold: bool = false,
+    regular: bool = false,
+    use_typo_metrics: bool = false,
+    _1: u1 = 0,
+    oblique: bool = false,
+    _2: u6 = 0,
+} {
+    var s = parser.Stream.new_at(self.data, SELECTION_OFFSET) catch return .{};
+    const f = s.read(u16) catch return .{};
+
+    return @bitCast(f);
+}
+
+/// Returns style.
+pub fn style(
+    self: Table,
+) Style {
+    const flags = self.fs_selection();
+    if (flags.italic)
+        return .italic
+    else if (self.version >= 4 and flags.oblique)
+        return .oblique
+    else
+        return .normal;
+}
+
+/// Checks if face is bold.
+///
+/// Do not confuse with `Weight.Bold`.
+pub fn is_bold(
+    self: Table,
+) bool {
+    return self.fs_selection().bold;
+}
+
+/// Returns weight class.
+pub fn weight(
+    self: Table,
+) Weight {
+    const f: u16 = f: {
+        var s = parser.Stream.new_at(self.data, WEIGHT_CLASS_OFFSET) catch break :f 0;
+        break :f s.read(u16) catch 0;
+    };
+    return Weight.from(f);
+}
+
+/// Returns face width.
+pub fn width(
+    self: Table,
+) Width {
+    var s = parser.Stream.new_at(self.data, WIDTH_CLASS_OFFSET) catch return .normal;
+    const n: u16 = s.read(u16) catch 0;
+    return switch (n) {
+        1 => .ultra_condensed,
+        2 => .extra_condensed,
+        3 => .condensed,
+        4 => .semi_condensed,
+        5 => .normal,
+        6 => .semi_expanded,
+        7 => .expanded,
+        8 => .extra_expanded,
+        9 => .ultra_expanded,
+        else => .normal,
+    };
+}
+
+/// Checks if typographic metrics should be used.
+pub fn use_typographic_metrics(
+    self: Table,
+) bool {
+    return self.version >= 4 and self.fs_selection().use_typo_metrics;
+}
+
+/// Returns typographic ascender.
+pub fn typographic_ascender(
+    self: Table,
+) i16 {
+    var s = parser.Stream.new_at(self.data, TYPO_ASCENDER_OFFSET) catch return 0;
+    return s.read(i16) catch 0;
+}
+
+/// Returns Windows ascender.
+pub fn windows_ascender(
+    self: Table,
+) i16 {
+    var s = parser.Stream.new_at(self.data, WIN_ASCENT) catch return 0;
+    return s.read(i16) catch 0;
+}
+
+/// Returns typographic descender.
+pub fn typographic_descender(
+    self: Table,
+) i16 {
+    var s = parser.Stream.new_at(self.data, TYPO_DESCENDER_OFFSET) catch return 0;
+    return s.read(i16) catch 0;
+}
+
+/// Returns Windows descender
+pub fn windows_descender(
+    self: Table,
+) i16 {
+    var s = parser.Stream.new_at(self.data, WIN_DESCENT) catch return 0;
+    return -(s.read(i16) catch 0);
+}
+
+/// Returns typographic line gap.
+pub fn typographic_line_gap(
+    self: Table,
+) i16 {
+    var s = parser.Stream.new_at(self.data, TYPO_LINE_GAP_OFFSET) catch return 0;
+    return s.read(i16) catch 0;
+}
+
+/// Returns x height.
+///
+/// Returns `null` version is < 2.
+pub fn x_height(
+    self: Table,
+) ?i16 {
+    if (self.version < 2) {
+        return null;
+    } else {
+        var s = parser.Stream.new_at(self.data, X_HEIGHT_OFFSET) catch return null;
+        return s.read(i16) catch null;
     }
+}
 
-    fn fs_selection(
-        self: Table,
-    ) packed struct(u16) {
-        italic: bool = false,
-        _0: u4 = 0,
-        bold: bool = false,
-        regular: bool = false,
-        use_typo_metrics: bool = false,
-        _1: u1 = 0,
-        oblique: bool = false,
-        _2: u6 = 0,
-    } {
-        var s = parser.Stream.new_at(self.data, SELECTION_OFFSET) catch return .{};
-        const f = s.read(u16) catch return .{};
-
-        return @bitCast(f);
+/// Returns capital height.
+///
+/// Returns `null` version is < 2.
+pub fn capital_height(
+    self: Table,
+) ?i16 {
+    if (self.version < 2) {
+        return null;
+    } else {
+        var s = parser.Stream.new_at(self.data, CAP_HEIGHT_OFFSET) catch return null;
+        return s.read(i16) catch null;
     }
+}
 
-    /// Returns style.
-    pub fn style(
-        self: Table,
-    ) Style {
-        const flags = self.fs_selection();
-        if (flags.italic)
-            return .italic
-        else if (self.version >= 4 and flags.oblique)
-            return .oblique
+/// Returns strikeout metrics.
+pub fn strikeout_metrics(
+    self: Table,
+) lib.LineMetrics {
+    var s = parser.Stream.new(self.data);
+
+    return .{
+        .thickness = s.read_at(i16, Y_STRIKEOUT_SIZE_OFFSET) catch 0,
+        .position = s.read_at(i16, Y_STRIKEOUT_POSITION_OFFSET) catch 0,
+    };
+}
+
+/// Returns subscript metrics.
+pub fn subscript_metrics(
+    self: Table,
+) ScriptMetrics {
+    var s = parser.Stream.new_at(self.data, Y_SUBSCRIPT_X_SIZE_OFFSET) catch return .{};
+    return .{
+        .x_size = s.read(i16) catch 0,
+        .y_size = s.read(i16) catch 0,
+        .x_offset = s.read(i16) catch 0,
+        .y_offset = s.read(i16) catch 0,
+    };
+}
+
+/// Returns superscript metrics.
+pub fn superscript_metrics(
+    self: Table,
+) ScriptMetrics {
+    var s = parser.Stream.new_at(self.data, Y_SUPERSCRIPT_X_SIZE_OFFSET) catch return .{};
+    return .{
+        .x_size = s.read(i16) catch 0,
+        .y_size = s.read(i16) catch 0,
+        .x_offset = s.read(i16) catch 0,
+        .y_offset = s.read(i16) catch 0,
+    };
+}
+
+/// Returns face permissions.
+///
+/// Returns `null` in case of a malformed value.
+pub fn permissions(
+    self: Table,
+) ?Permissions {
+    var s = parser.Stream.new(self.data);
+    const n = s.read_at(u16, TYPE_OFFSET) catch 0;
+
+    if (self.version <= 2)
+        // Version 2 and prior, applications are allowed to take
+        // the most permissive of provided flags
+        if (n & 0xF == 0)
+            return .installable
+        else if (n & 8 != 0)
+            return .editable
+        else if (n & 4 != 0)
+            return .preview_and_print
         else
-            return .normal;
+            return .restricted
+    else switch (n & 0xF) {
+        // Version 3 onwards, flags must be mutually exclusive.
+        0 => return .installable,
+        2 => return .restricted,
+        4 => return .preview_and_print,
+        8 => return .editable,
+        else => return null,
     }
+}
 
-    /// Checks if face is bold.
-    ///
-    /// Do not confuse with `Weight.Bold`.
-    pub fn is_bold(
-        self: Table,
-    ) bool {
-        return self.fs_selection().bold;
-    }
-
-    /// Returns weight class.
-    pub fn weight(
-        self: Table,
-    ) Weight {
-        const f: u16 = f: {
-            var s = parser.Stream.new_at(self.data, WEIGHT_CLASS_OFFSET) catch break :f 0;
-            break :f s.read(u16) catch 0;
-        };
-        return Weight.from(f);
-    }
-
-    /// Returns face width.
-    pub fn width(
-        self: Table,
-    ) Width {
-        var s = parser.Stream.new_at(self.data, WIDTH_CLASS_OFFSET) catch return .normal;
-        const n: u16 = s.read(u16) catch 0;
-        return switch (n) {
-            1 => .ultra_condensed,
-            2 => .extra_condensed,
-            3 => .condensed,
-            4 => .semi_condensed,
-            5 => .normal,
-            6 => .semi_expanded,
-            7 => .expanded,
-            8 => .extra_expanded,
-            9 => .ultra_expanded,
-            else => .normal,
-        };
-    }
-
-    /// Checks if typographic metrics should be used.
-    pub fn use_typographic_metrics(
-        self: Table,
-    ) bool {
-        return self.version >= 4 and self.fs_selection().use_typo_metrics;
-    }
-
-    /// Returns typographic ascender.
-    pub fn typographic_ascender(
-        self: Table,
-    ) i16 {
-        var s = parser.Stream.new_at(self.data, TYPO_ASCENDER_OFFSET) catch return 0;
-        return s.read(i16) catch 0;
-    }
-
-    /// Returns Windows ascender.
-    pub fn windows_ascender(
-        self: Table,
-    ) i16 {
-        var s = parser.Stream.new_at(self.data, WIN_ASCENT) catch return 0;
-        return s.read(i16) catch 0;
-    }
-
-    /// Returns typographic descender.
-    pub fn typographic_descender(
-        self: Table,
-    ) i16 {
-        var s = parser.Stream.new_at(self.data, TYPO_DESCENDER_OFFSET) catch return 0;
-        return s.read(i16) catch 0;
-    }
-
-    /// Returns Windows descender
-    pub fn windows_descender(
-        self: Table,
-    ) i16 {
-        var s = parser.Stream.new_at(self.data, WIN_DESCENT) catch return 0;
-        return -(s.read(i16) catch 0);
-    }
-
-    /// Returns typographic line gap.
-    pub fn typographic_line_gap(
-        self: Table,
-    ) i16 {
-        var s = parser.Stream.new_at(self.data, TYPO_LINE_GAP_OFFSET) catch return 0;
-        return s.read(i16) catch 0;
-    }
-
-    /// Returns x height.
-    ///
-    /// Returns `null` version is < 2.
-    pub fn x_height(
-        self: Table,
-    ) ?i16 {
-        if (self.version < 2) {
-            return null;
-        } else {
-            var s = parser.Stream.new_at(self.data, X_HEIGHT_OFFSET) catch return null;
-            return s.read(i16) catch null;
-        }
-    }
-
-    /// Returns capital height.
-    ///
-    /// Returns `null` version is < 2.
-    pub fn capital_height(
-        self: Table,
-    ) ?i16 {
-        if (self.version < 2) {
-            return null;
-        } else {
-            var s = parser.Stream.new_at(self.data, CAP_HEIGHT_OFFSET) catch return null;
-            return s.read(i16) catch null;
-        }
-    }
-
-    /// Returns strikeout metrics.
-    pub fn strikeout_metrics(
-        self: Table,
-    ) LineMetrics {
-        var s = parser.Stream.new(self.data);
-
-        return .{
-            .thickness = s.read_at(i16, Y_STRIKEOUT_SIZE_OFFSET) catch 0,
-            .position = s.read_at(i16, Y_STRIKEOUT_POSITION_OFFSET) catch 0,
-        };
-    }
-
-    /// Returns subscript metrics.
-    pub fn subscript_metrics(
-        self: Table,
-    ) ScriptMetrics {
-        var s = parser.Stream.new_at(self.data, Y_SUBSCRIPT_X_SIZE_OFFSET) catch return .{};
-        return .{
-            .x_size = s.read(i16) catch 0,
-            .y_size = s.read(i16) catch 0,
-            .x_offset = s.read(i16) catch 0,
-            .y_offset = s.read(i16) catch 0,
-        };
-    }
-
-    /// Returns superscript metrics.
-    pub fn superscript_metrics(
-        self: Table,
-    ) ScriptMetrics {
-        var s = parser.Stream.new_at(self.data, Y_SUPERSCRIPT_X_SIZE_OFFSET) catch return .{};
-        return .{
-            .x_size = s.read(i16) catch 0,
-            .y_size = s.read(i16) catch 0,
-            .x_offset = s.read(i16) catch 0,
-            .y_offset = s.read(i16) catch 0,
-        };
-    }
-
-    /// Returns face permissions.
-    ///
-    /// Returns `null` in case of a malformed value.
-    pub fn permissions(
-        self: Table,
-    ) ?Permissions {
+/// Checks if the face allows embedding a subset, further restricted by `Self.permissions`.
+pub fn is_subsetting_allowed(
+    self: Table,
+) bool {
+    // Flag introduced in version 2
+    return (self.version <= 1) or b: {
         var s = parser.Stream.new(self.data);
         const n = s.read_at(u16, TYPE_OFFSET) catch 0;
 
-        if (self.version <= 2)
-            // Version 2 and prior, applications are allowed to take
-            // the most permissive of provided flags
-            if (n & 0xF == 0)
-                return .installable
-            else if (n & 8 != 0)
-                return .editable
-            else if (n & 4 != 0)
-                return .preview_and_print
-            else
-                return .restricted
-        else switch (n & 0xF) {
-            // Version 3 onwards, flags must be mutually exclusive.
-            0 => return .installable,
-            2 => return .restricted,
-            4 => return .preview_and_print,
-            8 => return .editable,
-            else => return null,
-        }
-    }
+        break :b (n & 0x0100 == 0);
+    };
+}
 
-    /// Checks if the face allows embedding a subset, further restricted by `Self.permissions`.
-    pub fn is_subsetting_allowed(
-        self: Table,
-    ) bool {
-        // Flag introduced in version 2
-        return (self.version <= 1) or b: {
-            var s = parser.Stream.new(self.data);
-            const n = s.read_at(u16, TYPE_OFFSET) catch 0;
+/// Checks if the face allows outline data to be embedded.
+///
+/// If false, only bitmaps may be embedded in accordance with `Self.permissions`.
+///
+/// If the font contains no bitmaps and this flag is not set, it implies no embedding is allowed.
+pub fn is_outline_embedding_allowed(
+    self: Table,
+) bool {
+    // Flag introduced in version 2
+    return (self.version <= 1) or b: {
+        var s = parser.Stream.new(self.data);
+        const n = s.read_at(u16, TYPE_OFFSET) catch 0;
 
-            break :b (n & 0x0100 == 0);
-        };
-    }
+        break :b (n & 0x0200 == 0);
+    };
+}
 
-    /// Checks if the face allows outline data to be embedded.
-    ///
-    /// If false, only bitmaps may be embedded in accordance with `Self.permissions`.
-    ///
-    /// If the font contains no bitmaps and this flag is not set, it implies no embedding is allowed.
-    pub fn is_outline_embedding_allowed(
-        self: Table,
-    ) bool {
-        // Flag introduced in version 2
-        return (self.version <= 1) or b: {
-            var s = parser.Stream.new(self.data);
-            const n = s.read_at(u16, TYPE_OFFSET) catch 0;
+/// Returns Unicode ranges.
+pub fn unicode_ranges(
+    self: Table,
+) UnicodeRanges {
+    var s = parser.Stream.new_at(self.data, UNICODE_RANGES_OFFSET) catch
+        return .{};
 
-            break :b (n & 0x0200 == 0);
-        };
-    }
+    const n1: u128 = s.read(u32) catch 0;
+    const n2: u128 = s.read(u32) catch 0;
+    const n3: u128 = s.read(u32) catch 0;
+    const n4: u128 = s.read(u32) catch 0;
 
-    /// Returns Unicode ranges.
-    pub fn unicode_ranges(
-        self: Table,
-    ) UnicodeRanges {
-        var s = parser.Stream.new_at(self.data, UNICODE_RANGES_OFFSET) catch
-            return .{};
-
-        const n1: u128 = s.read(u32) catch 0;
-        const n2: u128 = s.read(u32) catch 0;
-        const n3: u128 = s.read(u32) catch 0;
-        const n4: u128 = s.read(u32) catch 0;
-
-        return .{ .inner = n4 << 96 | n3 << 64 | n2 << 32 | n1 };
-    }
-};
+    return .{ .inner = n4 << 96 | n3 << 64 | n2 << 32 | n1 };
+}
 
 /// A face style.
 pub const Style = enum {

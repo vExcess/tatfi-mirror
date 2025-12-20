@@ -18,8 +18,6 @@ const Charset = @import("charset.zig").Charset;
 const DictionaryParser = @import("dict.zig");
 const CharStringParser = @import("charstring.zig");
 
-const LazyArray16 = parser.LazyArray16;
-
 // Limits according to the Adobe Technical Note #5177 Appendix B.
 const STACK_LIMIT: u8 = 10;
 const MAX_ARGUMENTS_STACK_LEN: usize = 48;
@@ -82,234 +80,234 @@ const adobe_operator = struct {
 
 /// A [Compact Font Format Table](
 /// https://docs.microsoft.com/en-us/typography/opentype/spec/cff).
-pub const Table = struct {
-    // The whole CFF table.
-    // Used to resolve a local subroutine in a CID font.
-    table_data: []const u8,
+const Table = @This();
 
-    strings: Index,
-    global_subrs: Index,
-    charset: Charset,
-    number_of_glyphs: u16, // nonzero
-    matrix: Matrix,
-    char_strings: Index,
-    kind: FontKind,
+// The whole CFF table.
+// Used to resolve a local subroutine in a CID font.
+table_data: []const u8,
 
-    // Copy of Face.units_per_em().
-    // Required to do glyph outlining, since coordinates must be scaled up by this before applying the `matrix`.
+strings: Index,
+global_subrs: Index,
+charset: Charset,
+number_of_glyphs: u16, // nonzero
+matrix: Matrix,
+char_strings: Index,
+kind: FontKind,
+
+// Copy of Face.units_per_em().
+// Required to do glyph outlining, since coordinates must be scaled up by this before applying the `matrix`.
+units_per_em: ?u16,
+
+/// Parses a table from raw data.
+pub fn parse(
+    data: []const u8,
+) parser.Error!Table {
+    return try Table.parse_inner(data, null);
+}
+
+/// The same as `Table.parse`, with the difference that it allows you to
+/// manually pass the units per em of the font, which is needed to properly
+/// scale certain fonts with a non-identity matrix.
+pub fn parse_with_upem(
+    data: []const u8,
+    units_per_em: u16,
+) parser.Error!Table {
+    return try Table.parse_inner(data, units_per_em);
+}
+
+fn parse_inner(
+    data: []const u8,
     units_per_em: ?u16,
+) parser.Error!Table {
+    var s = parser.Stream.new(data);
 
-    /// Parses a table from raw data.
-    pub fn parse(
-        data: []const u8,
-    ) parser.Error!Table {
-        return try Table.parse_inner(data, null);
-    }
+    // Parse Header.
+    const major = try s.read(u8);
+    s.skip(u8); // minor
+    const header_size = try s.read(u8);
+    s.skip(u8); // Absolute offset
 
-    /// The same as `Table.parse`, with the difference that it allows you to
-    /// manually pass the units per em of the font, which is needed to properly
-    /// scale certain fonts with a non-identity matrix.
-    pub fn parse_with_upem(
-        data: []const u8,
-        units_per_em: u16,
-    ) parser.Error!Table {
-        return try Table.parse_inner(data, units_per_em);
-    }
+    if (major != 1) return error.ParseFail;
 
-    fn parse_inner(
-        data: []const u8,
-        units_per_em: ?u16,
-    ) parser.Error!Table {
-        var s = parser.Stream.new(data);
+    // Jump to Name INDEX. It's not necessarily right after the header.
+    if (header_size > 4) s.advance(header_size - 4);
 
-        // Parse Header.
-        const major = try s.read(u8);
-        s.skip(u8); // minor
-        const header_size = try s.read(u8);
-        s.skip(u8); // Absolute offset
+    // Skip Name INDEX.
+    try Index.skip(u16, &s);
 
-        if (major != 1) return error.ParseFail;
+    const top_dict = try parse_top_dict(&s);
 
-        // Jump to Name INDEX. It's not necessarily right after the header.
-        if (header_size > 4) s.advance(header_size - 4);
+    // Must be set, otherwise there are nothing to parse.
+    if (top_dict.char_strings_offset == 0) return error.ParseFail;
 
-        // Skip Name INDEX.
-        try Index.skip(u16, &s);
+    // String INDEX.
+    const strings = try Index.parse(u16, &s);
 
-        const top_dict = try parse_top_dict(&s);
+    // Parse Global Subroutines INDEX.
+    const global_subrs = try Index.parse(u16, &s);
 
-        // Must be set, otherwise there are nothing to parse.
-        if (top_dict.char_strings_offset == 0) return error.ParseFail;
+    const char_strings = cs: {
+        var scs = try parser.Stream.new_at(data, top_dict.char_strings_offset);
+        break :cs try Index.parse(u16, &scs);
+    };
 
-        // String INDEX.
-        const strings = try Index.parse(u16, &s);
+    // 'The number of glyphs is the value of the count field in the CharStrings INDEX.'
+    const number_of_glyphs = std.math.cast(u16, char_strings.len()) orelse
+        return error.ParseFail;
+    if (number_of_glyphs == 0) return error.ParseFail;
 
-        // Parse Global Subroutines INDEX.
-        const global_subrs = try Index.parse(u16, &s);
+    // continue from line 941 in cff1.rs
+    const charset: Charset = if (top_dict.charset_offset) |charset_offset|
+        switch (charset_offset) {
+            charset_id.ISO_ADOBE => .iso_adobe,
+            charset_id.EXPERT => .expert,
+            charset_id.EXPERT_SUBSET => .expert_subset,
+            else => s: {
+                var sco = try parser.Stream.new_at(data, charset_offset);
+                break :s try Charset.parse_charset(number_of_glyphs, &sco);
+            },
+        }
+    else
+        .iso_adobe; // default
 
-        const char_strings = cs: {
-            var scs = try parser.Stream.new_at(data, top_dict.char_strings_offset);
-            break :cs try Index.parse(u16, &scs);
-        };
+    const matrix = top_dict.matrix;
 
-        // 'The number of glyphs is the value of the count field in the CharStrings INDEX.'
-        const number_of_glyphs = std.math.cast(u16, char_strings.len()) orelse
-            return error.ParseFail;
-        if (number_of_glyphs == 0) return error.ParseFail;
-
-        // continue from line 941 in cff1.rs
-        const charset: Charset = if (top_dict.charset_offset) |charset_offset|
-            switch (charset_offset) {
-                charset_id.ISO_ADOBE => .iso_adobe,
-                charset_id.EXPERT => .expert,
-                charset_id.EXPERT_SUBSET => .expert_subset,
-                else => s: {
-                    var sco = try parser.Stream.new_at(data, charset_offset);
-                    break :s try Charset.parse_charset(number_of_glyphs, &sco);
+    const kind = if (top_dict.has_ros)
+        try parse_cid_metadata(data, top_dict, number_of_glyphs)
+    else k: {
+        // Only SID fonts are allowed to have an Encoding.
+        const encoding: Encoding = if (top_dict.encoding_offset) |offset|
+            switch (offset) {
+                encoding_id.STANDARD => .new_standard,
+                encoding_id.EXPERT => .new_expert,
+                else => e: {
+                    var se = try parser.Stream.new_at(data, offset);
+                    break :e try .parse(&se);
                 },
             }
         else
-            .iso_adobe; // default
+            .new_standard;
 
-        const matrix = top_dict.matrix;
+        break :k try parse_sid_metadata(data, top_dict, encoding);
+    };
 
-        const kind = if (top_dict.has_ros)
-            try parse_cid_metadata(data, top_dict, number_of_glyphs)
-        else k: {
-            // Only SID fonts are allowed to have an Encoding.
-            const encoding: Encoding = if (top_dict.encoding_offset) |offset|
-                switch (offset) {
-                    encoding_id.STANDARD => .new_standard,
-                    encoding_id.EXPERT => .new_expert,
-                    else => e: {
-                        var se = try parser.Stream.new_at(data, offset);
-                        break :e try .parse(&se);
-                    },
-                }
-            else
-                .new_standard;
+    return .{
+        .table_data = data,
+        .strings = strings,
+        .global_subrs = global_subrs,
+        .charset = charset,
+        .number_of_glyphs = number_of_glyphs,
+        .matrix = matrix,
+        .char_strings = char_strings,
+        .kind = kind,
+        .units_per_em = units_per_em,
+    };
+}
 
-            break :k try parse_sid_metadata(data, top_dict, encoding);
-        };
+/// Resolves a Glyph ID for a code point.
+///
+/// Similar to `Face.glyph_index` but 8bit
+/// and uses CFF encoding and charset tables instead of TrueType `cmap`.
+pub fn glyph_index(
+    self: Table,
+    code_point: u8,
+) ?lib.GlyphId {
+    if (self.kind == .cid) return null;
 
-        return .{
-            .table_data = data,
-            .strings = strings,
-            .global_subrs = global_subrs,
-            .charset = charset,
-            .number_of_glyphs = number_of_glyphs,
-            .matrix = matrix,
-            .char_strings = char_strings,
-            .kind = kind,
-            .units_per_em = units_per_em,
-        };
-    }
+    return self.kind.sid.encoding.code_to_gid(self.charset, code_point) orelse
+        // Try using the Standard encoding otherwise.
+        // Custom Encodings does not guarantee to include all glyphs.
+        Encoding.new_standard.code_to_gid(self.charset, code_point);
+}
 
-    /// Resolves a Glyph ID for a code point.
-    ///
-    /// Similar to `Face.glyph_index` but 8bit
-    /// and uses CFF encoding and charset tables instead of TrueType `cmap`.
-    pub fn glyph_index(
-        self: Table,
-        code_point: u8,
-    ) ?lib.GlyphId {
-        if (self.kind == .cid) return null;
+/// Returns a glyph width.
+///
+/// This value is different from outline bbox width and is stored separately.
+///
+/// Technically similar to `Face.glyph_hor_advance`.
+pub fn glyph_width(
+    self: Table,
+    glyph_id: lib.GlyphId,
+) ?u16 {
+    if (self.kind == .cid) return null;
 
-        return self.kind.sid.encoding.code_to_gid(self.charset, code_point) orelse
-            // Try using the Standard encoding otherwise.
-            // Custom Encodings does not guarantee to include all glyphs.
-            Encoding.new_standard.code_to_gid(self.charset, code_point);
-    }
+    const sid = self.kind.sid;
+    const data = self.char_strings.get(glyph_id[0]) orelse return null;
+    _, const maybe_width = parse_char_string(
+        data,
+        &self,
+        glyph_id,
+        true,
+        lib.OutlineBuilder.dummy_builder,
+    ) catch return null;
+    const width = w: {
+        const w = maybe_width orelse break :w sid.default_width;
+        break :w sid.nominal_width + w;
+    };
 
-    /// Returns a glyph width.
-    ///
-    /// This value is different from outline bbox width and is stored separately.
-    ///
-    /// Technically similar to `Face.glyph_hor_advance`.
-    pub fn glyph_width(
-        self: Table,
-        glyph_id: lib.GlyphId,
-    ) ?u16 {
-        if (self.kind == .cid) return null;
+    return utils.f32_to_u16(width);
+}
 
-        const sid = self.kind.sid;
-        const data = self.char_strings.get(glyph_id[0]) orelse return null;
-        _, const maybe_width = parse_char_string(
-            data,
-            &self,
-            glyph_id,
-            true,
-            lib.OutlineBuilder.dummy_builder,
-        ) catch return null;
-        const width = w: {
-            const w = maybe_width orelse break :w sid.default_width;
-            break :w sid.nominal_width + w;
-        };
+/// Returns a glyph ID by a name.
+pub fn glyph_index_by_name(
+    self: Table,
+    name: []const u8,
+) ?lib.GlyphId {
+    if (self.kind == .cid) return null;
 
-        return utils.f32_to_u16(width);
-    }
+    const sid: cff.StringId = sid: for (cff.STANDARD_NAMES, 0..) |n, pos| {
+        if (std.mem.eql(u8, n, name)) break :sid .{@truncate(pos)};
+    } else {
+        var iter = self.strings.iterator();
+        var pos: usize = 0;
 
-    /// Returns a glyph ID by a name.
-    pub fn glyph_index_by_name(
-        self: Table,
-        name: []const u8,
-    ) ?lib.GlyphId {
-        if (self.kind == .cid) return null;
+        const index = while (iter.next()) |n| : (pos += 1) {
+            if (std.mem.eql(u8, n, name)) break pos;
+        } else return null;
+        break :sid .{@truncate(index + cff.STANDARD_NAMES.len)};
+    };
 
-        const sid: cff.StringId = sid: for (cff.STANDARD_NAMES, 0..) |n, pos| {
-            if (std.mem.eql(u8, n, name)) break :sid .{@truncate(pos)};
-        } else {
-            var iter = self.strings.iterator();
-            var pos: usize = 0;
+    return self.charset.sid_to_gid(sid);
+}
 
-            const index = while (iter.next()) |n| : (pos += 1) {
-                if (std.mem.eql(u8, n, name)) break pos;
-            } else return null;
-            break :sid .{@truncate(index + cff.STANDARD_NAMES.len)};
-        };
+/// Returns a glyph name.
+pub fn glyph_name(
+    self: Table,
+    glyph_id: lib.GlyphId,
+) ?[]const u8 {
+    if (self.kind == .cid) return null;
 
-        return self.charset.sid_to_gid(sid);
-    }
+    const sid = self.charset.gid_to_sid(glyph_id) orelse return null;
 
-    /// Returns a glyph name.
-    pub fn glyph_name(
-        self: Table,
-        glyph_id: lib.GlyphId,
-    ) ?[]const u8 {
-        if (self.kind == .cid) return null;
+    if (sid[0] < cff.STANDARD_NAMES.len) return cff.STANDARD_NAMES[sid[0]];
 
-        const sid = self.charset.gid_to_sid(glyph_id) orelse return null;
+    const index = std.math.cast(u32, sid[0] - cff.STANDARD_NAMES.len) orelse return null;
+    return self.strings.get(index);
+}
 
-        if (sid[0] < cff.STANDARD_NAMES.len) return cff.STANDARD_NAMES[sid[0]];
+/// Outlines a glyph.
+pub fn outline(
+    self: Table,
+    glyph_id: lib.GlyphId,
+    builder: lib.OutlineBuilder,
+) cff.Error!lib.Rect {
+    const data = self.char_strings.get(glyph_id[0]) orelse return error.NoGlyph;
+    const ret = try parse_char_string(data, &self, glyph_id, false, builder);
+    return ret[0];
+}
 
-        const index = std.math.cast(u32, sid[0] - cff.STANDARD_NAMES.len) orelse return null;
-        return self.strings.get(index);
-    }
+/// Returns the CID corresponding to a glyph ID.
+///
+/// Returns `null` if this is not a CIDFont.
+pub fn glyph_cid(
+    self: Table,
+    glyph_id: lib.GlyphId,
+) ?u16 {
+    if (self.kind == .sid) return null;
 
-    /// Outlines a glyph.
-    pub fn outline(
-        self: Table,
-        glyph_id: lib.GlyphId,
-        builder: lib.OutlineBuilder,
-    ) cff.Error!lib.Rect {
-        const data = self.char_strings.get(glyph_id[0]) orelse return error.NoGlyph;
-        const ret = try parse_char_string(data, &self, glyph_id, false, builder);
-        return ret[0];
-    }
-
-    /// Returns the CID corresponding to a glyph ID.
-    ///
-    /// Returns `null` if this is not a CIDFont.
-    pub fn glyph_cid(
-        self: Table,
-        glyph_id: lib.GlyphId,
-    ) ?u16 {
-        if (self.kind == .sid) return null;
-
-        const ret = self.charset.gid_to_sid(glyph_id) orelse return null;
-        return ret[0];
-    }
-};
+    const ret = self.charset.gid_to_sid(glyph_id) orelse return null;
+    return ret[0];
+}
 
 /// An affine transformation matrix.
 //[ARS] I dont know what affine means here
@@ -342,7 +340,7 @@ pub const CIDMetadata = struct {
 };
 
 pub const FDSelect = union(enum) {
-    format0: LazyArray16(u8),
+    format0: parser.LazyArray16(u8),
     format3: []const u8, // It's easier to parse it in-place.
 
     fn font_dict_index(

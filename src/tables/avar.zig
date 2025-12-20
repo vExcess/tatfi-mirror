@@ -5,49 +5,47 @@ const std = @import("std");
 const lib = @import("../lib.zig");
 const parser = @import("../parser.zig");
 
-/// An [Axis Variations Table](
-/// https://docs.microsoft.com/en-us/typography/opentype/spec/avar).
-pub const Table = struct {
-    /// The segment maps array — one segment map for each axis
-    /// in the order of axes specified in the `fvar` table.
-    segment_maps: SegmentMaps,
+const Table = @This();
 
-    /// Parses a table from raw data.
-    pub fn parse(
-        data: []const u8,
-    ) parser.Error!Table {
-        var s = parser.Stream.new(data);
+/// The segment maps array — one segment map for each axis
+/// in the order of axes specified in the `fvar` table.
+segment_maps: SegmentMaps,
 
-        const version = try s.read(u32);
-        if (version != 0x00010000) return error.ParseFail;
+/// Parses a table from raw data.
+pub fn parse(
+    data: []const u8,
+) parser.Error!Table {
+    var s = parser.Stream.new(data);
 
-        s.skip(u16); // reserved
+    const version = try s.read(u32);
+    if (version != 0x00010000) return error.ParseFail;
 
-        return .{
-            .segment_maps = .{
-                // TODO: check that `axisCount` is the same as in `fvar`?
-                .count = try s.read(u16),
-                .data = try s.tail(),
-            },
-        };
-    }
+    s.skip(u16); // reserved
 
-    /// Maps a single coordinate. return true on success
-    pub fn map_coordinate(
-        self: Table,
-        coordinates: []lib.NormalizedCoordinate,
-        coordinate_index: usize,
-    ) !void {
-        if (self.segment_maps.count != coordinates.len) return error.DataError;
+    return .{
+        .segment_maps = .{
+            // TODO: check that `axisCount` is the same as in `fvar`?
+            .count = try s.read(u16),
+            .data = try s.tail(),
+        },
+    };
+}
 
-        var iter = self.segment_maps.iterator();
-        var i: usize = 0;
-        while (iter.next()) |map| : (i += 1) if (i == coordinate_index) {
-            coordinates[i] = .from(map_value(&map, coordinates[i].inner) orelse return error.MapError);
-            break;
-        };
-    }
-};
+/// Maps a single coordinate. return true on success
+pub fn map_coordinate(
+    self: Table,
+    coordinates: []lib.NormalizedCoordinate,
+    coordinate_index: usize,
+) !void {
+    if (self.segment_maps.count != coordinates.len) return error.DataError;
+
+    var iter = self.segment_maps.iterator();
+    var i: usize = 0;
+    while (iter.next()) |map| : (i += 1) if (i == coordinate_index) {
+        coordinates[i] = .from(map_value(&map, coordinates[i].inner) orelse return error.MapError);
+        break;
+    };
+}
 
 /// A list of segment maps.
 ///

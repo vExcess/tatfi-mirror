@@ -7,102 +7,98 @@ const parser = @import("../parser.zig");
 const utils = @import("../utils.zig");
 const loca = @import("loca.zig");
 
-const F2DOT14 = parser.F2DOT14;
+const Table = @This();
 
-/// A [Glyph Data Table](
-/// https://docs.microsoft.com/en-us/typography/opentype/spec/glyf).
-pub const Table = struct {
-    data: []const u8,
+data: []const u8,
+loca_table: loca.Table,
+
+/// Parses a table from raw data.
+pub fn parse(
     loca_table: loca.Table,
+    data: []const u8,
+) Table {
+    return .{
+        .data = data,
+        .loca_table = loca_table,
+    };
+}
 
-    /// Parses a table from raw data.
-    pub fn parse(
-        loca_table: loca.Table,
-        data: []const u8,
-    ) Table {
-        return .{
-            .data = data,
-            .loca_table = loca_table,
-        };
+pub fn get(
+    self: Table,
+    glyph_id: lib.GlyphId,
+) ?[]const u8 {
+    const start, const end = self.loca_table.glyph_range(glyph_id) orelse return null;
+    return utils.slice(self.data, .{ .start = start, .end = end }) catch null;
+}
+
+/// Returns the number of points in this outline.
+pub fn outline_points(
+    self: Table,
+    glyph_id: lib.GlyphId,
+) u16 {
+    return self.outline_points_impl(glyph_id) catch 0;
+}
+
+fn outline_points_impl(
+    self: Table,
+    glyph_id: lib.GlyphId,
+) parser.Error!u16 {
+    const data = self.get(glyph_id) orelse return error.ParseFail;
+    var s = parser.Stream.new(data);
+    const number_of_contours = try s.read(i16);
+
+    s.advance(8); //  bbox.
+
+    if (number_of_contours > 0) {
+        // Simple glyph.
+        const glyph_points = try parse_simple_outline(
+            try s.tail(),
+            @bitCast(number_of_contours),
+        );
+        return glyph_points.points_left;
+    } else if (number_of_contours < 0) {
+        // Composite glyph.
+        var components = CompositeGlyphIter.new(try s.tail());
+        var count: u16 = 0;
+        while (components.next()) |_| count += 1;
+
+        return count;
+    } else {
+        // An empty glyph.
+        return error.ParseFail;
     }
+}
 
-    pub fn get(
-        self: Table,
-        glyph_id: lib.GlyphId,
-    ) ?[]const u8 {
-        const start, const end = self.loca_table.glyph_range(glyph_id) orelse return null;
-        return utils.slice(self.data, .{ .start = start, .end = end }) catch null;
-    }
+/// Outlines a glyph.
+pub fn outline(
+    self: Table,
+    glyph_id: lib.GlyphId,
+    builder: lib.OutlineBuilder,
+) ?lib.Rect {
+    var b = Builder.new(.{}, .{}, builder);
+    const glyph_data = self.get(glyph_id) orelse return null;
+    return outline_impl(self.loca_table, self.data, glyph_data, 0, &b) catch return null;
+}
 
-    /// Returns the number of points in this outline.
-    pub fn outline_points(
-        self: Table,
-        glyph_id: lib.GlyphId,
-    ) u16 {
-        return self.outline_points_impl(glyph_id) catch 0;
-    }
+/// The bounding box of the glyph. Unlike the `outline` method, this method does not
+/// calculate the bounding box manually by outlining the glyph, but instead uses the
+/// bounding box in the `glyf` program. As a result, this method will be much faster,
+/// but the bounding box could be more inaccurate.
+pub fn bbox(
+    self: Table,
+    glyph_id: lib.GlyphId,
+) ?lib.Rect {
+    const glyph_data = self.get(glyph_id) orelse return null;
 
-    fn outline_points_impl(
-        self: Table,
-        glyph_id: lib.GlyphId,
-    ) parser.Error!u16 {
-        const data = self.get(glyph_id) orelse return error.ParseFail;
-        var s = parser.Stream.new(data);
-        const number_of_contours = try s.read(i16);
-
-        s.advance(8); //  bbox.
-
-        if (number_of_contours > 0) {
-            // Simple glyph.
-            const glyph_points = try parse_simple_outline(
-                try s.tail(),
-                @bitCast(number_of_contours),
-            );
-            return glyph_points.points_left;
-        } else if (number_of_contours < 0) {
-            // Composite glyph.
-            var components = CompositeGlyphIter.new(try s.tail());
-            var count: u16 = 0;
-            while (components.next()) |_| count += 1;
-
-            return count;
-        } else {
-            // An empty glyph.
-            return error.ParseFail;
-        }
-    }
-
-    /// Outlines a glyph.
-    pub fn outline(
-        self: Table,
-        glyph_id: lib.GlyphId,
-        builder: lib.OutlineBuilder,
-    ) ?lib.Rect {
-        var b = Builder.new(.{}, .{}, builder);
-        const glyph_data = self.get(glyph_id) orelse return null;
-        return outline_impl(self.loca_table, self.data, glyph_data, 0, &b) catch return null;
-    }
-
-    /// The bounding box of the glyph. Unlike the `outline` method, this method does not
-    /// calculate the bounding box manually by outlining the glyph, but instead uses the
-    /// bounding box in the `glyf` program. As a result, this method will be much faster,
-    /// but the bounding box could be more inaccurate.
-    pub fn bbox(
-        self: Table,
-        glyph_id: lib.GlyphId,
-    ) ?lib.Rect {
-        const glyph_data = self.get(glyph_id) orelse return null;
-
-        var s = parser.Stream.new(glyph_data);
-        s.skip(i16); // number of contours
-        return .{
-            .x_min = s.read(i16) catch return null,
-            .y_min = s.read(i16) catch return null,
-            .x_max = s.read(i16) catch return null,
-            .y_max = s.read(i16) catch return null,
-        };
-    }
-};
+    var s = parser.Stream.new(glyph_data);
+    s.skip(i16); // number of contours
+    return .{
+        .x_min = s.read(i16) catch return null,
+        .y_min = s.read(i16) catch return null,
+        .x_max = s.read(i16) catch return null,
+        .y_max = s.read(i16) catch return null,
+    };
+}
 
 pub fn parse_simple_outline(
     glyph_data: []const u8,
@@ -341,15 +337,15 @@ pub const CompositeGlyphIter = struct {
         }
 
         if (flags.we_have_a_two_by_two) {
-            ts.a = (self.stream.read(F2DOT14) catch return null).to_f32();
-            ts.b = (self.stream.read(F2DOT14) catch return null).to_f32();
-            ts.c = (self.stream.read(F2DOT14) catch return null).to_f32();
-            ts.d = (self.stream.read(F2DOT14) catch return null).to_f32();
+            ts.a = (self.stream.read(parser.F2DOT14) catch return null).to_f32();
+            ts.b = (self.stream.read(parser.F2DOT14) catch return null).to_f32();
+            ts.c = (self.stream.read(parser.F2DOT14) catch return null).to_f32();
+            ts.d = (self.stream.read(parser.F2DOT14) catch return null).to_f32();
         } else if (flags.we_have_an_x_and_y_scale) {
-            ts.a = (self.stream.read(F2DOT14) catch return null).to_f32();
-            ts.d = (self.stream.read(F2DOT14) catch return null).to_f32();
+            ts.a = (self.stream.read(parser.F2DOT14) catch return null).to_f32();
+            ts.d = (self.stream.read(parser.F2DOT14) catch return null).to_f32();
         } else if (flags.we_have_a_scale) {
-            ts.a = (self.stream.read(F2DOT14) catch return null).to_f32();
+            ts.a = (self.stream.read(parser.F2DOT14) catch return null).to_f32();
             ts.d = ts.a;
         }
 
@@ -454,14 +450,14 @@ pub const Builder = struct {
 
     pub fn new(
         transform: lib.Transform,
-        bbox: lib.RectF,
+        b_box: lib.RectF,
         builder: lib.OutlineBuilder,
     ) Builder {
         return .{
             .builder = builder,
             .transform = transform,
             .is_default_ts = transform.is_default(),
-            .bbox = bbox,
+            .bbox = b_box,
             .first_on_curve = null,
             .first_off_curve = null,
             .last_off_curve = null,

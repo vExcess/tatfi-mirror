@@ -7,7 +7,7 @@ const Charset = @import("charset.zig").Charset;
 const Encoding = @This();
 
 kind: Kind,
-supplemental: parser.LazyArray16(Supplement),
+supplemental: parser.LazyArray(u8, Supplement),
 
 pub const new_standard: Encoding = .{
     .kind = .standard,
@@ -29,15 +29,15 @@ pub fn parse(
         break :f .{ format & 0x80 != 0, format & 0x7f };
     };
 
-    const count: u16 = try s.read(u8);
+    const count = try s.read(u8);
     const kind: Kind = switch (format) {
         0 => .{ .format0 = try s.read_array(u8, count) },
         1 => .{ .format1 = try s.read_array(Format1Range, count) },
         else => return error.ParseFail,
     };
 
-    const supplemental: parser.LazyArray16(Supplement) = if (has_supplemental) s: {
-        const suppl_count: u16 = try s.read(u8);
+    const supplemental: parser.LazyArray(u8, Supplement) = if (has_supplemental) s: {
+        const suppl_count = try s.read(u8);
         break :s try s.read_array(Supplement, suppl_count);
     } else .{};
 
@@ -97,8 +97,8 @@ pub fn code_to_gid(
 pub const Kind = union(enum) {
     standard,
     expert,
-    format0: parser.LazyArray16(u8),
-    format1: parser.LazyArray16(Format1Range),
+    format0: parser.LazyArray(u8, u8),
+    format1: parser.LazyArray(u8, Format1Range),
 };
 
 pub const Supplement = struct {
