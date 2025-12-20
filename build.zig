@@ -5,6 +5,16 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("src/lib.zig"),
     });
 
+    set_up_options(b, mod);
+
+    if (b.pkg_hash.len == 0)
+        set_up_testing_exe(b, mod);
+}
+
+fn set_up_options(
+    b: *std.Build,
+    mod: *std.Build.Module,
+) void {
     const options = add_config(b, mod, &.{
         .{
             .name = "variable_fonts",
@@ -33,9 +43,6 @@ pub fn build(b: *std.Build) void {
         \\Most fonts are in the 10-20 range.
     ) orelse 32;
     options.addOption(usize, "gvar_max_stack_tuples_len", gvar);
-
-    if (b.pkg_hash.len == 0)
-        set_up_testing_exe(b, mod);
 }
 
 fn add_config(
@@ -62,6 +69,9 @@ fn set_up_testing_exe(
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
+    mod.resolved_target = target;
+    mod.optimize = optimize;
+
     const exe = b.addExecutable(.{
         .name = "foo",
         .root_module = b.createModule(.{
@@ -76,10 +86,15 @@ fn set_up_testing_exe(
         }),
     });
 
+    const t = b.addTest(.{ .root_module = mod });
+
     b.installArtifact(exe);
 
     const run_step = b.step("run", "Run the app");
 
     const run_cmd = b.addRunArtifact(exe);
     run_step.dependOn(&run_cmd.step);
+
+    const test_cmd = b.addRunArtifact(t);
+    run_step.dependOn(&test_cmd.step);
 }

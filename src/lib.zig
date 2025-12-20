@@ -2144,3 +2144,7 @@ pub const RgbaColor = struct {
         return ret;
     }
 };
+
+test {
+    _ = std.testing.refAllDeclsRecursive(@This());
+}

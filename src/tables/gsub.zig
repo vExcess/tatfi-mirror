@@ -162,7 +162,7 @@ pub const AlternateSubstitution = struct {
         /// Array of alternate glyph IDs, in arbitrary order.
         alternates: parser.LazyArray16(lib.GlyphId),
 
-        fn parse(
+        pub fn parse(
             data: []const u8,
         ) parser.Error!AlternateSet {
             var s = parser.Stream.new(data);
@@ -204,7 +204,7 @@ pub const LigatureSubstitution = struct {
         /// Glyph components for one ligature.
         components: parser.LazyArray16(lib.GlyphId),
 
-        fn parse(
+        pub fn parse(
             data: []const u8,
         ) parser.Error!Ligature {
             var s = parser.Stream.new(data);

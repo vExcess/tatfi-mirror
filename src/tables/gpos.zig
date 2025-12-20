@@ -300,7 +300,7 @@ pub const ValueRecordsArray = struct {
         const data = utils.slice(self.data, .{ start, self.value_len }) catch return null;
 
         var s = parser.Stream.new(data);
-        return .parse(self.table_data, &s, self.flags) catch null;
+        return ValueRecord.parse(self.table_data, &s, self.flags) catch null;
     }
 };
 
@@ -509,7 +509,7 @@ pub const PairSet = struct {
         second: lib.GlyphId,
     ) parser.Error!struct { ValueRecord, ValueRecord } {
         const record_data = self.binary_search(second) orelse return error.ParseFail;
-        var s = try parser.Stream.new(record_data);
+        var s = parser.Stream.new(record_data);
         s.skip(lib.GlyphId);
         return .{
             try .parse(self.data, &s, self.flags[0]),
@@ -562,8 +562,8 @@ pub const ClassMatrix = struct {
 
         var s = parser.Stream.new(record);
         return .{
-            .parse(self.table_data, &s, self.flags[0]) catch return null,
-            .parse(self.table_data, &s, self.flags[1]) catch return null,
+            ValueRecord.parse(self.table_data, &s, self.flags[0]) catch return null,
+            ValueRecord.parse(self.table_data, &s, self.flags[1]) catch return null,
         };
     }
 };
@@ -738,8 +738,8 @@ pub const AnchorMatrix = struct {
         col: u16,
     ) ?Anchor {
         const idx = @as(u32, row) * @as(u32, self.cols) + @as(u32, col);
-        const offset = self.matrix.get(idx) orelse return null orelse return null;
-        const data = try utils.slice(self.data, offset[0]) catch return null;
+        const offset = self.matrix.get_optional(idx) orelse return null;
+        const data = utils.slice(self.data, offset[0]) catch return null;
         return Anchor.parse(data) catch null;
     }
 };

@@ -907,3 +907,70 @@ fn seac_code_to_glyph_id(
         else => return charset.sid_to_gid(sid),
     }
 }
+
+// [RazrFalcon] TODO: move to integration
+const t = std.testing;
+
+test "private dict size overflow" {
+    const data = &.{
+        0x00, 0x01, // count: 1
+        0x01, // offset size: 1
+        0x01, // index [0]: 1
+        0x0C, // index [1]: 14
+        0x1D, 0x7F, 0xFF, 0xFF, 0xFF, // length: i32::MAX
+        0x1D, 0x7F, 0xFF, 0xFF, 0xFF, // offset: i32::MAX
+        0x12, // operator: 18 (private)
+    };
+    var s = parser.Stream.new(data);
+    const top_dict = try parse_top_dict(&s);
+    try t.expectEqual(.{ 2147483647, 2147483647 }, top_dict.private_dict_range);
+}
+
+test "private dict negative char strings offset" {
+    const data = &.{
+        0x00, 0x01, // count: 1
+        0x01, // offset size: 1
+        0x01, // index [0]: 1
+        0x03, // index [1]: 3
+        // Item 0
+        0x8A, // offset: -1
+        0x11, // operator: 17 (char_string)
+    };
+
+    var s = parser.Stream.new(data);
+    const top_dict = parse_top_dict(&s);
+    try t.expectError(error.ParseFail, top_dict);
+}
+
+test "private dict no char strings offset operand" {
+    const data = &.{
+        0x00, 0x01, // count: 1
+        0x01, // offset size: 1
+        0x01, // index [0]: 1
+        0x02, // index [1]: 2
+        // Item 0
+        // <-- No number here.
+        0x11, // operator: 17 (char_string)
+    };
+
+    var s = parser.Stream.new(data);
+    const top_dict = parse_top_dict(&s);
+    try t.expectError(error.ParseFail, top_dict);
+}
+
+test "negative private dict offset and size" {
+    const data = &.{
+        0x00, 0x01, // count: 1
+        0x01, // offset size: 1
+        0x01, // index [0]: 1
+        0x04, // index [1]: 4
+        // Item 0
+        0x8A, // length: -1
+        0x8A, // offset: -1
+        0x12, // operator: 18 (private)
+    };
+
+    var s = parser.Stream.new(data);
+    const top_dict = try parse_top_dict(&s);
+    try t.expectEqual(null, top_dict.private_dict_range);
+}

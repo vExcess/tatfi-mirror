@@ -168,3 +168,19 @@ pub fn parse(
         return .{ .data = data, .offsets = offsets };
     } else return .default;
 }
+
+test "parse offset size" {
+    const t = std.testing;
+    {
+        var s = parser.Stream.new(&.{0x00});
+        try t.expectError(error.ParseFail, s.read(OffsetSize));
+    }
+    {
+        var s = parser.Stream.new(&.{0x01});
+        try t.expectEqual(OffsetSize.size1, s.read(OffsetSize));
+    }
+    {
+        var s = parser.Stream.new(&.{0x05});
+        try t.expectError(error.ParseFail, s.read(OffsetSize));
+    }
+}
