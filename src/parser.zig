@@ -1,4 +1,5 @@
 const std = @import("std");
+const log = std.log.scoped(.parser_module);
 
 /// A slice-like container that converts internal binary data only on access.
 ///
@@ -391,18 +392,18 @@ pub const Stream = struct {
         self: *Stream,
         len: usize,
     ) Error![]const u8 {
+        const end = self.offset + len;
+
         // An integer overflow here on 32bit systems is almost guarantee to be caused
         // by an incorrect parsing logic from the caller side.
         // Simply using `checked_add` here would silently swallow errors, which is not what we want.
-        std.debug.assert(self.offset + len <= std.math.maxInt(u32));
+        std.debug.assert(end <= std.math.maxInt(u32));
 
-        const start = self.offset + len;
-        if (start > self.data.len) return error.ParseFail;
-        const end = start + len;
+        if (self.offset > self.data.len) return error.ParseFail;
         if (end > self.data.len) return error.ParseFail;
 
         defer self.advance(len);
-        return self.data[start..end];
+        return self.data[self.offset..][0..len];
     }
 
     /// Reads the next `count` types as a slice.

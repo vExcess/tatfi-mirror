@@ -208,7 +208,7 @@ pub const Subtable0 = struct {
 
         const needle = @as(u32, left[0]) << 16 | @as(u32, right[0]);
         // self.pairs.binary_search_by(|v| v.pair.cmp(&needle)).map(|(_, v)| v.value)
-        _, const ret = self.pairs.binary_search_by(needle, func) orelse return null;
+        _, const ret = self.pairs.binary_search_by(needle, func) catch return null;
         return ret.value;
     }
 };

@@ -193,19 +193,17 @@ pub fn parse_number(
         },
         30 => return try parse_float(s),
         32...246 => {
-            const n: i32 = b0 - 139;
+            const n: i32 = @as(i32, b0) - 139;
             return @floatFromInt(n);
         },
         247...250 => {
-            const b0_i32: i32 = b0;
             const b1: i32 = try s.read(u8);
-            const n: i32 = (b0_i32 - 247) * 256 + b1 + 108;
+            const n: i32 = (@as(i32, b0) - 247) * 256 + b1 + 108;
             return @floatFromInt(n);
         },
         251...254 => {
-            const b0_i32: i32 = b0;
             const b1: i32 = try s.read(u8);
-            const n: i32 = -(b0_i32 - 251) * 256 - b1 - 108;
+            const n: i32 = -(@as(i32, b0) - 251) * 256 - b1 - 108;
             return @floatFromInt(n);
         },
         else => return error.ParseFail,
@@ -262,4 +260,33 @@ fn parse_float_nibble(
 
     idx += 1;
     return idx;
+}
+
+test "parse dict number" {
+    const t = std.testing;
+
+    {
+        var s = parser.Stream.new(&.{0x7C});
+        try t.expectEqual(try parse_number(0xFA, &s), 1000);
+    }
+    {
+        var s = parser.Stream.new(&.{0x7C});
+        try t.expectEqual(try parse_number(0xFE, &s), -1000);
+    }
+    {
+        var s = parser.Stream.new(&.{ 0x27, 0x10 });
+        try t.expectEqual(try parse_number(0x1C, &s), 10000);
+    }
+    {
+        var s = parser.Stream.new(&.{ 0xD8, 0xF0 });
+        try t.expectEqual(try parse_number(0x1C, &s), -10000);
+    }
+    {
+        var s = parser.Stream.new(&.{ 0x00, 0x01, 0x86, 0xA0 });
+        try t.expectEqual(try parse_number(0x1D, &s), 100000);
+    }
+    {
+        var s = parser.Stream.new(&.{ 0xFF, 0xFE, 0x79, 0x60 });
+        try t.expectEqual(try parse_number(0x1D, &s), -100000);
+    }
 }
