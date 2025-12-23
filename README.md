@@ -20,9 +20,15 @@ However, `ttf_parser` tests are not ported yet. Note that even with all `ttf_par
 
 You can see the API surface on `main.zig`. If you'd like to help, please see any of the following topics.
 
-### Tests and Benchmarks
+### Tests, Fuzzing, and Benchmarks
 
-There are currently no tests. Adding new tests or help in porting the tests and benchmarks would be super helpful.
+I have currently started to add unit tests and integration tests. I tried to add fuzzing using AFL++ (like ttf_parser does), but being on macOS makes me [fight the system incessantly](https://ziggit.dev/t/trouble-figuring-out-fuzzing-with-afl/13625/3?u=asibahi).
+
+If you depend (or plan to depend) on the libraary, I would really appreciate help adding proper benchmarks and fuzzing infrastructure, where one can influence the input). I am not going to go beyond tests.
+
+### C API
+
+`ttf_parser` has a [minimal C API](https://github.com/harfbuzz/ttf-parser/blob/main/c-api/lib.rs). Porting that interface to this library would be nice, too. The C interface is also used in testing comparison with FreeType.
 
 ### Better Errors
 
