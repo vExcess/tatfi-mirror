@@ -48,7 +48,7 @@ pub const VariationAxis = struct {
     const Self = @This();
     pub const FromData = struct {
         // [ARS] impl of FromData trait
-        pub const SIZE: usize = 4;
+        pub const SIZE: usize = 20;
 
         pub fn parse(
             data: *const [SIZE]u8,

@@ -233,7 +233,7 @@ fn paint_impl(
     foreground_color: lib.RgbaColor,
 ) Error!void {
     if (self.get_v1(glyph_id)) |base|
-        return try self.paint_v1(
+        return self.paint_v1(
             base,
             palette,
             painter,
@@ -288,8 +288,9 @@ fn paint_v1(
     recursion_stack: *std.ArrayList(usize),
     coords: if (cfg.variable_fonts) []const lib.NormalizedCoordinate else void,
     foreground_color: lib.RgbaColor,
-) Error!void {
+) void {
     const clip_box_maybe = self.clip_box(base.glyph_id, coords);
+
     if (clip_box_maybe) |box| painter.push_clip_box(box);
     defer if (clip_box_maybe != null) painter.pop_clip();
 
@@ -300,7 +301,7 @@ fn paint_v1(
         recursion_stack,
         coords,
         foreground_color,
-    ) catch return error.PaintError;
+    ) catch {};
 }
 
 fn parse_paint(
@@ -502,6 +503,7 @@ fn parse_paint_impl(
             } });
         },
         9 => if (cfg.variable_fonts) { // PaintVarSweepGradient
+
             const color_line_offset = try s.read(parser.Offset24);
             const color_line = try self.parse_var_color_line(
                 offset + color_line_offset[0],
@@ -1253,7 +1255,7 @@ const ClipList = struct {
         var s = parser.Stream.new(data);
         const format = s.read(u8) catch return null;
 
-        const deltas: [4]f32 = if (cfg.variable_fonts or format == 2) d: {
+        const deltas: [4]f32 = if (cfg.variable_fonts and format == 2) d: {
             const og_offset = s.offset;
             defer s.offset = og_offset;
 
@@ -1403,6 +1405,22 @@ pub const LinearGradient = struct {
     extend: GradientExtend,
     variation_data: if (cfg.variable_fonts) VariationData else void,
     color_line: ColorLine,
+
+    /// Returns an iterator over the stops of the linear gradient. Stops need to
+    /// be sorted by the caller, or use `collect`.
+    pub fn stops(
+        self: LinearGradient,
+        palette: u16,
+        coords: if (cfg.variable_fonts) []lib.NormalizedCoordinate else void,
+    ) GradientStopsIter {
+        return .{
+            .color_line = self.color_line,
+            .palette = palette,
+            .index = 0,
+            .variation_data = self.variation_data,
+            .coords = coords,
+        };
+    }
 };
 
 /// A [radial gradient](https://learn.microsoft.com/en-us/typography/opentype/spec/colr#formats-6-and-7-paintradialgradient-paintvarradialgradient)
@@ -1423,6 +1441,22 @@ pub const RadialGradient = struct {
     extend: GradientExtend,
     variation_data: if (cfg.variable_fonts) VariationData else void,
     color_line: ColorLine,
+
+    /// Returns an iterator over the stops of the radial gradient. Stops need to
+    /// be sorted by the caller, or use `collect`.
+    pub fn stops(
+        self: RadialGradient,
+        palette: u16,
+        coords: if (cfg.variable_fonts) []lib.NormalizedCoordinate else void,
+    ) GradientStopsIter {
+        return .{
+            .color_line = self.color_line,
+            .palette = palette,
+            .index = 0,
+            .variation_data = self.variation_data,
+            .coords = coords,
+        };
+    }
 };
 
 /// A [sweep gradient](https://learn.microsoft.com/en-us/typography/opentype/spec/colr#formats-8-and-9-paintsweepgradient-paintvarsweepgradient)
@@ -1439,6 +1473,22 @@ pub const SweepGradient = struct {
     extend: GradientExtend,
     variation_data: if (cfg.variable_fonts) VariationData else void,
     color_line: ColorLine,
+
+    /// Returns an iterator over the stops of the radial gradient. Stops need to
+    /// be sorted by the caller, or use `collect`.
+    pub fn stops(
+        self: SweepGradient,
+        palette: u16,
+        coords: if (cfg.variable_fonts) []lib.NormalizedCoordinate else void,
+    ) GradientStopsIter {
+        return .{
+            .color_line = self.color_line,
+            .palette = palette,
+            .index = 0,
+            .variation_data = self.variation_data,
+            .coords = coords,
+        };
+    }
 };
 
 /// A [gradient extend](
@@ -1511,6 +1561,28 @@ const VarColorLine = struct {
     colors: parser.LazyArray16(VarColorStopRaw),
     palettes: cpalTable,
     foreground_color: lib.RgbaColor,
+
+
+    fn get(
+        self: VarColorLine,
+        palette: u16,
+        index: u16,
+        var_data: VariationData,
+        coordinates: []const lib.NormalizedCoordinate,
+    ) ?ColorStop {
+        const info = self.colors.get(index) orelse return null;
+
+        var color = if (info.palette_index == std.math.maxInt(u16))
+            self.foreground_color
+        else
+            self.palettes.get(palette, info.palette_index) orelse return null;
+
+        const deltas = var_data.read_deltas(2, info.var_index_base, coordinates);
+        const stop_offset = info.stop_offset.apply_float_delta(deltas[0]);
+        color = color.apply_alpha(info.alpha.apply_float_delta(deltas[1]));
+
+        return .{ .stop_offset = stop_offset, .color = color };
+    }
 };
 
 /// A [var color stop](
@@ -1539,6 +1611,23 @@ const NonVarColorLine = struct {
     colors: parser.LazyArray16(ColorStopRaw),
     palettes: cpalTable,
     foreground_color: lib.RgbaColor,
+
+
+    fn get(
+        self: NonVarColorLine,
+        palette: u16,
+        index: u16,
+    ) ?ColorStop {
+        const info = self.colors.get(index) orelse return null;
+
+        var color = if (info.palette_index == std.math.maxInt(u16))
+            self.foreground_color
+        else
+            self.palettes.get(palette, info.palette_index) orelse return null;
+
+        color = color.apply_alpha(info.alpha.to_f32());
+        return .{ .stop_offset = info.stop_offset.to_f32(), .color = color };
+    }
 };
 
 /// A [color stop](
@@ -1559,6 +1648,62 @@ const ColorStopRaw = struct {
             return try parser.parse_struct_from_data(Self, data);
         }
     };
+};
+
+/// A [gradient extend](
+/// https://learn.microsoft.com/en-us/typography/opentype/spec/colr#baseglyphlist-layerlist-and-cliplist).
+pub const ColorStop = struct {
+    /// The offset of the color stop.
+    stop_offset: f32,
+    /// The color of the color stop.
+    color: lib.RgbaColor,
+};
+
+/// An iterator over stops of a gradient.
+pub const GradientStopsIter = struct {
+    color_line: ColorLine,
+    palette: u16,
+    index: u16,
+    variation_data: if (cfg.variable_fonts) VariationData else void,
+    coords: if (cfg.variable_fonts) []const lib.NormalizedCoordinate else void,
+
+    pub fn next(
+        self: *GradientStopsIter,
+    ) ?ColorStop {
+        const len = switch (self.color_line) {
+            inline else => |cl| cl.colors.len(),
+        };
+        if (self.index == len) return null;
+
+        defer self.index +|= 1;
+        return switch (self.color_line) {
+            .var_color_line => |vcl| vcl.get(self.palette, self.index, self.variation_data, self.coords),
+            .non_var_color_line => |nvcl| nvcl.get(self.palette, self.index),
+        };
+    }
+
+    /// collects and sorts ColorStops
+    pub fn collect(
+        iter: *GradientStopsIter,
+        gpa: std.mem.Allocator,
+    ) std.mem.Allocator.Error![]ColorStop {
+        const len = switch (iter.color_line) {
+            inline else => |cl| cl.colors.len(),
+        };
+        var stops: std.ArrayList(ColorStop) = try .initCapacity(gpa, len);
+        defer stops.deinit(gpa);
+
+        while (iter.next()) |stop| stops.appendAssumeCapacity(stop);
+
+        const less_than = struct {
+            fn less_than(_: void, lhs: ColorStop, rhs: ColorStop) bool {
+                return lhs.stop_offset < rhs.stop_offset;
+            }
+        }.less_than;
+
+        std.mem.sort(ColorStop, stops.items, {}, less_than);
+        return try stops.toOwnedSlice(gpa);
+    }
 };
 
 /// A [ClipBox](https://learn.microsoft.com/en-us/typography/opentype/spec/colr#baseglyphlist-layerlist-and-cliplist).
