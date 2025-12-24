@@ -171,7 +171,7 @@ pub const Script = struct {
         var s = parser.Stream.new(data);
         const default_language: ?LanguageSystem =
             if (try s.read_optional(parser.Offset16)) |offset| try .parse(
-                .{ .inner = lib.Tag.from_bytes("dflt") },
+                .from_bytes("dflt"),
                 try utils.slice(data, offset[0]),
             ) else null;
 

@@ -120,8 +120,8 @@ pub const Strike = struct {
         // 'Support for the 'pdf ' and 'mask' data types and sbixDrawOutlines flag
         // are planned for future releases of iOS and OS X.'
         const format: lib.RasterGlyphImage.Format = switch (image_type.inner) {
-            lib.Tag.from_bytes("png ") => .png,
-            lib.Tag.from_bytes("dupe") => {
+            lib.Tag.from_bytes("png ").inner => .png,
+            lib.Tag.from_bytes("dupe").inner => {
                 // 'The special graphicType of 'dupe' indicates that
                 // the data field contains a glyph ID. The bitmap data for
                 // the indicated glyph should be used for the current glyph.'
