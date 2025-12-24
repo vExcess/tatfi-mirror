@@ -402,7 +402,7 @@ pub const Face = struct {
     ///
     /// Contains face name and other strings.
     pub fn names(
-        self: Face,
+        self: *const Face,
     ) tables.name.Names {
         const t: tables.name = self.tables.name orelse .{};
         return t.names;
@@ -410,7 +410,7 @@ pub const Face = struct {
 
     /// Returns face style.
     pub fn style(
-        self: Face,
+        self: *const Face,
     ) tables.os2.Style {
         const t = self.tables.os2 orelse return .normal;
         return t.style();
@@ -420,14 +420,14 @@ pub const Face = struct {
     ///
     /// Returns `true` when OS/2 table is not present.
     pub fn is_regular(
-        self: Face,
+        self: *const Face,
     ) bool {
         return self.style() == .normal;
     }
 
     /// Checks that face is marked as *Italic*.
     pub fn is_italic(
-        self: Face,
+        self: *const Face,
     ) bool {
         // A face can have a Normal style and a non-zero italic angle, which also makes it italic.
         return self.style() == .italic or self.italic_angle() != 0.0;
@@ -437,7 +437,7 @@ pub const Face = struct {
     ///
     /// Returns `0.0` when `post` table is not present.
     pub fn italic_angle(
-        self: Face,
+        self: *const Face,
     ) f32 {
         const t = self.tables.post orelse return 0.0;
         return t.italic_angle;
@@ -447,7 +447,7 @@ pub const Face = struct {
     ///
     /// Returns `false` when OS/2 table is not present.
     pub fn is_bold(
-        self: Face,
+        self: *const Face,
     ) bool {
         const t = self.tables.os2 orelse return false;
         return t.is_bold();
@@ -457,7 +457,7 @@ pub const Face = struct {
     ///
     /// Returns `false` when OS/2 table is not present or when its version is < 4.
     pub fn is_oblique(
-        self: Face,
+        self: *const Face,
     ) bool {
         return self.style() == .oblique;
     }
@@ -466,7 +466,7 @@ pub const Face = struct {
     ///
     /// Returns `false` when `post` table is not present.
     pub fn is_monospaced(
-        self: Face,
+        self: *const Face,
     ) bool {
         const t = self.tables.post orelse return false;
         return t.is_monospaced;
@@ -477,7 +477,7 @@ pub const Face = struct {
     /// Simply checks the presence of a `fvar` table.
     /// returns 'false' if variable_fonts is not enabled
     pub fn is_variable(
-        self: Face,
+        self: *const Face,
     ) bool {
         if (cfg.variable_fonts) {
             // `fvar.parse` already checked that `axisCount` is non-zero.
@@ -489,7 +489,7 @@ pub const Face = struct {
     ///
     /// Returns `Weight.normal` when OS/2 table is not present.
     pub fn weight(
-        self: Face,
+        self: *const Face,
     ) tables.os2.Weight {
         const t = self.tables.os2 orelse return .normal;
         return t.weight();
@@ -499,7 +499,7 @@ pub const Face = struct {
     ///
     /// Returns `Width.normal` when OS/2 table is not present or when value is invalid.
     pub fn width(
-        self: Face,
+        self: *const Face,
     ) tables.os2.Width {
         const t = self.tables.os2 orelse return .normal;
         return t.width();
@@ -512,7 +512,7 @@ pub const Face = struct {
     ///
     /// This method is affected by variation axes.
     pub fn ascender(
-        self: Face,
+        self: *const Face,
     ) i16 {
         if (self.tables.os2) |os2| if (os2.use_typographic_metrics()) {
             const value = os2.typographic_ascender();
@@ -538,7 +538,7 @@ pub const Face = struct {
     ///
     /// This method is affected by variation axes.
     pub fn descender(
-        self: Face,
+        self: *const Face,
     ) i16 {
         if (self.tables.os2) |os2| if (os2.use_typographic_metrics()) {
             const value = os2.typographic_descender();
@@ -564,7 +564,7 @@ pub const Face = struct {
     ///
     /// This method is affected by variation axes.
     pub fn height(
-        self: Face,
+        self: *const Face,
     ) i16 {
         return self.ascender() - self.descender();
     }
@@ -573,7 +573,7 @@ pub const Face = struct {
     ///
     /// This method is affected by variation axes.
     pub fn line_gap(
-        self: Face,
+        self: *const Face,
     ) i16 {
         if (self.tables.os2) |os2| if (os2.use_typographic_metrics()) {
             const value = os2.typographic_line_gap();
@@ -603,7 +603,7 @@ pub const Face = struct {
     ///
     /// Returns `null` when OS/2 table is not present.
     pub fn typographic_ascender(
-        self: Face,
+        self: *const Face,
     ) ?i16 {
         const os2 = self.tables.os2 orelse return null;
         const v = os2.typographic_ascender();
@@ -619,7 +619,7 @@ pub const Face = struct {
     ///
     /// Returns `null` when OS/2 table is not present.
     pub fn typographic_descender(
-        self: Face,
+        self: *const Face,
     ) ?i16 {
         const os2 = self.tables.os2 orelse return null;
         const v = os2.typographic_descender();
@@ -635,7 +635,7 @@ pub const Face = struct {
     ///
     /// Returns `null` when OS/2 table is not present.
     pub fn typographic_line_gap(
-        self: Face,
+        self: *const Face,
     ) ?i16 {
         const os2 = self.tables.os2 orelse return null;
         const v = os2.typographic_line_gap();
@@ -646,7 +646,7 @@ pub const Face = struct {
     ///
     /// This method is affected by variation axes.
     pub fn vertical_ascender(
-        self: Face,
+        self: *const Face,
     ) ?i16 {
         const vhea = self.tables.vhea orelse return null;
         const v = vhea.ascender;
@@ -657,7 +657,7 @@ pub const Face = struct {
     ///
     /// This method is affected by variation axes.
     pub fn vertical_descender(
-        self: Face,
+        self: *const Face,
     ) ?i16 {
         const vhea = self.tables.vhea orelse return null;
         const v = vhea.descender;
@@ -668,7 +668,7 @@ pub const Face = struct {
     ///
     /// This method is affected by variation axes.
     pub fn vertical_height(
-        self: Face,
+        self: *const Face,
     ) ?i16 {
         const a = self.vertical_ascender() orelse return null;
         const d = self.vertical_descender() orelse return null;
@@ -679,7 +679,7 @@ pub const Face = struct {
     ///
     /// This method is affected by variation axes.
     pub fn vertical_line_gap(
-        self: Face,
+        self: *const Face,
     ) ?i16 {
         const vhea = self.tables.vhea orelse return null;
         const v = vhea.line_gap;
@@ -690,7 +690,7 @@ pub const Face = struct {
     ///
     /// Guarantee to be in a 16..=16384 range.
     pub fn units_per_em(
-        self: Face,
+        self: *const Face,
     ) u16 {
         return self.tables.head.units_per_em;
     }
@@ -701,7 +701,7 @@ pub const Face = struct {
     ///
     /// Returns `null` when OS/2 table is not present or when its version is < 2.
     pub fn x_height(
-        self: Face,
+        self: *const Face,
     ) ?i16 {
         const os2 = self.tables.os2 orelse return null;
         const v = os2.x_height() orelse return null;
@@ -714,7 +714,7 @@ pub const Face = struct {
     ///
     /// Returns `null` when OS/2 table is not present or when its version is < 2.
     pub fn capital_height(
-        self: Face,
+        self: *const Face,
     ) ?i16 {
         const os2 = self.tables.os2 orelse return null;
         const v = os2.capital_height() orelse return null;
@@ -727,7 +727,7 @@ pub const Face = struct {
     ///
     /// Returns `null` when `post` table is not present.
     pub fn underline_metrics(
-        self: Face,
+        self: *const Face,
     ) ?LineMetrics {
         const t = self.tables.post orelse return null;
         var metrics = t.underline_metrics;
@@ -752,7 +752,7 @@ pub const Face = struct {
     ///
     /// Returns `null` when OS/2 table is not present.
     pub fn strikeout_metrics(
-        self: Face,
+        self: *const Face,
     ) ?LineMetrics {
         const t = self.tables.os2 orelse return null;
         var metrics = t.strikeout_metrics();
@@ -777,7 +777,7 @@ pub const Face = struct {
     ///
     /// Returns `null` when OS/2 table is not present.
     pub fn subscript_metrics(
-        self: Face,
+        self: *const Face,
     ) ?tables.os2.ScriptMetrics {
         const t = self.tables.os2 orelse return null;
         var metrics = t.subscript_metrics();
@@ -810,7 +810,7 @@ pub const Face = struct {
     ///
     /// Returns `null` when OS/2 table is not present.
     pub fn superscript_metrics(
-        self: Face,
+        self: *const Face,
     ) ?tables.os2.ScriptMetrics {
         const t = self.tables.os2 orelse return null;
         var metrics = t.superscript_metrics();
@@ -841,7 +841,7 @@ pub const Face = struct {
     ///
     /// Returns `null` in case of a malformed value.
     pub fn permissions(
-        self: Face,
+        self: *const Face,
     ) ?tables.os2.Permissions {
         const t = self.tables.os2 orelse return null;
         return t.permissions();
@@ -849,7 +849,7 @@ pub const Face = struct {
 
     /// Checks if the face allows embedding a subset, further restricted by `Self.permissions`.
     pub fn is_subsetting_allowed(
-        self: Face,
+        self: *const Face,
     ) bool {
         const t = self.tables.os2 orelse return false;
         return t.is_subsetting_allowed();
@@ -861,7 +861,7 @@ pub const Face = struct {
     ///
     /// If the font contains no bitmaps and this flag is not set, it implies no embedding is allowed.
     pub fn is_outline_embedding_allowed(
-        self: Face,
+        self: *const Face,
     ) bool {
         const t = self.tables.os2 orelse return false;
         return t.is_outline_embedding_allowed();
@@ -869,7 +869,7 @@ pub const Face = struct {
 
     /// Returns [Unicode Ranges](https://docs.microsoft.com/en-us/typography/opentype/spec/os2#ur).
     pub fn unicode_ranges(
-        self: Face,
+        self: *const Face,
     ) tables.os2.UnicodeRanges {
         const t = self.tables.os2 orelse return .{};
         return t.unicode_ranges();
@@ -881,7 +881,7 @@ pub const Face = struct {
     ///
     /// The value was already parsed, so this function doesn't involve any parsing.
     pub fn number_of_glyphs(
-        self: Face,
+        self: *const Face,
     ) u16 {
         return self.tables.maxp.number_of_glyphs;
     }
@@ -894,7 +894,7 @@ pub const Face = struct {
     ///
     /// If you need a more low-level control, prefer `Face.tables.cmap`.
     pub fn glyph_index(
-        self: Face,
+        self: *const Face,
         code_point: u21,
     ) ?GlyphId {
         const t = self.tables.cmap orelse return null;
@@ -915,7 +915,7 @@ pub const Face = struct {
     ///
     /// Returns `null` when no name is associated with a `glyph`.
     pub fn glyph_index_by_name(
-        self: Face,
+        self: *const Face,
         name: []const u8,
     ) ?GlyphId {
         if (self.tables.post) |post|
@@ -937,7 +937,7 @@ pub const Face = struct {
     ///
     /// Returns `null` instead of `0` when glyph is not found.
     pub fn glyph_variation_index(
-        self: Face,
+        self: *const Face,
         code_point: u21,
         variation: u21,
     ) ?GlyphId {
@@ -964,7 +964,7 @@ pub const Face = struct {
     ///
     /// [ARS] A working allocator is not strictly needed.
     pub fn glyph_hor_advance(
-        self: Face,
+        self: *const Face,
         gpa: if (cfg.variable_fonts) std.mem.Allocator else void,
         glyph_id: GlyphId,
     ) ?u16 {
@@ -1001,7 +1001,7 @@ pub const Face = struct {
     ///
     /// [ARS] A working allocator is not strictly needed.
     pub fn glyph_ver_advance(
-        self: Face,
+        self: *const Face,
         gpa: if (cfg.variable_fonts) std.mem.Allocator else void,
         glyph_id: GlyphId,
     ) ?u16 {
@@ -1031,7 +1031,7 @@ pub const Face = struct {
     ///
     /// This method is affected by variation axes.
     pub fn glyph_hor_side_bearing(
-        self: Face,
+        self: *const Face,
         glyph_id: GlyphId,
     ) ?i16 {
         const t = self.tables.hmtx orelse return null;
@@ -1054,7 +1054,7 @@ pub const Face = struct {
     ///
     /// This method is affected by variation axes.
     pub fn glyph_ver_side_bearing(
-        self: Face,
+        self: *const Face,
         glyph_id: GlyphId,
     ) ?i16 {
         const t = self.tables.vmtx orelse return null;
@@ -1078,7 +1078,7 @@ pub const Face = struct {
     ///
     /// This method is affected by variation axes.
     pub fn glyph_y_origin(
-        self: Face,
+        self: *const Face,
         glyph_id: GlyphId,
     ) ?i16 {
         const t = self.tables.vorg orelse return null;
@@ -1105,7 +1105,7 @@ pub const Face = struct {
     ///
     /// Return string is either static or owned by the font data.
     pub fn glyph_name(
-        self: Face,
+        self: *const Face,
         glyph_id: GlyphId,
     ) ?[]const u8 {
         if (self.tables.post) |post|
@@ -1133,7 +1133,7 @@ pub const Face = struct {
     ///
     /// Returns `null` when glyph has no outline or on error.
     pub fn outline_glyph(
-        self: Face,
+        self: *const Face,
         gpa: if (cfg.variable_fonts) std.mem.Allocator else void,
         glyph_id: GlyphId,
         builder: OutlineBuilder,
@@ -1178,7 +1178,7 @@ pub const Face = struct {
     ///
     /// This method is affected by variation axes.
     pub fn glyph_bounding_box(
-        self: Face,
+        self: *const Face,
         gpa: if (cfg.variable_fonts) std.mem.Allocator else void,
         glyph_id: GlyphId,
     ) ?Rect {
@@ -1187,7 +1187,7 @@ pub const Face = struct {
 
     /// Returns a bounding box that large enough to enclose any glyph from the face.
     pub fn global_bounding_box(
-        self: Face,
+        self: *const Face,
     ) Rect {
         return self.tables.head.global_bbox;
     }
@@ -1213,7 +1213,7 @@ pub const Face = struct {
     /// This includes `sbix`, `bloc` + `bdat`, `EBLC` + `EBDT`, `CBLC` + `CBDT`.
     /// And font's tables will be accesses in this specific order.
     pub fn glyph_raster_image(
-        self: Face,
+        self: *const Face,
         glyph_id: GlyphId,
         pixels_per_em: u16,
     ) ?RasterGlyphImage {
@@ -1245,7 +1245,7 @@ pub const Face = struct {
     /// Also, a font can contain both: images and outlines. So when this method returns `null`
     /// you should also try `outline_glyph()` afterwards.
     pub fn glyph_svg_image(
-        self: Face,
+        self: *const Face,
         glyph_id: GlyphId,
     ) ?tables.svg.SvgDocument {
         const t = self.tables.svg orelse return null;
@@ -1256,7 +1256,7 @@ pub const Face = struct {
     ///
     /// See `paint_color_glyph` for details.
     pub fn is_color_glyph(
-        self: Face,
+        self: *const Face,
         glyph_id: GlyphId,
     ) bool {
         const t = self.tables.colr orelse return false;
@@ -1267,7 +1267,7 @@ pub const Face = struct {
     ///
     /// See `paint_color_glyph` for details.
     pub fn color_palettes(
-        self: Face,
+        self: *const Face,
     ) ?u16 {
         const t = self.tables.colr orelse return null;
         return t.palettes.palettes();
@@ -1290,25 +1290,26 @@ pub const Face = struct {
     ///
     /// See `examples/font2svg.rs` for usage examples.
     pub fn paint_color_glyph(
-        self: Face,
+        self: *const Face,
         glyph_id: GlyphId,
         palette: u16,
         foreground_color: RgbaColor,
         painter: tables.colr.Painter,
     ) tables.colr.Error!void {
         const t = self.tables.colr orelse return error.PaintError;
+
         try t.paint(
             glyph_id,
             palette,
             painter,
-            if (cfg.variable_fonts) self.coords(),
+            self.coords(),
             foreground_color,
         );
     }
 
     /// Returns an iterator over variation axes.
     pub fn variation_axes(
-        self: Face,
+        self: *const Face,
     ) parser.LazyArray16(tables.fvar.VariationAxis) {
         if (!cfg.variable_fonts) @compileError("variation_axes needs variable_fonts enabled");
 
@@ -1351,7 +1352,7 @@ pub const Face = struct {
 
     /// Returns the current normalized variation coordinates.
     pub fn variation_coordinates(
-        self: Face,
+        self: *const Face,
     ) []const NormalizedCoordinate {
         if (!cfg.variable_fonts) @compileError("variation_coordinates needs variable_fonts enabled");
 
@@ -1360,7 +1361,7 @@ pub const Face = struct {
 
     /// Checks that face has non-default variation coordinates.
     pub fn has_non_default_variation_coordinates(
-        self: Face,
+        self: *const Face,
     ) bool {
         if (!cfg.variable_fonts) @compileError("has_non_default_variation_coordinates needs variable_fonts enabled");
 
@@ -1375,7 +1376,7 @@ pub const Face = struct {
     ///
     /// [ARS] A working allocator is not strictly needed.
     pub fn glyph_phantom_points(
-        self: Face,
+        self: *const Face,
         gpa: if (cfg.variable_fonts) std.mem.Allocator else void,
         glyph_id: GlyphId,
     ) ?PhantomPoints {
@@ -1387,7 +1388,7 @@ pub const Face = struct {
     }
 
     fn apply_metrics_variation(
-        self: Face,
+        self: *const Face,
         tag: Tag,
         value_immutable: i16,
     ) i16 {
@@ -1406,7 +1407,7 @@ pub const Face = struct {
     }
 
     fn coords(
-        self: Face,
+        self: *const Face,
     ) []const NormalizedCoordinate {
         return self.coordinates.data[0..self.coordinates.len];
     }
@@ -1870,7 +1871,7 @@ pub const NormalizedCoordinate = struct {
             return .{ .inner = v };
         } else if (T == f32) {
             const v = std.math.clamp(n, -1.0, 1.0);
-            return .{ .inner = @intFromFloat(v * (1 << 16)) };
+            return .{ .inner = @intFromFloat(v * (1 << 14)) };
         } else @compileError("can make NormalizedCoordinates only from i16 and f32");
     }
 };
@@ -2133,6 +2134,20 @@ pub const RgbaColor = struct {
     green: u8,
     blue: u8,
     alpha: u8,
+
+    pub fn new(
+        red: u8,
+        green: u8,
+        blue: u8,
+        alpha: u8,
+    ) RgbaColor {
+        return .{
+            .red = red,
+            .green = green,
+            .blue = blue,
+            .alpha = alpha,
+        };
+    }
 
     /// internal use only
     pub fn apply_alpha(

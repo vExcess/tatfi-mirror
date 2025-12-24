@@ -86,15 +86,24 @@ fn set_up_testing_exe(
         }),
     });
 
-    const t = b.addTest(.{ .root_module = mod });
+    const t = b.addTest(.{
+        .root_module = mod,
+        .filters = if (b.option([]const u8, "filter", "")) |item|
+            &.{item}
+        else
+            &.{},
+    });
 
     b.installArtifact(exe);
 
-    const run_step = b.step("run", "Run the app");
+    const run_step = b.step("run", "Check compilation and run tests");
 
     const run_cmd = b.addRunArtifact(exe);
     run_step.dependOn(&run_cmd.step);
 
     const test_cmd = b.addRunArtifact(t);
     run_step.dependOn(&test_cmd.step);
+
+    const test_step = b.step("test", "Run tests only");
+    test_step.dependOn(&test_cmd.step);
 }

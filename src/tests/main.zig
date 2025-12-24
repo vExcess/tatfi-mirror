@@ -1,4 +1,3 @@
-
 //! [ARS] integration tests live here.
 
 const std = @import("std");
@@ -10,6 +9,7 @@ test {
     _ = @import("ankr.zig");
     _ = @import("cff1.zig");
     _ = @import("cmap.zig");
+    _ = @import("colr.zig");
 }
 
 pub const Unit = union(enum) {
