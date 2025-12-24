@@ -40,7 +40,7 @@ pub fn glyph_index(
 pub fn codepoints(
     self: Subtable,
     ctx: anytype,
-    F: fn (u32, @TypeOf(ctx)) void,
+    F: fn (u21, @TypeOf(ctx)) void,
 ) void {
     // In contrast to every other format, here we take a look at the glyph
     // id and check whether it is zero because otherwise this method would

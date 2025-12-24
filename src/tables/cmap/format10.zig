@@ -8,7 +8,7 @@ const parser = @import("../../parser.zig");
 const Subtable = @This();
 
 /// First character code covered.
-first_code_point: u32,
+first_code_point: u21,
 /// Array of glyph indices for the character codes covered.
 glyphs: parser.LazyArray32(lib.GlyphId),
 
@@ -44,10 +44,10 @@ pub fn glyph_index(
 pub fn codepoints(
     self: Subtable,
     ctx: anytype,
-    F: fn (u32, @TypeOf(ctx)) void,
+    F: fn (u21, @TypeOf(ctx)) void,
 ) void {
     for (0..self.glyphs.len()) |i| {
-        const code_point = std.math.add(u32, self.first_code_point, @truncate(i)) catch continue;
+        const code_point = std.math.add(u21, self.first_code_point, @truncate(i)) catch continue;
         F(code_point, ctx);
     }
 }

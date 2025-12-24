@@ -83,6 +83,9 @@ pub fn main() !void {
     const raw_tables: ttf.RawFaceTables = .{};
     _ = ttf.Face.from_raw_tables(raw_tables) catch return;
 
+    // misc
+    _ = ttf.fonts_in_collection(&.{});
+
     // RawFace methods
     const raw_face = face.raw_face;
     _ = raw_face.table(.from_bytes("Wasm"));
@@ -321,4 +324,4 @@ const unsafe_painter = ttf.tables.colr.Painter{
 
 const white: ttf.RgbaColor = .{ .red = 255, .green = 255, .blue = 255, .alpha = 255 };
 
-fn func(_: u32, _: u32) void {}
+fn func(_: u21, _: u32) void {}

@@ -239,7 +239,7 @@ pub const Subtable = struct {
     pub fn codepoints(
         self: Subtable,
         ctx: anytype,
-        F: fn (u32, @TypeOf(ctx)) void,
+        F: fn (u21, @TypeOf(ctx)) void,
     ) void {
         switch (self.format) {
             .mixed_coverage, .unicode_variation_sequences => {}, // unsupported

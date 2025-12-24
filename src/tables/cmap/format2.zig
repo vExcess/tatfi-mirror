@@ -110,7 +110,7 @@ pub fn glyph_index(
 pub fn codepoints(
     self: Subtable,
     ctx: anytype,
-    F: fn (u32, @TypeOf(ctx)) void,
+    F: fn (u21, @TypeOf(ctx)) void,
 ) void {
     for (0..256) |first_byte_usize| {
         const first_byte: u16 = @truncate(first_byte_usize);

@@ -112,14 +112,14 @@ pub fn glyph_index(
 pub fn codepoints(
     self: Subtable,
     ctx: anytype,
-    F: fn (u32, @TypeOf(ctx)) void,
+    F: fn (u21, @TypeOf(ctx)) void,
 ) void {
     var start_iter = self.start_codes.iterator();
     var end_iter = self.end_codes.iterator();
 
     while (true) {
         const start = start_iter.next() orelse break;
-        const end = end_iter.next() orelse break;
+        const end: usize = end_iter.next() orelse break;
 
         // OxFFFF value is special and indicates codes end.
         if (start == end and start == 0xFFFF) break;
