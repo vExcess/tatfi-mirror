@@ -123,10 +123,10 @@ fn parse_variation_data(
         .short => |array| {
             // 'If the short format (parser.Offset16) is used for offsets,
             // the value stored is the offset divided by 2.'
-            const start = array.get(glyph_id[0]) orelse return error.ParseFail;
-            const end = array.get(next_glyph_id) orelse return error.ParseFail;
+            const start: usize = (array.get(glyph_id[0]) orelse return error.ParseFail)[0];
+            const end: usize = (array.get(next_glyph_id) orelse return error.ParseFail)[0];
 
-            break :se .{ start[0] * 2, end[0] * 2 };
+            break :se .{ start * 2, end * 2 };
         },
         .long => |array| {
             const start = array.get(glyph_id[0]) orelse return error.ParseFail;
@@ -158,7 +158,8 @@ pub fn outline(
     builder: lib.OutlineBuilder,
 ) ?lib.Rect {
     var b = glyfTable.Builder.new(.{}, .{}, builder);
-    const glyph_data = glyf_table.get(glyph_id) orelse return null;
+    const glyph_data = glyf_table.get(glyph_id) orelse
+        return null;
     outline_var_impl(gpa, glyf_table, self, glyph_id, glyph_data, coordinates, 0, &b) catch |e|
         log.err("Hit error outlining a glyph: {t}", .{e});
 
@@ -242,8 +243,7 @@ const VariationTuples = struct {
         for (self.list.items) |*tuple| {
             const x_delta, const y_delta = d: {
                 var set_points = &(tuple.set_points orelse
-                    break :d tuple.deltas.next() orelse
-                        continue);
+                    break :d tuple.deltas.next() orelse continue);
 
                 defer if (point.last_point) {
                     tuple.prev_point = null;
@@ -383,7 +383,8 @@ fn parse_variation_tuples(
     serialized_s: *parser.Stream,
     tuples: *VariationTuples,
 ) parser.Error!void {
-    std.debug.assert(@sizeOf(VariationTuple) <= 80);
+    // [ARS] would be 80 if Zig did niche optimization properly
+    comptime std.debug.assert(@sizeOf(VariationTuple) <= 88);
 
     // `TupleVariationHeader` has a variable size, so we cannot use a `LazyArray`.
     for (0..count) |_| {
@@ -433,8 +434,7 @@ fn parse_variation_tuples(
             break :d PackedDeltasIter.new(header.scalar, deltas_count, deltas_data);
         };
 
-        const set_points: ?PackedPointsIter.SetPointsIter =
-            if (point_numbers) |pn| .new(pn) else null;
+        const set_points: ?PackedPointsIter.SetPointsIter = if (point_numbers) |pn| .new(pn) else null;
 
         const tuple = VariationTuple{
             .set_points = set_points,
@@ -1010,7 +1010,7 @@ const PackedDeltasIter = struct {
         count: u16,
         data: []const u8,
     ) PackedDeltasIter {
-        std.debug.assert(@sizeOf(PackedDeltasIter) <= 32);
+        comptime std.debug.assert(@sizeOf(PackedDeltasIter) <= 32);
 
         var iter = PackedDeltasIter{
             .data = data,

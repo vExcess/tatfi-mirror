@@ -1975,6 +1975,17 @@ pub const Transform = struct {
 
         return .{ .b = y, .c = -x };
     }
+
+    pub fn apply_to(
+        self: Transform,
+        x: *f32,
+        y: *f32,
+    ) void {
+        const tx = x.*;
+        const ty = y.*;
+        x.* = self.a * tx + self.c * ty + self.e;
+        y.* = self.b * tx + self.d * ty + self.f;
+    }
 };
 
 /// An interface for glyph outline construction.
