@@ -46,7 +46,7 @@ pub fn glyph_index(
 pub fn codepoints(
     self: Subtable,
     ctx: anytype,
-    F: fn (u32, @TypeOf(ctx)) void,
+    F: fn (u21, @TypeOf(ctx)) void,
 ) void {
     for (0..self.glyphs.len()) |i| {
         const code_point = std.math.add(u16, self.first_code_point, @truncate(i)) catch continue;

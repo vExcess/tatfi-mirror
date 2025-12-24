@@ -73,7 +73,7 @@ fn set_up_testing_exe(
     mod.optimize = optimize;
 
     const exe = b.addExecutable(.{
-        .name = "foo",
+        .name = "tests",
         .root_module = b.createModule(.{
             .root_source_file = b.path("src/main.zig"),
 

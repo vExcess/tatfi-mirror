@@ -8,9 +8,11 @@
 const std = @import("std");
 const cfg = @import("config");
 const parser = @import("parser.zig");
-pub const tables = @import("tables.zig");
-const opentype_layout = @import("ggg.zig");
 const utils = @import("utils.zig");
+
+pub const tables = @import("tables.zig");
+pub const apple_layout = @import("aat.zig");
+pub const opentype_layout = @import("ggg.zig");
 
 /// A type-safe wrapper for glyph ID.
 pub const GlyphId = struct { u16 };
@@ -1410,6 +1412,20 @@ pub const Face = struct {
     }
 };
 
+/// Returns the number of fonts stored in a TrueType font collection.
+///
+/// Returns `null` if a provided data is not a TrueType font collection.
+pub fn fonts_in_collection(
+    data: []const u8,
+) ?u32 {
+    var s = parser.Stream.new(data);
+    const magic = s.read(Magic) catch return null;
+    if (magic != .font_collection) return null;
+
+    s.skip(u32); // version
+    return s.read(u32) catch null;
+}
+
 /// A raw font face.
 ///
 /// You are probably looking for `Face`. This is a low-level type.
@@ -2135,5 +2151,6 @@ pub const RgbaColor = struct {
 };
 
 test {
+    _ = @import("tests/main.zig");
     _ = std.testing.refAllDeclsRecursive(@This());
 }

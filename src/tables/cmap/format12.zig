@@ -47,11 +47,11 @@ pub fn glyph_index(
 pub fn codepoints(
     self: Subtable,
     ctx: anytype,
-    F: fn (u32, @TypeOf(ctx)) void,
+    F: fn (u21, @TypeOf(ctx)) void,
 ) void {
     var iter = self.groups.iterator();
     while (iter.next()) |group| {
-        var code_point = group.start_char_code;
+        var code_point: u21 = @truncate(group.start_char_code);
         while (code_point <= group.end_char_code) : (code_point += 1)
             F(code_point, ctx);
     }

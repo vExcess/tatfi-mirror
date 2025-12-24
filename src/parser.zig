@@ -392,12 +392,17 @@ pub const Stream = struct {
         self: *Stream,
         len: usize,
     ) Error![]const u8 {
-        const end = self.offset + len;
+        // [ARS] simulate Rust behaviour
+        const end = if (@import("builtin").mode == .Debug) e: {
+            const end = self.offset + len;
 
-        // An integer overflow here on 32bit systems is almost guarantee to be caused
-        // by an incorrect parsing logic from the caller side.
-        // Simply using `checked_add` here would silently swallow errors, which is not what we want.
-        std.debug.assert(end <= std.math.maxInt(u32));
+            // [RazrFalcon]
+            // An integer overflow here on 32bit systems is almost guarantee to be caused
+            // by an incorrect parsing logic from the caller side.
+            // Simply using `checked_add` here would silently swallow errors, which is not what we want.
+            std.debug.assert(end <= std.math.maxInt(u32));
+            break :e end;
+        } else try std.math.add(usize, self.offset, len);
 
         if (self.offset > self.data.len) return error.ParseFail;
         if (end > self.data.len) return error.ParseFail;
