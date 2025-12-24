@@ -446,6 +446,17 @@ pub const Builder = struct {
     const Point = struct {
         x: f32,
         y: f32,
+
+        fn lerp(
+            self: Point,
+            other: Point,
+            t: f32,
+        ) Point {
+            return .{
+                .x = self.x + t * (other.x - self.x),
+                .y = self.y + t * (other.y - self.y),
+            };
+        }
     };
 
     pub fn new(
@@ -475,11 +486,104 @@ pub const Builder = struct {
         on_curve_point: bool,
         last_point: bool,
     ) void {
-        _ = self;
-        _ = x;
-        _ = y;
-        _ = on_curve_point;
-        _ = last_point;
+        const p: Point = .{ .x = x, .y = y };
+
+        if (self.first_on_curve) |_| if (self.last_off_curve) |offcurve| if (on_curve_point) {
+            self.last_off_curve = null;
+            self.quad_to(offcurve.x, offcurve.y, p.x, p.y);
+        } else {
+            self.last_off_curve = p;
+            const mid = offcurve.lerp(p, 0.5);
+            self.quad_to(offcurve.x, offcurve.y, mid.x, mid.y);
+        } else if (on_curve_point) {
+            self.line_to(p.x, p.y);
+        } else {
+            self.last_off_curve = p;
+        } else if (on_curve_point) {
+            self.first_on_curve = p;
+            self.move_to(p.x, p.y);
+        } else if (self.first_off_curve) |offcurve| {
+            const mid = offcurve.lerp(p, 0.5);
+            self.first_on_curve = mid;
+            self.last_off_curve = p;
+            self.move_to(mid.x, mid.y);
+        } else {
+            self.first_off_curve = p;
+        }
+
+        if (last_point)
+            self.finish_contour();
+    }
+
+    fn move_to(
+        self: *Builder,
+        x_: f32,
+        y_: f32,
+    ) void {
+        var x, var y = .{ x_, y_ };
+        if (!self.is_default_ts) {
+            self.transform.apply_to(&x, &y);
+        }
+
+        self.bbox.extend_by(x, y);
+        self.builder.move_to(x, y);
+    }
+
+    fn line_to(
+        self: *Builder,
+        x_: f32,
+        y_: f32,
+    ) void {
+        var x, var y = .{ x_, y_ };
+        if (!self.is_default_ts) {
+            self.transform.apply_to(&x, &y);
+        }
+
+        self.bbox.extend_by(x, y);
+        self.builder.line_to(x, y);
+    }
+
+    fn quad_to(
+        self: *Builder,
+        x1_: f32,
+        y1_: f32,
+        x_: f32,
+        y_: f32,
+    ) void {
+        var x1, var y1, var x, var y = .{ x1_, y1_, x_, y_ };
+        if (!self.is_default_ts) {
+            self.transform.apply_to(&x1, &y1);
+            self.transform.apply_to(&x, &y);
+        }
+
+        self.bbox.extend_by(x1, y1);
+        self.bbox.extend_by(x, y);
+
+        self.builder.quad_to(x1, y1, x, y);
+    }
+
+    fn finish_contour(
+        self: *Builder,
+    ) void {
+        if (self.first_off_curve) |offcurve1| if (self.last_off_curve) |offcurve2| {
+            self.last_off_curve = null;
+            const mid = offcurve2.lerp(offcurve1, 0.5);
+            self.quad_to(offcurve2.x, offcurve2.y, mid.x, mid.y);
+        };
+
+        if (self.first_on_curve) |p|
+            if (self.first_on_curve) |offcurve1|
+                self.quad_to(offcurve1.x, offcurve1.y, p.x, p.y)
+            else if (self.last_off_curve) |offcurve2|
+                self.quad_to(offcurve2.x, offcurve2.y, p.x, p.y)
+            else
+                self.line_to(p.x, p.y);
+
+        self.first_on_curve = null;
+        self.first_off_curve = null;
+        self.last_off_curve = null;
+
+        self.builder.close();
     }
 };
 

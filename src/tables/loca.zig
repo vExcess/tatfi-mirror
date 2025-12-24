@@ -70,12 +70,12 @@ pub const Table = union(enum) {
         const start: usize, const end: usize = switch (self) {
             .short => |array| .{
                 // 'The actual local offset divided by 2 is stored.'
-                (array.get(id) orelse return null) * 2,
-                (array.get(id + 1) orelse return null) * 2,
+                @as(usize, array.get(id) orelse return null) * 2,
+                @as(usize, array.get(id + 1) orelse return null) * 2,
             },
             .long => |array| .{
-                (array.get(id) orelse return null),
-                (array.get(id + 1) orelse return null),
+                @as(usize, array.get(id) orelse return null),
+                @as(usize, array.get(id + 1) orelse return null),
             },
         };
 
