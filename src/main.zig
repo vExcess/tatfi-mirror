@@ -13,7 +13,7 @@ pub fn main() !void {
 
     // Face methods
     var face = ttf.Face.parse("true", 0) catch return;
-    _ = face.raw_face.table(.{ .inner = 53 }) orelse {};
+    _ = face.raw_face.table(.from_bytes("Wasm")) orelse {};
     _ = face.names();
     _ = face.style();
     _ = face.is_bold();
@@ -74,7 +74,7 @@ pub fn main() !void {
     _ = face.paint_color_glyph(.{64}, 16, white, unsafe_painter) catch return;
 
     _ = face.variation_axes();
-    _ = face.set_variation(ttf.Tag{ .inner = 4 }, 300.0) catch return; // mutable method
+    _ = face.set_variation(.from_bytes("wght"), 300.0) catch return; // mutable method
     _ = face.variation_coordinates();
     _ = face.has_non_default_variation_coordinates();
 
@@ -85,7 +85,7 @@ pub fn main() !void {
 
     // RawFace methods
     const raw_face = face.raw_face;
-    _ = raw_face.table(ttf.Tag{ .inner = 43 });
+    _ = raw_face.table(.from_bytes("Wasm"));
 
     // FaceTables methods
     const tables = face.tables;
@@ -198,7 +198,7 @@ pub fn main() !void {
             _ = subtable.is_elidable();
             _ = subtable.is_older_sibling();
         }
-        _ = stat.subtable_for_axis(.{ .inner = 3 }, null);
+        _ = stat.subtable_for_axis(.from_bytes("wdth"), null);
     }
     if (tables.svg) |svg| {
         const docs = svg.documents;
@@ -219,8 +219,8 @@ pub fn main() !void {
     if (tables.opentype_layout.gpos) |gpos| {
         const scripts = gpos.scripts;
         _ = scripts.get(0);
-        _ = scripts.find(.{ .inner = 0 });
-        _ = scripts.index(.{ .inner = 0 });
+        _ = scripts.find(.from_bytes("arab"));
+        _ = scripts.index(.from_bytes("arab"));
         var script_iter = scripts.iterator();
         while (script_iter.next()) |_| {}
 

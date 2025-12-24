@@ -44,13 +44,13 @@ pub fn parse(
 /// Returns a metric offset by tag.
 pub fn metric_offset(
     self: Table,
-    tag: u32,
+    tag: lib.Tag,
     coordinates: []const lib.NormalizedCoordinate,
 ) ?f32 {
     const func = struct {
-        fn func(record: ValueRecord, t: u32) std.math.Order {
+        fn func(record: ValueRecord, t: lib.Tag) std.math.Order {
             const lhs = record.value_tag.inner;
-            const rhs = t;
+            const rhs = t.inner;
 
             return std.math.order(lhs, rhs);
         }

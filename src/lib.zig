@@ -76,80 +76,80 @@ pub const Face = struct {
             const table_data = utils.slice(raw_face.data, .{ record.offset, record.length }) catch continue;
 
             switch (record.tag.inner) {
-                Tag.from_bytes("bdat") => ret_tables.bdat = table_data,
-                Tag.from_bytes("bloc") => ret_tables.bloc = table_data,
-                Tag.from_bytes("CBDT") => ret_tables.cbdt = table_data,
-                Tag.from_bytes("CBLC") => ret_tables.cblc = table_data,
-                Tag.from_bytes("CFF ") => ret_tables.cff = table_data,
-                Tag.from_bytes("CFF2") => if (cfg.variable_fonts) {
+                Tag.from_bytes("bdat").inner => ret_tables.bdat = table_data,
+                Tag.from_bytes("bloc").inner => ret_tables.bloc = table_data,
+                Tag.from_bytes("CBDT").inner => ret_tables.cbdt = table_data,
+                Tag.from_bytes("CBLC").inner => ret_tables.cblc = table_data,
+                Tag.from_bytes("CFF ").inner => ret_tables.cff = table_data,
+                Tag.from_bytes("CFF2").inner => if (cfg.variable_fonts) {
                     ret_tables.variable_fonts.cff2 = table_data;
                 },
-                Tag.from_bytes("COLR") => ret_tables.colr = table_data,
-                Tag.from_bytes("CPAL") => ret_tables.cpal = table_data,
-                Tag.from_bytes("EBDT") => ret_tables.ebdt = table_data,
-                Tag.from_bytes("EBLC") => ret_tables.eblc = table_data,
-                Tag.from_bytes("GDEF") => if (cfg.opentype_layout) {
+                Tag.from_bytes("COLR").inner => ret_tables.colr = table_data,
+                Tag.from_bytes("CPAL").inner => ret_tables.cpal = table_data,
+                Tag.from_bytes("EBDT").inner => ret_tables.ebdt = table_data,
+                Tag.from_bytes("EBLC").inner => ret_tables.eblc = table_data,
+                Tag.from_bytes("GDEF").inner => if (cfg.opentype_layout) {
                     ret_tables.opentype_layout.gdef = table_data;
                 },
-                Tag.from_bytes("GPOS") => if (cfg.opentype_layout) {
+                Tag.from_bytes("GPOS").inner => if (cfg.opentype_layout) {
                     ret_tables.opentype_layout.gpos = table_data;
                 },
-                Tag.from_bytes("GSUB") => if (cfg.opentype_layout) {
+                Tag.from_bytes("GSUB").inner => if (cfg.opentype_layout) {
                     ret_tables.opentype_layout.gsub = table_data;
                 },
-                Tag.from_bytes("MATH") => if (cfg.opentype_layout) {
+                Tag.from_bytes("MATH").inner => if (cfg.opentype_layout) {
                     ret_tables.opentype_layout.math = table_data;
                 },
-                Tag.from_bytes("HVAR") => if (cfg.variable_fonts) {
+                Tag.from_bytes("HVAR").inner => if (cfg.variable_fonts) {
                     ret_tables.variable_fonts.hvar = table_data;
                 },
-                Tag.from_bytes("MVAR") => if (cfg.variable_fonts) {
+                Tag.from_bytes("MVAR").inner => if (cfg.variable_fonts) {
                     ret_tables.variable_fonts.mvar = table_data;
                 },
-                Tag.from_bytes("OS/2") => ret_tables.os2 = table_data,
-                Tag.from_bytes("SVG ") => ret_tables.svg = table_data,
-                Tag.from_bytes("VORG") => ret_tables.vorg = table_data,
-                Tag.from_bytes("VVAR") => if (cfg.variable_fonts) {
+                Tag.from_bytes("OS/2").inner => ret_tables.os2 = table_data,
+                Tag.from_bytes("SVG ").inner => ret_tables.svg = table_data,
+                Tag.from_bytes("VORG").inner => ret_tables.vorg = table_data,
+                Tag.from_bytes("VVAR").inner => if (cfg.variable_fonts) {
                     ret_tables.variable_fonts.vvar = table_data;
                 },
-                Tag.from_bytes("ankr") => if (cfg.apple_layout) {
+                Tag.from_bytes("ankr").inner => if (cfg.apple_layout) {
                     ret_tables.apple_layout.ankr = table_data;
                 },
-                Tag.from_bytes("avar") => if (cfg.variable_fonts) {
+                Tag.from_bytes("avar").inner => if (cfg.variable_fonts) {
                     ret_tables.variable_fonts.avar = table_data;
                 },
-                Tag.from_bytes("cmap") => ret_tables.cmap = table_data,
-                Tag.from_bytes("feat") => if (cfg.apple_layout) {
+                Tag.from_bytes("cmap").inner => ret_tables.cmap = table_data,
+                Tag.from_bytes("feat").inner => if (cfg.apple_layout) {
                     ret_tables.apple_layout.feat = table_data;
                 },
-                Tag.from_bytes("fvar") => if (cfg.variable_fonts) {
+                Tag.from_bytes("fvar").inner => if (cfg.variable_fonts) {
                     ret_tables.variable_fonts.fvar = table_data;
                 },
-                Tag.from_bytes("glyf") => ret_tables.glyf = table_data,
-                Tag.from_bytes("gvar") => if (cfg.variable_fonts) {
+                Tag.from_bytes("glyf").inner => ret_tables.glyf = table_data,
+                Tag.from_bytes("gvar").inner => if (cfg.variable_fonts) {
                     ret_tables.variable_fonts.gvar = table_data;
                 },
-                Tag.from_bytes("head") => ret_tables.head = table_data,
-                Tag.from_bytes("hhea") => ret_tables.hhea = table_data,
-                Tag.from_bytes("hmtx") => ret_tables.hmtx = table_data,
-                Tag.from_bytes("kern") => ret_tables.kern = table_data,
-                Tag.from_bytes("kerx") => if (cfg.apple_layout) {
+                Tag.from_bytes("head").inner => ret_tables.head = table_data,
+                Tag.from_bytes("hhea").inner => ret_tables.hhea = table_data,
+                Tag.from_bytes("hmtx").inner => ret_tables.hmtx = table_data,
+                Tag.from_bytes("kern").inner => ret_tables.kern = table_data,
+                Tag.from_bytes("kerx").inner => if (cfg.apple_layout) {
                     ret_tables.apple_layout.kerx = table_data;
                 },
-                Tag.from_bytes("loca") => ret_tables.loca = table_data,
-                Tag.from_bytes("maxp") => ret_tables.maxp = table_data,
-                Tag.from_bytes("morx") => if (cfg.apple_layout) {
+                Tag.from_bytes("loca").inner => ret_tables.loca = table_data,
+                Tag.from_bytes("maxp").inner => ret_tables.maxp = table_data,
+                Tag.from_bytes("morx").inner => if (cfg.apple_layout) {
                     ret_tables.apple_layout.morx = table_data;
                 },
-                Tag.from_bytes("name") => ret_tables.name = table_data,
-                Tag.from_bytes("post") => ret_tables.post = table_data,
-                Tag.from_bytes("sbix") => ret_tables.sbix = table_data,
-                Tag.from_bytes("STAT") => ret_tables.stat = table_data,
-                Tag.from_bytes("trak") => if (cfg.apple_layout) {
+                Tag.from_bytes("name").inner => ret_tables.name = table_data,
+                Tag.from_bytes("post").inner => ret_tables.post = table_data,
+                Tag.from_bytes("sbix").inner => ret_tables.sbix = table_data,
+                Tag.from_bytes("STAT").inner => ret_tables.stat = table_data,
+                Tag.from_bytes("trak").inner => if (cfg.apple_layout) {
                     ret_tables.apple_layout.trak = table_data;
                 },
-                Tag.from_bytes("vhea") => ret_tables.vhea = table_data,
-                Tag.from_bytes("vmtx") => ret_tables.vmtx = table_data,
+                Tag.from_bytes("vhea").inner => ret_tables.vhea = table_data,
+                Tag.from_bytes("vmtx").inner => ret_tables.vmtx = table_data,
                 else => {},
             }
         }
@@ -1386,7 +1386,7 @@ pub const Face = struct {
 
     fn apply_metrics_variation(
         self: Face,
-        tag: u32,
+        tag: Tag,
         value_immutable: i16,
     ) i16 {
         var value = value_immutable;
@@ -1686,37 +1686,16 @@ pub const TableRecord = struct {
 pub const Tag = struct {
     inner: u32,
 
-    const Self = @This();
-    pub const FromData = struct {
-        // [ARS] impl of FromData trait
-        pub const SIZE: usize = 4;
-
-        pub fn parse(
-            data: *const [SIZE]u8,
-        ) parser.Error!Self {
-            const u = std.mem.readInt(u32, data, .big);
-            return .{ .inner = u };
-        }
-    };
-
     /// Creates a `Tag` from bytes.
-    pub fn from_bytes(bytes: *const [4]u8) u32 {
-        const _0 = @as(u32, bytes[0]) << 24;
-        const _1 = @as(u32, bytes[1]) << 16;
-        const _2 = @as(u32, bytes[2]) << 8;
-        const _3 = @as(u32, bytes[3]);
-
-        return _0 | _1 | _2 | _3;
+    pub fn from_bytes(bytes: *const [4]u8) Tag {
+        return .{ .inner = std.mem.readInt(u32, bytes, .big) };
     }
 
     /// Returns tag as 4-element byte array.
-    pub fn to_bytes(self: Self) [4]u8 {
-        return .{
-            @truncate((self.inner >> 24 & 0xff)),
-            @truncate((self.inner >> 16 & 0xff)),
-            @truncate((self.inner >> 8 & 0xff)),
-            @truncate((self.inner >> 0 & 0xff)),
-        };
+    pub fn to_bytes(self: Tag) [4]u8 {
+        var b: [4]u8 = undefined;
+        std.mem.writeInt(u32, &b, self.inner, .big);
+        return b;
     }
 };
 
