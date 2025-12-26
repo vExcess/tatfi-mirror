@@ -4,7 +4,7 @@ const parser = @import("../../parser.zig");
 // Limits according to the Adobe Technical Note #5176, chapter 4 DICT Data.
 const TWO_BYTE_OPERATOR_MARK: u8 = 12;
 const FLOAT_STACK_LEN: usize = 64;
-const END_OF_FLOAT_FLAG: u8 = 0xf;
+const END_OF_FLOAT_FLAG: u4 = 0xF;
 
 const DictionaryParser = @This();
 
@@ -163,14 +163,9 @@ pub fn skip_number(
         28 => s.skip(u16),
         29 => s.skip(u32),
         30 => while (!s.at_end()) {
-            const b1 = try s.read(u8);
-            const nibble1 = b1 >> 4;
-            const nibble2 = b1 & 15;
-            if (nibble1 == END_OF_FLOAT_FLAG or
-                nibble2 == END_OF_FLOAT_FLAG)
-            {
-                break;
-            }
+            const f = try s.read(FloatNibble);
+            if (f.nibble1 == END_OF_FLOAT_FLAG or
+                f.nibble2 == END_OF_FLOAT_FLAG) break;
         },
         32...246 => {},
         247...250 => s.skip(u8),
@@ -193,7 +188,7 @@ pub fn parse_number(
             const n = try s.read(i32);
             return @floatFromInt(n);
         },
-        30 => return try parse_float(s),
+        30 => return parse_float(s) catch return error.ParseFail,
         32...246 => {
             const n: i32 = @as(i32, b0) - 139;
             return @floatFromInt(n);
@@ -212,61 +207,58 @@ pub fn parse_number(
     }
 }
 
+const FloatNibble = packed struct(u8) {
+    nibble2: u4,
+    nibble1: u4,
+};
+
 fn parse_float(
     s: *parser.Stream,
-) parser.Error!f64 {
-    var data: [FLOAT_STACK_LEN]u8 = @splat(0);
-    var idx: usize = 0;
+) !f64 {
+    var buffer: [FLOAT_STACK_LEN]u8 = undefined;
+    var data: std.ArrayList(u8) = .initBuffer(&buffer);
 
-    while (true) {
-        const b1 = try s.read(u8);
-        const nibble1 = b1 >> 4;
-        const nibble2 = b1 & 15;
+    while (s.read(FloatNibble)) |f| {
+        try parse_float_nibble(f.nibble1, &data) orelse break;
+        try parse_float_nibble(f.nibble2, &data) orelse break;
+    } else |e| return e;
 
-        if (nibble1 == END_OF_FLOAT_FLAG) break;
-        idx = try parse_float_nibble(nibble1, idx, &data);
-
-        if (nibble2 == END_OF_FLOAT_FLAG) break;
-        idx = try parse_float_nibble(nibble2, idx, &data);
-    }
-
-    return std.fmt.parseFloat(f64, data[0..idx]) catch return error.ParseFail;
+    return try std.fmt.parseFloat(f64, data.items);
 }
 
 // Adobe Technical Note #5176, Table 5 Nibble Definitions
 fn parse_float_nibble(
-    nibble: u8,
-    idx_immutable: usize,
-    data: []u8,
-) parser.Error!usize {
-    var idx = idx_immutable;
-    if (idx >= FLOAT_STACK_LEN) return error.ParseFail;
-
+    nibble: u4,
+    data: *std.ArrayList(u8),
+) !?void {
     switch (nibble) {
-        0...9 => data[idx] = '0' + nibble,
-        10 => data[idx] = '.',
-        11 => data[idx] = 'E',
+        0...9 => try data.appendBounded('0' + @as(u8, nibble)),
+        10 => try data.appendBounded('.'),
+        11 => try data.appendBounded('E'),
         12 => {
-            if (idx + 1 == FLOAT_STACK_LEN)
-                return error.ParseFail;
-
-            data[idx] = 'E';
-            idx += 1;
-            data[idx] = '-';
+            try data.appendBounded('E');
+            try data.appendBounded('-');
         },
-        13 => return error.ParseFail,
-        14 => data[idx] = '-',
-
-        else => return error.ParseFail,
+        13 => return error.OutOfMemory,
+        14 => try data.appendBounded('-'),
+        END_OF_FLOAT_FLAG => return null,
     }
+}
 
-    idx += 1;
-    return idx;
+const t = std.testing;
+
+test "parse float" {
+    {
+        var s = parser.Stream.new(&.{ 0xE2, 0xA2, 0x5F });
+        try t.expectEqual(try parse_float(&s), -2.25);
+    }
+    {
+        var s = parser.Stream.new(&.{ 0x0A, 0x14, 0x05, 0x41, 0xC3, 0xFF });
+        try t.expectEqual(try parse_float(&s), 0.140541E-3);
+    }
 }
 
 test "parse dict number" {
-    const t = std.testing;
-
     {
         var s = parser.Stream.new(&.{0x7C});
         try t.expectEqual(try parse_number(0xFA, &s), 1000);
