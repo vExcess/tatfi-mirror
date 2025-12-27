@@ -902,7 +902,8 @@ fn seac_code_to_glyph_id(
     }
 }
 
-// [RazrFalcon] TODO: move to integration
+// tests
+
 const t = std.testing;
 
 test "private dict size overflow" {

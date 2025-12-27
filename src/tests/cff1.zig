@@ -1155,7 +1155,7 @@ fn rect(x_min: i16, y_min: i16, x_max: i16, y_max: i16) ttf.Rect {
     return .{ .x_min = x_min, .y_min = y_min, .x_max = x_max, .y_max = y_max };
 }
 
-fn init_outline_builder(
+pub fn init_outline_builder(
     writer: *std.Io.Writer,
 ) ttf.OutlineBuilder {
     return .{ .ptr = writer, .vtable = .{
