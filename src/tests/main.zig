@@ -10,6 +10,14 @@ test {
     _ = @import("cff1.zig");
     _ = @import("cmap.zig");
     _ = @import("colr.zig");
+    _ = @import("feat.zig");
+    _ = @import("glyf.zig");
+    _ = @import("hmtx.zig");
+    _ = @import("maxp.zig");
+    _ = @import("sbix.zig");
+    _ = @import("trak.zig");
+
+    _ = @import("bitmap.zig");
 }
 
 pub const Unit = union(enum) {
