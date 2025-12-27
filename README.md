@@ -14,21 +14,21 @@ Almost the entire Rust ecosystem depends on [`ttf_parser`](https://docs.rs/ttf-p
 
 ## Status
 
-`tatfi` is still a work in progress. The API surface is fairly complete. It is possible to build a rasterizer or a shaper on top of `tatfi`.
+`tatfi` is pretty much complete as a port. It is possible to build a rasterizer or a shaper on top of `tatfi`, especially now many of the bugs were fixed. Future work of this library will be mostly keeping up with Zig releaes and bug fixes.
 
-However, `ttf_parser` tests are not ported yet. Note that even with all `ttf_parser` tests ported, the crate actually depended on `rustybuzz` (and from there, the `HarfBuzz` test suite), for testing. Without actual real use of this library it is not possible to test exhaustively.
+All `ttf_parser` tests are ported. Note that even sp, the crate depended on `rustybuzz` (and from there, the `HarfBuzz` test suite), for testing. Without actual real use of this library it is not possible to test exhaustively.
 
 You can see the API surface on `main.zig`. If you'd like to help, please see any of the following topics.
 
-### Tests, Fuzzing, and Benchmarks
+### Fuzzing and Benchmarks
 
-I have currently started to add unit tests and integration tests. I tried to add fuzzing using AFL++ (like ttf_parser does), but being on macOS makes me [fight the system incessantly](https://ziggit.dev/t/trouble-figuring-out-fuzzing-with-afl/13625/3?u=asibahi).
+I am done adding unit tests and integration tests. I tried to add fuzzing using AFL++ (like ttf_parser does), but being on macOS makes me [fight the system incessantly](https://ziggit.dev/t/trouble-figuring-out-fuzzing-with-afl/13625/3?u=asibahi).
 
-If you depend (or plan to depend) on the libraary, I would really appreciate help adding proper benchmarks and fuzzing infrastructure, where one can influence the input). I am not going to go beyond tests.
+If you depend (or plan to depend) on the libraary, I would really appreciate help adding proper benchmarks and fuzzing infrastructure.
 
 ### C API
 
-`ttf_parser` has a [minimal C API](https://github.com/harfbuzz/ttf-parser/blob/main/c-api/lib.rs). Porting that interface to this library would be nice, too. The C interface is also used in testing comparison with FreeType.
+`ttf_parser` has a [minimal C API](https://github.com/harfbuzz/ttf-parser/blob/main/c-api/lib.rs). Porting that interface to this library would be nice, too. The C interface is also used in testing comparison with FreeType. The C++ code to set that part up is beyond my ability.
 
 ### Better Errors
 
