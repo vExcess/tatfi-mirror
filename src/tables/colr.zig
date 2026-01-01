@@ -1701,7 +1701,7 @@ pub const GradientStopsIter = struct {
             }
         }.less_than;
 
-        std.mem.sort(ColorStop, stops.items, {}, less_than);
+        std.mem.sortUnstable(ColorStop, stops.items, {}, less_than);
         return try stops.toOwnedSlice(gpa);
     }
 };
