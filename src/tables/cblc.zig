@@ -1,7 +1,7 @@
 //! A [Color Bitmap Location Table](
 //! https://docs.microsoft.com/en-us/typography/opentype/spec/cblc) implementation.
-///!
-///! EBLC and bloc also share the same structure, so this is re-used for them.
+//!
+//! EBLC and bloc also share the same structure, so this is re-used for them.
 
 const std = @import("std");
 const lib = @import("../lib.zig");

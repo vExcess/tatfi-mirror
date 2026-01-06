@@ -1,0 +1,13 @@
+{
+	"languages": {
+		"Zig": {
+			"tab_size": 4,
+			"formatter": {
+				"external": {
+					"command": "zig",
+					"arguments": ["fmt", "--stdin"],
+				},
+			},
+		},
+	},
+}

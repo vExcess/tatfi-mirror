@@ -1562,7 +1562,6 @@ const VarColorLine = struct {
     palettes: cpalTable,
     foreground_color: lib.RgbaColor,
 
-
     fn get(
         self: VarColorLine,
         palette: u16,
@@ -1611,7 +1610,6 @@ const NonVarColorLine = struct {
     colors: parser.LazyArray16(ColorStopRaw),
     palettes: cpalTable,
     foreground_color: lib.RgbaColor,
-
 
     fn get(
         self: NonVarColorLine,
