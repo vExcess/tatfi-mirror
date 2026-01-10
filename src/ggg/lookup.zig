@@ -117,10 +117,8 @@ pub fn LookupSubtables(kind: LookupSubtable) type {
             ) ?T {
                 if (self.index < self.data.len()) {
                     defer self.index += 1;
-                    return self.data.get(T, self.index);
-                } else {
-                    return null;
-                }
+                    return self.data.get(self.index);
+                } else return null;
             }
         };
     };

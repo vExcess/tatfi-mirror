@@ -8,6 +8,11 @@
 // internal reëxports
 const layout_table = @import("ggg/layout_table.zig");
 pub const LayoutTable = layout_table.LayoutTable;
+pub const ScriptIndex = layout_table.ScriptIndex;
+pub const LanguageIndex = layout_table.LanguageIndex;
+pub const FeatureIndex = layout_table.FeatureIndex;
+pub const LookupIndex = layout_table.LookupIndex;
+pub const VariationIndex = layout_table.VariationIndex;
 
 // end of internal reëxports
 
@@ -18,6 +23,7 @@ const parser = @import("parser.zig");
 pub const ContextLookup = @import("ggg/context.zig").ContextLookup;
 pub const ChainedContextLookup = @import("ggg/chained_context.zig").ChainedContextLookup;
 
+pub const Lookup = @import("ggg/lookup.zig").Lookup;
 pub const parse_extension_lookup = @import("ggg/lookup.zig").parse_extension_lookup;
 
 /// A [Class Definition Table](
@@ -123,14 +129,11 @@ pub const RangeRecord = struct {
 /// A [Coverage Table](
 /// https://docs.microsoft.com/en-us/typography/opentype/spec/chapter2#coverage-table).
 pub const Coverage = union(enum) {
-    format1: struct {
-        /// Array of glyph IDs. Sorted.
-        glyphs: parser.LazyArray16(lib.GlyphId),
-    },
-    format2: struct {
-        /// Array of glyph ranges. Ordered by `RangeRecord.start`.
-        records: parser.LazyArray16(RangeRecord),
-    },
+    /// Array of glyph IDs. Sorted.
+    format1: parser.LazyArray16(lib.GlyphId),
+
+    /// Array of glyph ranges. Ordered by `RangeRecord.start`.
+    format2: parser.LazyArray16(RangeRecord),
 
     pub fn parse(
         data: []const u8,
@@ -140,12 +143,12 @@ pub const Coverage = union(enum) {
             1 => {
                 const count = try s.read(u16);
                 const glyphs = try s.read_array(lib.GlyphId, count);
-                return .{ .format1 = .{ .glyphs = glyphs } };
+                return .{ .format1 = glyphs };
             },
             2 => {
                 const count = try s.read(u16);
                 const records = try s.read_array(RangeRecord, count);
-                return .{ .format2 = .{ .records = records } };
+                return .{ .format2 = records };
             },
             else => return error.ParseFail,
         }
@@ -165,18 +168,18 @@ pub const Coverage = union(enum) {
         glyph: lib.GlyphId,
     ) ?u16 {
         switch (self) {
-            .format1 => |f| {
+            .format1 => |glyphs| {
                 const func = struct {
                     fn func(lhs: lib.GlyphId, rhs: lib.GlyphId) std.math.Order {
                         return std.math.order(lhs[0], rhs[0]);
                     }
                 }.func;
 
-                const p, _ = f.glyphs.binary_search_by(glyph, func) catch return null;
+                const p, _ = glyphs.binary_search_by(glyph, func) catch return null;
                 return p;
             },
-            .format2 => |f| {
-                const record = RangeRecord.range(f.records, glyph) orelse return null;
+            .format2 => |records| {
+                const record = RangeRecord.range(records, glyph) orelse return null;
                 const offset = glyph[0] - record.start[0];
                 return std.math.add(u16, record.value, offset) catch null;
             },

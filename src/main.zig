@@ -232,13 +232,13 @@ pub fn main() !void {
 
         const lookups = gpos.lookups;
         var lookup_iter = lookups.iterator();
-        while (lookup_iter.next()) |maybe| {
-            const lookup = maybe orelse continue;
+        while (lookup_iter.next()) |lookup| {
             const subtables = lookup.subtables; // also an iterator
-            const subtable = subtables.get(0).?;
+            var sb_iter = subtables.iterator();
+            const subtable = sb_iter.next().?;
             _ = subtable.coverage();
             // api goes deeper when you go into the variants.
-        } else |_| {}
+        }
     }
     if (tables.opentype_layout.gsub) |gsub| {
         // api other than subtables of lookups is same as gpos.

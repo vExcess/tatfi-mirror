@@ -821,7 +821,7 @@ pub const GlyphConstructions = struct {
         offsets: parser.LazyArray16(?parser.Offset16),
     ) GlyphConstructions {
         return .{
-            .coverage = coverage orelse .{ .format1 = .{ .glyphs = .{} } },
+            .coverage = coverage orelse .{ .format1 = .{} },
             .constructions = .new(data, offsets),
         };
     }

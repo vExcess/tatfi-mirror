@@ -231,11 +231,11 @@ pub fn LazyOffsetArray16(T: type) type {
             array: *const Self,
             index: u16 = 0,
 
-            pub fn next(self: *Iterator) error{IteratorEnd}!?T {
-                if (self.index < self.array.len()) {
+            pub fn next(self: *Iterator) ?T {
+                while (self.index < self.array.len()) {
                     defer self.index += 1;
-                    return self.array.get(self.index);
-                } else return error.IteratorEnd;
+                    return self.array.get(self.index) orelse continue;
+                } else return null;
             }
         };
     };

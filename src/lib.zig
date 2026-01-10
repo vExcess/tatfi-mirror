@@ -1714,6 +1714,33 @@ pub const Tag = struct {
         std.mem.writeInt(u32, &b, self.inner, .big);
         return b;
     }
+
+    /// Creates a `Tag` from bytes.
+    ///
+    /// In case of empty data will return `Tag` set to 0.
+    ///
+    /// When `bytes` are shorter than 4, will set missing bytes to ` `.
+    ///
+    /// Data after first 4 bytes is ignored.
+    pub fn from_bytes_lossy(bytes: []const u8) Tag {
+        switch (bytes.len) {
+            0 => return .{ .inner = 0 },
+            1...3 => {
+                var temp: [4]u8 = @splat(' ');
+                @memcpy(temp[0..bytes.len], bytes[0..bytes.len]);
+                return .from_bytes(&temp);
+            },
+            else => return .from_bytes(bytes[0..4]),
+        }
+    }
+
+    test "tag from bytes lossy" {
+        const t = std.testing;
+
+        try t.expectEqual(Tag{ .inner = 0 }, Tag.from_bytes_lossy(&.{}));
+        try t.expectEqual(Tag.from_bytes("b   "), Tag.from_bytes_lossy("b"));
+        try t.expectEqual(Tag.from_bytes("hell"), Tag.from_bytes_lossy("hello"));
+    }
 };
 
 /// A list of font face parsing errors.
