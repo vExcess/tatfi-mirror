@@ -295,7 +295,10 @@ pub fn main() !void {
     }
     _ = tables.variable_fonts.avar;
     _ = tables.variable_fonts.cff2;
-    _ = tables.variable_fonts.fvar;
+    if (tables.variable_fonts.fvar) |fvar| {
+        var iter = fvar.instances.iterator();
+        while (iter.next()) |_| {}
+    }
     _ = tables.variable_fonts.gvar;
     _ = tables.variable_fonts.hvar;
     _ = tables.variable_fonts.mvar;

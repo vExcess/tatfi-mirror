@@ -10,6 +10,8 @@ const Table = @This();
 
 /// A list of variation axes.
 axes: parser.LazyArray16(VariationAxis),
+/// A list of instance records
+instances: Instances,
 
 /// Parses a table from raw data.
 pub fn parse(
@@ -23,6 +25,12 @@ pub fn parse(
     const axes_array_offset = try s.read(parser.Offset16);
     s.skip(u16); // reserved
     const axis_count = try s.read(u16);
+    const axis_sixe = try s.read(u16);
+
+    if (axis_sixe != VariationAxis.FromData.SIZE) return error.DataError;
+
+    const instance_count = try s.read(u16);
+    const instance_size = try s.read(u16);
 
     // 'If axisCount is zero, then the font is not functional as a variable font,
     // and must be treated as a non-variable font;
@@ -32,7 +40,32 @@ pub fn parse(
     s.offset = axes_array_offset[0];
     const axes = try s.read_array(VariationAxis, axis_count);
 
-    return .{ .axes = axes };
+    // Instance records follow the axes array immediately.
+    const instances_offset = try std.math.add(
+        usize,
+        axes_array_offset[0],
+        axis_count * VariationAxis.FromData.SIZE,
+    );
+
+    // Validate instance record size: must be base or base + 2 (for psNameID).
+    const base = 4 + (@as(usize, 4) * axis_count);
+    if (instance_size < base) return error.ParseFail;
+
+    const total_instances_len = try std.math.mul(usize, instance_count, instance_size);
+
+    var inst_stream = try parser.Stream.new_at(data, instances_offset);
+    const inst_data = try inst_stream.read_bytes(total_instances_len);
+    const instances: Instances = .new(
+        inst_data,
+        instance_size,
+        axis_count,
+        instance_count,
+    );
+
+    return .{
+        .axes = axes,
+        .instances = instances,
+    };
 }
 
 /// A [variation axis](https://docs.microsoft.com/en-us/typography/opentype/spec/fvar#variationaxisrecord).
@@ -93,4 +126,108 @@ pub const VariationAxis = struct {
 
         return .from(v);
     }
+};
+
+pub const Instances = struct {
+    data: []const u8,
+    record_len: u16,
+    axis_count: u16,
+    count: u16,
+
+    pub fn iterator(
+        self: *const Instances,
+    ) Iterator {
+        return .{ .data = self };
+    }
+
+    pub const Iterator = struct {
+        data: *const Instances,
+        index: u16 = 0,
+
+        pub fn next(
+            self: *Iterator,
+        ) ?Instance {
+            if (self.index < self.data.count) {
+                defer self.index += 1;
+                return self.data.get(self.index);
+            } else return null;
+        }
+    };
+
+    fn new(
+        data: []const u8,
+        record_len: u16,
+        axis_count: u16,
+        count: u16,
+    ) Instances {
+        return .{
+            .data = data,
+            .record_len = record_len,
+            .axis_count = axis_count,
+            .count = count,
+        };
+    }
+
+    /// Returns `true` when the `postScriptNameID` field is present in records.
+    pub fn has_post_script_name_id(
+        self: Instances,
+    ) bool {
+        // The base size is 4 bytes (subfamilyNameID + flags) + 4 bytes per axis coordinate.
+        // If record_len is at least base + 2, the optional postScriptNameID field is present.
+        const axis_count: usize = self.axis_count;
+        const base = 4 + 4 * axis_count;
+        return self.record_len >= (base + 2);
+    }
+
+    /// Returns the instance at the given index.
+    ///
+    /// Returns `null` if the index is out of bounds.
+    pub fn get(
+        self: Instances,
+        index: u16,
+    ) ?Instance {
+        if (index >= self.count) return null;
+        const len: usize = self.record_len;
+        const start = index * len;
+        const record = utils.slice(self.data, .{ start, len }) catch return null;
+        return Instance.parse(
+            record,
+            self.axis_count,
+            self.has_post_script_name_id(),
+        ) catch null;
+    }
+
+    pub const Instance = struct {
+        /// The name ID for entries in the 'name' table that provide subfamily names for this instance.
+        subfamily_name_id: u16,
+        /// Reserved for future use — set to 0.
+        flags: u16,
+        /// The coordinate array for this instance (length = axisCount).
+        coordinates: parser.LazyArray16(parser.Fixed),
+        /// The name ID for entries in the 'name' table that provide PostScript names for this instance.
+        post_script_name_id: ?u16,
+
+        fn parse(
+            record: []const u8,
+            axis_count: u16,
+            has_ps_name_id: bool,
+        ) parser.Error!Instance {
+            var s: parser.Stream = .new(record);
+
+            const subfamily_name_id = try s.read(u16);
+            const flags = try s.read(u16);
+            const coordinates = try s.read_array(parser.Fixed, axis_count);
+            const post_script_name_id = if (has_ps_name_id)
+                try s.read(u16)
+            else
+                null;
+
+            return .{
+                .subfamily_name_id = subfamily_name_id,
+                .flags = flags,
+                .coordinates = coordinates,
+                .post_script_name_id = post_script_name_id,
+            };
+        }
+    };
 };
