@@ -41,21 +41,13 @@ pub fn parse(
     s.offset = axes_array_offset[0];
     const axes = try s.read_array(VariationAxis, axis_count);
 
-    // Instance records follow the axes array immediately.
-    const instances_offset = try std.math.add(
-        usize,
-        axes_array_offset[0],
-        axis_count * VariationAxis.FromData.SIZE,
-    );
-
     // Validate instance record size: must be base or base + 2 (for psNameID).
-    const base = 4 + (@as(usize, 4) * axis_count);
-    if (instance_size < base) return error.ParseFail;
+    const base = 4 + (parser.size_of(parser.Fixed) * axis_count);
+    if (instance_size != base and instance_size != base + 2) return error.ParseFail;
 
     const total_instances_len = try std.math.mul(usize, instance_count, instance_size);
 
-    var inst_stream = try parser.Stream.new_at(data, instances_offset);
-    const inst_data = try inst_stream.read_bytes(total_instances_len);
+    const inst_data = try s.read_bytes(total_instances_len);
     const instances: Instances = .new(
         inst_data,
         instance_size,
@@ -169,17 +161,6 @@ pub const Instances = struct {
         };
     }
 
-    /// Returns `true` when the `postScriptNameID` field is present in records.
-    pub fn has_post_script_name_id(
-        self: Instances,
-    ) bool {
-        // The base size is 4 bytes (subfamilyNameID + flags) + 4 bytes per axis coordinate.
-        // If record_len is at least base + 2, the optional postScriptNameID field is present.
-        const axis_count: usize = self.axis_count;
-        const base = 4 + 4 * axis_count;
-        return self.record_len >= (base + 2);
-    }
-
     /// Returns the instance at the given index.
     ///
     /// Returns `null` if the index is out of bounds.
@@ -191,11 +172,7 @@ pub const Instances = struct {
         const len: usize = self.record_len;
         const start = index * len;
         const record = utils.slice(self.data, .{ start, len }) catch return null;
-        return Instance.parse(
-            record,
-            self.axis_count,
-            self.has_post_script_name_id(),
-        ) catch null;
+        return Instance.parse(record, self.axis_count) catch null;
     }
 
     pub const Instance = struct {
@@ -209,17 +186,13 @@ pub const Instances = struct {
         fn parse(
             record: []const u8,
             axis_count: u16,
-            has_ps_name_id: bool,
         ) parser.Error!Instance {
             var s: parser.Stream = .new(record);
 
             const subfamily_name_id = try s.read(name.NameId);
             s.skip(u16); // reserved
             const coordinates = try s.read_array(parser.Fixed, axis_count);
-            const post_script_name_id = if (has_ps_name_id)
-                try s.read(name.NameId)
-            else
-                null;
+            const post_script_name_id = s.read(name.NameId) catch null;
 
             return .{
                 .subfamily_name_id = subfamily_name_id,
