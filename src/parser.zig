@@ -165,6 +165,25 @@ pub fn LazyArray(I: type, T: type) type {
             const end_t = end * size;
             return .{ .data = self.data[start_t..end_t] };
         }
+
+        pub fn format(
+            self: Self,
+            writer: *std.Io.Writer,
+        ) std.Io.Writer.Error!void {
+            if (self.len() == 0) {
+                try writer.writeAll("[]");
+                return;
+            }
+
+            try writer.writeByte('[');
+            var iter = self.iterator();
+            var idx: I = 0;
+            while (iter.next()) |item| : (idx += 1) {
+            	if (idx > 0) try writer.writeByte(',');
+                try writer.print(" {any}", .{item});
+            }
+            try writer.writeAll(" ]");
+        }
     };
 }
 
