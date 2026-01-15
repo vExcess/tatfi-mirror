@@ -3,6 +3,7 @@
 
 const parser = @import("../parser.zig");
 const utils = @import("../utils.zig");
+const name = @import("name.zig");
 
 const Table = @This();
 
@@ -121,7 +122,7 @@ pub const Tracks = struct {
 
 const TrackTableRecord = struct {
     value: parser.Fixed,
-    name_id: u16,
+    name_id: name.NameId,
     offset: parser.Offset16, // Offset from start of the table.
 
     const Self = @This();
@@ -142,7 +143,7 @@ pub const Track = struct {
     /// A track value.
     value: f32,
     /// The `name` table index for the track's name.
-    name_index: u16,
+    name_index: name.NameId,
     /// A list of tracking values for each size.
     values: parser.LazyArray16(i16),
 };

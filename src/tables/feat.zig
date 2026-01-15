@@ -4,6 +4,7 @@
 const std = @import("std");
 const parser = @import("../parser.zig");
 const utils = @import("../utils.zig");
+const name = @import("name.zig");
 
 const Table = @This();
 
@@ -62,8 +63,8 @@ pub const FeatureNames = struct {
         feature: u16,
     ) ?FeatureName {
         const func = struct {
-            fn func(name: FeatureNameRecord, f: u16) std.math.Order {
-                return std.math.order(name.feature, f);
+            fn func(n: FeatureNameRecord, f: u16) std.math.Order {
+                return std.math.order(n.feature, f);
             }
         }.func;
         const index, _ = self.records.binary_search_by(feature, func) catch return null;
@@ -102,7 +103,7 @@ const FeatureNameRecord = struct {
         exclusive: bool,
     },
     default_setting_index: u8,
-    name_index: u16,
+    name_index: name.NameId,
 
     const Self = @This();
     pub const FromData = struct {
@@ -128,7 +129,7 @@ pub const FeatureName = struct {
     /// The feature's exclusive settings. If set, the feature settings are mutually exclusive.
     exclusive: bool,
     /// The `name` table index for the feature's name in a 256..32768 range.
-    name_index: u16,
+    name_index: name.NameId,
 };
 
 /// A setting name.
@@ -136,7 +137,7 @@ pub const SettingName = struct {
     /// The setting.
     setting: u16,
     /// The `name` table index for the feature's name in a 256..32768 range.
-    name_index: u16,
+    name_index: name.NameId,
 
     const Self = @This();
     pub const FromData = struct {

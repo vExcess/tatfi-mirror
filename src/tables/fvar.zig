@@ -5,6 +5,7 @@ const std = @import("std");
 const lib = @import("../lib.zig");
 const parser = @import("../parser.zig");
 const utils = @import("../utils.zig");
+const name = lib.tables.name;
 
 const Table = @This();
 
@@ -199,13 +200,11 @@ pub const Instances = struct {
 
     pub const Instance = struct {
         /// The name ID for entries in the 'name' table that provide subfamily names for this instance.
-        subfamily_name_id: u16,
-        /// Reserved for future use — set to 0.
-        flags: u16,
+        subfamily_name_id: name.NameId,
         /// The coordinate array for this instance (length = axisCount).
         coordinates: parser.LazyArray16(parser.Fixed),
         /// The name ID for entries in the 'name' table that provide PostScript names for this instance.
-        post_script_name_id: ?u16,
+        post_script_name_id: ?name.NameId,
 
         fn parse(
             record: []const u8,
@@ -214,17 +213,16 @@ pub const Instances = struct {
         ) parser.Error!Instance {
             var s: parser.Stream = .new(record);
 
-            const subfamily_name_id = try s.read(u16);
-            const flags = try s.read(u16);
+            const subfamily_name_id = try s.read(name.NameId);
+            s.skip(u16); // reserved
             const coordinates = try s.read_array(parser.Fixed, axis_count);
             const post_script_name_id = if (has_ps_name_id)
-                try s.read(u16)
+                try s.read(name.NameId)
             else
                 null;
 
             return .{
                 .subfamily_name_id = subfamily_name_id,
-                .flags = flags,
                 .coordinates = coordinates,
                 .post_script_name_id = post_script_name_id,
             };

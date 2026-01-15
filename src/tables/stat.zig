@@ -2,13 +2,14 @@
 
 const lib = @import("../lib.zig");
 const parser = @import("../parser.zig");
+const name = lib.tables.name;
 
 const Table = @This();
 
 /// List of axes
 axes: parser.LazyArray16(AxisRecord),
 /// Fallback name when everything can be elided.
-fallback_name_id: ?u16,
+fallback_name_id: ?name.NameId,
 version: u32,
 data: []const u8,
 value_lookup_start: parser.Offset32,
@@ -38,7 +39,7 @@ pub fn parse(
 
     const fallback_name_id = if (version >= 0x00010001)
         // If version >= 1.1 the field is required
-        try s.read(u16)
+        try s.read(name.NameId)
     else
         null;
 
@@ -126,7 +127,7 @@ pub const AxisRecord = struct {
     /// Axis tag.
     tag: lib.Tag,
     /// The name ID for entries in the 'name' table that provide a display string for this axis.
-    name_id: u16,
+    name_id: name.NameId,
     /// Sort order for e.g. composing font family or face names.
     ordering: u16,
 
@@ -232,7 +233,7 @@ pub const AxisValueSubtable = union(enum) {
     /// Returns the associated name ID.
     pub fn name_id(
         self: AxisValueSubtable,
-    ) u16 {
+    ) name.NameId {
         switch (self) {
             inline else => |st| return st.value_name_id,
         }
@@ -277,7 +278,7 @@ pub const AxisValueSubtableFormat1 = struct {
     /// Flags for `AxisValueSubtable`.
     flags: AxisValueFlags,
     /// The name ID of the display string.
-    value_name_id: u16,
+    value_name_id: name.NameId,
     /// Numeric value for this record.
     value: parser.Fixed,
 
@@ -301,7 +302,7 @@ pub const AxisValueSubtableFormat2 = struct {
     /// Flags for `AxisValueSubtable`.
     flags: AxisValueFlags,
     /// The name ID of the display string.
-    value_name_id: u16,
+    value_name_id: name.NameId,
     /// Nominal numeric value for this record.
     nominal_value: parser.Fixed,
     /// The minimum value for this record.
@@ -329,7 +330,7 @@ pub const AxisValueSubtableFormat3 = struct {
     /// Flags for `AxisValueSubtable`.
     flags: AxisValueFlags,
     /// The name ID of the display string.
-    value_name_id: u16,
+    value_name_id: name.NameId,
     /// Numeric value for this record.
     value: parser.Fixed,
     /// Numeric value for a style-linked mapping.
@@ -353,7 +354,7 @@ pub const AxisValueSubtableFormat4 = struct {
     /// Flags for `AxisValueSubtable`.
     flags: AxisValueFlags,
     /// The name ID of the display string.
-    value_name_id: u16,
+    value_name_id: name.NameId,
     /// List of axis-value pairings.
     values: parser.LazyArray16(AxisValue),
 
@@ -363,7 +364,7 @@ pub const AxisValueSubtableFormat4 = struct {
         var s = parser.Stream.new(data);
         const axis_count = try s.read(u16);
         const flags = try s.read(AxisValueFlags);
-        const value_name_id = try s.read(u16);
+        const value_name_id = try s.read(name.NameId);
         const values = try s.read_array(AxisValue, axis_count);
 
         return .{
