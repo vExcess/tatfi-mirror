@@ -73,7 +73,7 @@ pub fn parse(
 }
 
 pub fn phantom_points(
-    self: Table,
+    self: *const Table,
     gpa: std.mem.Allocator,
     glyf_table: glyfTable,
     coordinates: []const lib.NormalizedCoordinate,
@@ -107,7 +107,7 @@ pub fn phantom_points(
 }
 
 fn parse_variation_data(
-    self: Table,
+    self: *const Table,
     glyph_id: lib.GlyphId,
     coordinates: []const lib.NormalizedCoordinate,
     points_len: u16,
@@ -150,9 +150,9 @@ fn parse_variation_data(
 
 /// Outlines a glyph.
 pub fn outline(
-    self: Table,
+    self: *const Table,
     gpa: std.mem.Allocator,
-    glyf_table: glyfTable,
+    glyf_table: *const glyfTable,
     coordinates: []const lib.NormalizedCoordinate,
     glyph_id: lib.GlyphId,
     builder: lib.OutlineBuilder,
@@ -1418,8 +1418,8 @@ const PointAndDelta = struct {
 
 fn outline_var_impl(
     gpa: std.mem.Allocator,
-    glyf_table: glyfTable,
-    gvar_table: Table,
+    glyf_table: *const glyfTable,
+    gvar_table: *const Table,
     glyph_id: lib.GlyphId,
     data: []const u8,
     coordinates: []const lib.NormalizedCoordinate,

@@ -24,7 +24,7 @@ pub fn parse(
 }
 
 pub fn get(
-    self: Table,
+    self: *const Table,
     glyph_id: lib.GlyphId,
 ) ?[]const u8 {
     const start, const end = self.loca_table.glyph_range(glyph_id) orelse return null;
@@ -33,14 +33,14 @@ pub fn get(
 
 /// Returns the number of points in this outline.
 pub fn outline_points(
-    self: Table,
+    self: *const Table,
     glyph_id: lib.GlyphId,
 ) u16 {
     return self.outline_points_impl(glyph_id) catch 0;
 }
 
 fn outline_points_impl(
-    self: Table,
+    self: *const Table,
     glyph_id: lib.GlyphId,
 ) parser.Error!u16 {
     const data = self.get(glyph_id) orelse return error.ParseFail;
@@ -71,7 +71,7 @@ fn outline_points_impl(
 
 /// Outlines a glyph.
 pub fn outline(
-    self: Table,
+    self: *const Table,
     glyph_id: lib.GlyphId,
     builder: lib.OutlineBuilder,
 ) ?lib.Rect {
@@ -85,7 +85,7 @@ pub fn outline(
 /// bounding box in the `glyf` program. As a result, this method will be much faster,
 /// but the bounding box could be more inaccurate.
 pub fn bbox(
-    self: Table,
+    self: *const Table,
     glyph_id: lib.GlyphId,
 ) ?lib.Rect {
     const glyph_data = self.get(glyph_id) orelse return null;

@@ -40,7 +40,7 @@ pub fn parse(
 
 /// Returns the advance width offset for a glyph.
 pub fn advance_offset(
-    self: Table,
+    self: *const Table,
     glyph_id: lib.GlyphId,
     coordinates: []const lib.NormalizedCoordinate,
 ) ?f32 {
@@ -61,7 +61,7 @@ pub fn advance_offset(
 
 /// Returns the left side bearing offset for a glyph.
 pub fn left_side_bearing_offset(
-    self: Table,
+    self: *const Table,
     glyph_id: lib.GlyphId,
     coordinates: []const lib.NormalizedCoordinate,
 ) ?f32 {
@@ -72,7 +72,7 @@ pub fn left_side_bearing_offset(
 
 /// Returns the right side bearing offset for a glyph.
 pub fn right_side_bearing_offset(
-    self: Table,
+    self: *const Table,
     glyph_id: lib.GlyphId,
     coordinates: []const lib.NormalizedCoordinate,
 ) ?f32 {
@@ -82,7 +82,7 @@ pub fn right_side_bearing_offset(
 }
 
 fn side_bearing_offset(
-    self: Table,
+    self: *const Table,
     glyph_id: lib.GlyphId,
     coordinates: []const lib.NormalizedCoordinate,
     set_data: []const u8,

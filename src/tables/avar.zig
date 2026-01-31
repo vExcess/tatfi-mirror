@@ -33,7 +33,7 @@ pub fn parse(
 
 /// Maps a single coordinate. return true on success
 pub fn map_coordinate(
-    self: Table,
+    self: *const Table,
     coordinates: []lib.NormalizedCoordinate,
     coordinate_index: usize,
 ) !void {

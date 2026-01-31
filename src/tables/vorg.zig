@@ -35,7 +35,7 @@ pub fn parse(
 
 /// Returns glyph's Y origin.
 pub fn glyph_y_origin(
-    self: Table,
+    self: *const Table,
     glyph_id: lib.GlyphId,
 ) i16 {
     const func = struct {

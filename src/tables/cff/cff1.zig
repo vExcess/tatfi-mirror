@@ -166,7 +166,7 @@ fn parse_inner(
 /// Similar to `Face.glyph_index` but 8bit
 /// and uses CFF encoding and charset tables instead of TrueType `cmap`.
 pub fn glyph_index(
-    self: Table,
+    self: *const Table,
     code_point: u8,
 ) ?lib.GlyphId {
     if (self.kind == .cid) return null;
@@ -183,7 +183,7 @@ pub fn glyph_index(
 ///
 /// Technically similar to `Face.glyph_hor_advance`.
 pub fn glyph_width(
-    self: Table,
+    self: *const Table,
     glyph_id: lib.GlyphId,
 ) ?u16 {
     if (self.kind == .cid) return null;
@@ -192,7 +192,7 @@ pub fn glyph_width(
     const data = self.char_strings.get(glyph_id[0]) orelse return null;
     _, const maybe_width = parse_char_string(
         data,
-        &self,
+        self,
         glyph_id,
         true,
         lib.OutlineBuilder.dummy_builder,
@@ -207,7 +207,7 @@ pub fn glyph_width(
 
 /// Returns a glyph ID by a name.
 pub fn glyph_index_by_name(
-    self: Table,
+    self: *const Table,
     name: []const u8,
 ) ?lib.GlyphId {
     if (self.kind == .cid) return null;
@@ -229,7 +229,7 @@ pub fn glyph_index_by_name(
 
 /// Returns a glyph name.
 pub fn glyph_name(
-    self: Table,
+    self: *const Table,
     glyph_id: lib.GlyphId,
 ) ?[]const u8 {
     if (self.kind == .cid) return null;
@@ -244,12 +244,12 @@ pub fn glyph_name(
 
 /// Outlines a glyph.
 pub fn outline(
-    self: Table,
+    self: *const Table,
     glyph_id: lib.GlyphId,
     builder: lib.OutlineBuilder,
 ) cff.Error!lib.Rect {
     const data = self.char_strings.get(glyph_id[0]) orelse return error.NoGlyph;
-    const ret = try parse_char_string(data, &self, glyph_id, false, builder);
+    const ret = try parse_char_string(data, self, glyph_id, false, builder);
     return ret[0];
 }
 
@@ -257,7 +257,7 @@ pub fn outline(
 ///
 /// Returns `null` if this is not a CIDFont.
 pub fn glyph_cid(
-    self: Table,
+    self: *const Table,
     glyph_id: lib.GlyphId,
 ) ?u16 {
     if (self.kind == .sid) return null;

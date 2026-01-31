@@ -44,7 +44,7 @@ pub fn parse(
 
 /// Returns a list of anchor points for the specified glyph.
 pub fn points(
-    self: Table,
+    self: *const Table,
     glyph_id: lib.GlyphId,
 ) ?parser.LazyArray32(Point) {
     const offset = self.lookup.value(glyph_id) orelse return null;

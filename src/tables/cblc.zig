@@ -20,7 +20,7 @@ pub fn parse(
 }
 
 pub fn get(
-    self: Table,
+    self: *const Table,
     glyph_id: lib.GlyphId,
     pixels_per_em: u16,
 ) ?Location {
@@ -28,7 +28,7 @@ pub fn get(
 }
 
 fn get_impl(
-    self: Table,
+    self: *const Table,
     glyph_id: lib.GlyphId,
     pixels_per_em: u16,
 ) parser.Error!Location {

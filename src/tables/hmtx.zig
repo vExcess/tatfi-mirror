@@ -55,7 +55,7 @@ pub fn parse(
 
 /// Returns advance for a glyph.
 pub fn advance(
-    self: Table,
+    self: *const Table,
     glyph_id: lib.GlyphId,
 ) ?u16 {
     if (glyph_id[0] >= self.number_of_metrics) return null;
@@ -73,7 +73,7 @@ pub fn advance(
 
 /// Returns side bearing for a glyph.
 pub fn side_bearing(
-    self: Table,
+    self: *const Table,
     glyph_id: lib.GlyphId,
 ) ?i16 {
     if (self.metrics.get(glyph_id[0])) |metrics|

@@ -39,7 +39,7 @@ pub fn parse(
 
 /// Selects the best matching `Strike` based on `pixels_per_em`.
 pub fn best_strike(
-    self: Table,
+    self: *const Table,
     pixels_per_em: u16,
 ) ?Strike {
     var idx: u32 = 0;

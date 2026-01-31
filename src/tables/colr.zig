@@ -146,14 +146,14 @@ pub fn is_simple(self: Table) bool {
 
 /// Whether the table contains a definition for the given glyph.
 pub fn contains(
-    self: Table,
+    self: *const Table,
     glyph_id: lib.GlyphId,
 ) bool {
     return self.get_v1(glyph_id) != null or self.get_v0(glyph_id) != null;
 }
 
 fn get_v0(
-    self: Table,
+    self: *const Table,
     glyph_id: lib.GlyphId,
 ) ?BaseGlyphRecord {
     _, const ret = self.base_glyphs.binary_search_by(
@@ -164,7 +164,7 @@ fn get_v0(
 }
 
 fn get_v1(
-    self: Table,
+    self: *const Table,
     glyph_id: lib.GlyphId,
 ) ?BaseGlyphPaintRecord {
     _, const ret = self.base_glyph_paints.binary_search_by(
@@ -176,7 +176,7 @@ fn get_v1(
 
 /// Returns the clip box for a glyph.
 pub fn clip_box(
-    self: Table,
+    self: *const Table,
     glyph_id: lib.GlyphId,
     coords: if (cfg.variable_fonts) []const lib.NormalizedCoordinate else void,
 ) ?ClipBox {
@@ -189,7 +189,7 @@ pub fn clip_box(
 }
 
 fn variation_data(
-    self: Table,
+    self: *const Table,
 ) VariationData {
     return .{
         .variation_store = self.variable_fonts.item_variation_store,
@@ -202,7 +202,7 @@ fn variation_data(
 // be passed on and any kind of recursion can be prevented.
 /// Paints the color glyph.
 pub fn paint(
-    self: Table,
+    self: *const Table,
     glyph_id: lib.GlyphId,
     palette: u16,
     painter: Painter,
@@ -224,7 +224,7 @@ pub fn paint(
 }
 
 fn paint_impl(
-    self: Table,
+    self: *const Table,
     glyph_id: lib.GlyphId,
     palette: u16,
     painter: Painter,
@@ -253,7 +253,7 @@ fn paint_impl(
 }
 
 fn paint_v0(
-    self: Table,
+    self: *const Table,
     base: BaseGlyphRecord,
     palette: u16,
     painter: Painter,
@@ -281,7 +281,7 @@ fn paint_v0(
 }
 
 fn paint_v1(
-    self: Table,
+    self: *const Table,
     base: BaseGlyphPaintRecord,
     palette: u16,
     painter: Painter,
@@ -305,7 +305,7 @@ fn paint_v1(
 }
 
 fn parse_paint(
-    self: Table,
+    self: *const Table,
     offset: usize,
     palette: u16,
     painter: Painter,
@@ -336,7 +336,7 @@ fn parse_paint(
 }
 
 fn parse_paint_impl(
-    self: Table,
+    self: *const Table,
     offset: usize,
     palette: u16,
     painter: Painter,
@@ -1138,7 +1138,7 @@ fn parse_paint_impl(
 }
 
 fn parse_color_line(
-    self: Table,
+    self: *const Table,
     offset: usize,
     foreground_color: lib.RgbaColor,
 ) parser.Error!NonVarColorLine {
@@ -1155,7 +1155,7 @@ fn parse_color_line(
 }
 
 fn parse_var_color_line(
-    self: Table,
+    self: *const Table,
     offset: usize,
     foreground_color: lib.RgbaColor,
 ) parser.Error!VarColorLine {

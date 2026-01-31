@@ -62,7 +62,7 @@ pub fn parse(
 
 /// Returns an iterator over the collection of axis value tables.
 pub fn subtables(
-    self: Table,
+    self: *const Table,
 ) AxisValueSubtables {
     return .{
         .data = .new(self.data),
@@ -85,7 +85,7 @@ pub fn subtables(
 ///
 /// Note: Format 4 subtables are explicitly ignored in this function.
 pub fn subtable_for_axis(
-    self: Table,
+    self: *const Table,
     axis: lib.Tag,
     match_value: ?parser.Fixed,
 ) ?AxisValueSubtable {

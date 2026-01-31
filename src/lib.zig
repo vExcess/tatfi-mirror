@@ -1142,7 +1142,7 @@ pub const Face = struct {
             if (self.tables.variable_fonts.gvar) |gvar|
                 return gvar.outline(
                     gpa,
-                    self.tables.glyf orelse return null,
+                    &(self.tables.glyf orelse return null),
                     self.coords(),
                     glyph_id,
                     builder,

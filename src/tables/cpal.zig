@@ -39,7 +39,7 @@ pub fn parse(
 
 /// Returns the number of palettes.
 pub fn palettes(
-    self: Table,
+    self: *const Table,
 ) u16 {
     // Already checked to be nonzero during parsing.
     return self.color_indices.len();
@@ -47,7 +47,7 @@ pub fn palettes(
 
 /// Returns the color at the given index into the given palette.
 pub fn get(
-    self: Table,
+    self: *const Table,
     palette_index: u16,
     palette_entry: u16,
 ) ?lib.RgbaColor {

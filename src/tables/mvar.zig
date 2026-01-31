@@ -43,7 +43,7 @@ pub fn parse(
 
 /// Returns a metric offset by tag.
 pub fn metric_offset(
-    self: Table,
+    self: *const Table,
     tag: lib.Tag,
     coordinates: []const lib.NormalizedCoordinate,
 ) ?f32 {

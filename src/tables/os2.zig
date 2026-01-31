@@ -55,7 +55,7 @@ pub fn parse(
 }
 
 fn fs_selection(
-    self: Table,
+    self: *const Table,
 ) packed struct(u16) {
     italic: bool = false,
     _0: u4 = 0,
@@ -74,7 +74,7 @@ fn fs_selection(
 
 /// Returns style.
 pub fn style(
-    self: Table,
+    self: *const Table,
 ) Style {
     const flags = self.fs_selection();
     if (flags.italic)
@@ -89,14 +89,14 @@ pub fn style(
 ///
 /// Do not confuse with `Weight.Bold`.
 pub fn is_bold(
-    self: Table,
+    self: *const Table,
 ) bool {
     return self.fs_selection().bold;
 }
 
 /// Returns weight class.
 pub fn weight(
-    self: Table,
+    self: *const Table,
 ) Weight {
     const f: u16 = f: {
         var s = parser.Stream.new_at(self.data, WEIGHT_CLASS_OFFSET) catch break :f 0;
@@ -107,7 +107,7 @@ pub fn weight(
 
 /// Returns face width.
 pub fn width(
-    self: Table,
+    self: *const Table,
 ) Width {
     var s = parser.Stream.new_at(self.data, WIDTH_CLASS_OFFSET) catch return .normal;
     const n: u16 = s.read(u16) catch 0;
@@ -127,14 +127,14 @@ pub fn width(
 
 /// Checks if typographic metrics should be used.
 pub fn use_typographic_metrics(
-    self: Table,
+    self: *const Table,
 ) bool {
     return self.version >= 4 and self.fs_selection().use_typo_metrics;
 }
 
 /// Returns typographic ascender.
 pub fn typographic_ascender(
-    self: Table,
+    self: *const Table,
 ) i16 {
     var s = parser.Stream.new_at(self.data, TYPO_ASCENDER_OFFSET) catch return 0;
     return s.read(i16) catch 0;
@@ -142,7 +142,7 @@ pub fn typographic_ascender(
 
 /// Returns Windows ascender.
 pub fn windows_ascender(
-    self: Table,
+    self: *const Table,
 ) i16 {
     var s = parser.Stream.new_at(self.data, WIN_ASCENT) catch return 0;
     return s.read(i16) catch 0;
@@ -150,7 +150,7 @@ pub fn windows_ascender(
 
 /// Returns typographic descender.
 pub fn typographic_descender(
-    self: Table,
+    self: *const Table,
 ) i16 {
     var s = parser.Stream.new_at(self.data, TYPO_DESCENDER_OFFSET) catch return 0;
     return s.read(i16) catch 0;
@@ -158,7 +158,7 @@ pub fn typographic_descender(
 
 /// Returns Windows descender
 pub fn windows_descender(
-    self: Table,
+    self: *const Table,
 ) i16 {
     var s = parser.Stream.new_at(self.data, WIN_DESCENT) catch return 0;
     return -(s.read(i16) catch 0);
@@ -166,7 +166,7 @@ pub fn windows_descender(
 
 /// Returns typographic line gap.
 pub fn typographic_line_gap(
-    self: Table,
+    self: *const Table,
 ) i16 {
     var s = parser.Stream.new_at(self.data, TYPO_LINE_GAP_OFFSET) catch return 0;
     return s.read(i16) catch 0;
@@ -176,7 +176,7 @@ pub fn typographic_line_gap(
 ///
 /// Returns `null` version is < 2.
 pub fn x_height(
-    self: Table,
+    self: *const Table,
 ) ?i16 {
     if (self.version < 2) {
         return null;
@@ -190,7 +190,7 @@ pub fn x_height(
 ///
 /// Returns `null` version is < 2.
 pub fn capital_height(
-    self: Table,
+    self: *const Table,
 ) ?i16 {
     if (self.version < 2) {
         return null;
@@ -202,7 +202,7 @@ pub fn capital_height(
 
 /// Returns strikeout metrics.
 pub fn strikeout_metrics(
-    self: Table,
+    self: *const Table,
 ) lib.LineMetrics {
     var s = parser.Stream.new(self.data);
 
@@ -214,7 +214,7 @@ pub fn strikeout_metrics(
 
 /// Returns subscript metrics.
 pub fn subscript_metrics(
-    self: Table,
+    self: *const Table,
 ) ScriptMetrics {
     var s = parser.Stream.new_at(self.data, Y_SUBSCRIPT_X_SIZE_OFFSET) catch return .{};
     return .{
@@ -227,7 +227,7 @@ pub fn subscript_metrics(
 
 /// Returns superscript metrics.
 pub fn superscript_metrics(
-    self: Table,
+    self: *const Table,
 ) ScriptMetrics {
     var s = parser.Stream.new_at(self.data, Y_SUPERSCRIPT_X_SIZE_OFFSET) catch return .{};
     return .{
@@ -242,7 +242,7 @@ pub fn superscript_metrics(
 ///
 /// Returns `null` in case of a malformed value.
 pub fn permissions(
-    self: Table,
+    self: *const Table,
 ) ?Permissions {
     var s = parser.Stream.new(self.data);
     const n = s.read_at(u16, TYPE_OFFSET) catch 0;
@@ -270,7 +270,7 @@ pub fn permissions(
 
 /// Checks if the face allows embedding a subset, further restricted by `Self.permissions`.
 pub fn is_subsetting_allowed(
-    self: Table,
+    self: *const Table,
 ) bool {
     // Flag introduced in version 2
     return (self.version <= 1) or b: {
@@ -287,7 +287,7 @@ pub fn is_subsetting_allowed(
 ///
 /// If the font contains no bitmaps and this flag is not set, it implies no embedding is allowed.
 pub fn is_outline_embedding_allowed(
-    self: Table,
+    self: *const Table,
 ) bool {
     // Flag introduced in version 2
     return (self.version <= 1) or b: {
@@ -300,7 +300,7 @@ pub fn is_outline_embedding_allowed(
 
 /// Returns Unicode ranges.
 pub fn unicode_ranges(
-    self: Table,
+    self: *const Table,
 ) UnicodeRanges {
     var s = parser.Stream.new_at(self.data, UNICODE_RANGES_OFFSET) catch
         return .{};

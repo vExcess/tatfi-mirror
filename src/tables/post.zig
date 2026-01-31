@@ -70,7 +70,7 @@ pub fn parse(
 
 /// Returns a glyph ID by a name.
 pub fn glyph_index_by_name(
-    self: Table,
+    self: *const Table,
     name: []const u8,
 ) ?lib.GlyphId {
     const id = id: for (MACINTOSH_NAMES, 0..) |n, index| {
@@ -106,7 +106,7 @@ pub fn glyph_index_by_name(
 ///
 /// Default/predefined names are not included. Just the one in the font file.
 pub fn names(
-    self: Table,
+    self: *const Table,
 ) Names {
     return .{
         .data = self.names_data,
@@ -116,7 +116,7 @@ pub fn names(
 
 /// Returns a glyph name by ID.
 pub fn glyph_name(
-    self: Table,
+    self: *const Table,
     glyph_id: lib.GlyphId,
 ) ?[]const u8 {
     const index = self.glyph_indices.get(glyph_id[0]) orelse return null;

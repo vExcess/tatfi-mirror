@@ -82,7 +82,7 @@ pub fn parse(
 /// Returns `null` when *Glyph Class Definition Table* is not set
 /// or glyph class is not set or invalid.
 pub fn glyph_class(
-    self: Table,
+    self: *const Table,
     glyph_id: lib.GlyphId,
 ) ?GlyphClass {
     const classes = self.glyph_classes orelse return null;
@@ -101,7 +101,7 @@ pub fn glyph_class(
 ///
 /// All glyphs not assigned to a class fall into Class 0.
 pub fn glyph_mark_attachment_class(
-    self: Table,
+    self: *const Table,
     glyph_id: lib.GlyphId,
 ) ggg.Class {
     const def = self.mark_attach_classes orelse return 0;
@@ -115,7 +115,7 @@ pub fn glyph_mark_attachment_class(
 /// `set_index` allows checking a specific glyph coverage set.
 /// Otherwise all sets will be checked.
 pub fn is_mark_glyph(
-    self: Table,
+    self: *const Table,
     glyph_id: lib.GlyphId,
     set_index: ?u16,
 ) bool {
@@ -126,7 +126,7 @@ pub fn is_mark_glyph(
 /// [Item Variation Store Table](
 /// https://docs.microsoft.com/en-us/typography/opentype/spec/gdef#item-variation-store-table).
 pub fn glyph_variation_delta(
-    self: Table,
+    self: *const Table,
     outer_index: u16,
     inner_index: u16,
     coordinates: []const lib.NormalizedCoordinate,
@@ -145,7 +145,7 @@ pub const GlyphClass = enum(u3) {
 };
 
 fn is_mark_glyph_impl(
-    self: Table,
+    self: *const Table,
     glyph_id: lib.GlyphId,
     set_index_maybe: ?u16,
 ) !bool {
