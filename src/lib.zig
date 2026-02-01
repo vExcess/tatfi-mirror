@@ -1715,6 +1715,14 @@ pub const Tag = struct {
         return b;
     }
 
+    pub fn format(
+        self: @This(),
+        writer: *std.Io.Writer,
+    ) std.Io.Writer.Error!void {
+        const bytes = self.to_bytes();
+        try writer.print("Tag{{ \"{s}\" }}", .{&bytes});
+    }
+
     /// Creates a `Tag` from bytes.
     ///
     /// In case of empty data will return `Tag` set to 0.
