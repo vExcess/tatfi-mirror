@@ -5,7 +5,8 @@ const gpos = @import("../tables/gpos.zig");
 const gsub = @import("../tables/gsub.zig");
 
 /// used as a generic parameter for Lookup Subtables
-pub const LookupSubtable = enum { gpos, gsub };
+// order is important
+pub const LookupSubtable = enum(u1) { gsub = 0, gpos = 1 };
 
 /// A list of `Lookup` values.
 pub fn LookupList(subtable: LookupSubtable) type {

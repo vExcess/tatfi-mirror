@@ -24,6 +24,7 @@ pub const ContextLookup = @import("ggg/context.zig").ContextLookup;
 pub const ChainedContextLookup = @import("ggg/chained_context.zig").ChainedContextLookup;
 
 pub const Lookup = @import("ggg/lookup.zig").Lookup;
+pub const LookupKind = @import("ggg/lookup.zig").LookupSubtable;
 pub const parse_extension_lookup = @import("ggg/lookup.zig").parse_extension_lookup;
 
 /// A [Class Definition Table](
