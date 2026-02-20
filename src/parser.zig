@@ -179,7 +179,7 @@ pub fn LazyArray(I: type, T: type) type {
             var iter = self.iterator();
             var idx: I = 0;
             while (iter.next()) |item| : (idx += 1) {
-            	if (idx > 0) try writer.writeByte(',');
+                if (idx > 0) try writer.writeByte(',');
                 try writer.print(" {any}", .{item});
             }
             try writer.writeAll(" ]");

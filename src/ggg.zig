@@ -20,6 +20,8 @@ const std = @import("std");
 const lib = @import("lib.zig");
 const parser = @import("parser.zig");
 
+pub const SequenceRule = @import("ggg/context.zig").SequenceRule;
+pub const ChainedSequenceRule = @import("ggg/chained_context.zig").ChainedSequenceRule;
 pub const ContextLookup = @import("ggg/context.zig").ContextLookup;
 pub const ChainedContextLookup = @import("ggg/chained_context.zig").ChainedContextLookup;
 

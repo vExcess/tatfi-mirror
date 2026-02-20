@@ -198,7 +198,7 @@ pub const LigatureSubstitution = struct {
     pub const LigatureSet = parser.LazyOffsetArray16(Ligature);
 
     /// Glyph components for one ligature.
-    const Ligature = struct {
+    pub const Ligature = struct {
         /// Ligature to substitute.
         glyph: lib.GlyphId,
         /// Glyph components for one ligature.

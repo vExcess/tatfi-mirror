@@ -4,8 +4,13 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+### Fixed
+
+- Expose `SequenceRule` and `ChainedSequenceRule` and added missing `parse` metods that were not checked before. Damn you lazy compilation
+
 ### Added 
 
+- Expose `Ligature` 
 - Expose the generic paramter of `LookupTable`s.
 
 ## 0.1.1 - 2026-02-02

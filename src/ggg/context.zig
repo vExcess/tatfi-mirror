@@ -94,6 +94,22 @@ pub const SequenceRuleSet = parser.LazyOffsetArray16(SequenceRule);
 pub const SequenceRule = struct {
     input: parser.LazyArray16(u16),
     lookups: parser.LazyArray16(SequenceLookupRecord),
+
+    pub fn parse(
+        data: []const u8,
+    ) parser.Error!SequenceRule {
+        var s = parser.Stream.new(data);
+        const input_count = try s.read(u16);
+        const lookup_count = try s.read(u16);
+
+        const input = try s.read_array(u16, try std.math.sub(u16, input_count, 1));
+        const lookups = try s.read_array(SequenceLookupRecord, lookup_count);
+
+        return .{
+            .input = input,
+            .lookups = lookups,
+        };
+    }
 };
 
 /// A sequence rule record.

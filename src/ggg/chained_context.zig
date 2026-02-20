@@ -127,4 +127,24 @@ pub const ChainedSequenceRule = struct {
     /// Contains either glyph IDs or glyph Classes.
     lookahead: parser.LazyArray16(u16),
     lookups: parser.LazyArray16(ctx.SequenceLookupRecord),
+
+    pub fn parse(
+        data: []const u8,
+    ) parser.Error!ChainedSequenceRule {
+        var s = parser.Stream.new(data);
+        const backtrack_count = try s.read(u16);
+        const backtrack = try s.read_array(u16, backtrack_count);
+        const input_count = try s.read(u16);
+        const input = try s.read_array(u16, try std.math.sub(u16, input_count, 1));
+        const lookahead_count = try s.read(u16);
+        const lookahead = try s.read_array(u16, lookahead_count);
+        const lookup_count = try s.read(u16);
+        const lookups = try s.read_array(ctx.SequenceLookupRecord, lookup_count);
+        return .{
+            .backtrack = backtrack,
+            .input = input,
+            .lookahead = lookahead,
+            .lookups = lookups,
+        };
+    }
 };
