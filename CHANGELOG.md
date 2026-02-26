@@ -6,10 +6,11 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
-- Expose `SequenceRule` and `ChainedSequenceRule` and added missing `parse` metods that were not checked before. Damn you lazy compilation
+- Expose `SequenceRule` and `ChainedSequenceRule` and added missing `parse` methods that were not checked before. Damn you lazy compilation
 
 ### Added 
 
+- `find_index` public method for `FeatureVariations`.
 - Expose `Ligature` 
 - Expose the generic paramter of `LookupTable`s.
 
