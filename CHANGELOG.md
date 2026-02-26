@@ -10,6 +10,8 @@ All notable changes to this project will be documented in this file.
 
 ### Added 
 
+- Expose `Feature`
+- `find_substitute` public method for `FeatureVariations`.
 - `find_index` public method for `FeatureVariations`.
 - Expose `Ligature` 
 - Expose the generic paramter of `LookupTable`s.

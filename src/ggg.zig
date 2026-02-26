@@ -7,6 +7,7 @@
 
 // internal reëxports
 const layout_table = @import("ggg/layout_table.zig");
+pub const Feature = layout_table.Feature;
 pub const LayoutTable = layout_table.LayoutTable;
 pub const ScriptIndex = layout_table.ScriptIndex;
 pub const LanguageIndex = layout_table.LanguageIndex;

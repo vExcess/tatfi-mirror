@@ -224,7 +224,7 @@ pub const Feature = struct {
     tag: lib.Tag,
     lookup_indices: parser.LazyArray16(LookupIndex),
 
-    fn parse(
+    pub fn parse(
         tag: lib.Tag,
         data: []const u8,
     ) parser.Error!Feature {
