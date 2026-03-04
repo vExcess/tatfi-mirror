@@ -461,7 +461,7 @@ pub fn ExtendedStateTable(T: type) type {
         pub fn entry(
             self: Self,
             state: u16,
-            class_needle: u8,
+            class_needle: u16,
         ) ?GenericStateEntry(T) {
             var predef_class = class_needle;
             if (predef_class >= self.number_of_classes)

@@ -7,6 +7,7 @@ All notable changes to this project will be documented in this file.
 ### Fixed
 
 - Expose `SequenceRule` and `ChainedSequenceRule` and added missing `parse` methods that were not checked before. Damn you lazy compilation
+- Adjust `class_needle` paramter in `aat.ExtendedStateTable` to `u16` instead of `u8`. It doesn't really matter but it aligns better with `ttf-parser` API.
 
 ### Added 
 
