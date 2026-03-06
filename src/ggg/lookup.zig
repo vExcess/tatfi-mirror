@@ -54,13 +54,13 @@ pub fn Lookup(subtable: LookupSubtable) type {
 
 /// Lookup table flags.
 pub const LookupFlags = packed struct(u16) {
-    right_to_left: bool,
-    ignore_base_glyphs: bool,
-    ignore_ligatures: bool,
-    ignore_marks: bool,
-    use_mark_filtering_set: bool,
+    right_to_left: bool = false,
+    ignore_base_glyphs: bool = false,
+    ignore_ligatures: bool = false,
+    ignore_marks: bool = false,
+    use_mark_filtering_set: bool = false,
     _0: u3 = 0,
-    mark_attachment_type: u8,
+    mark_attachment_type: u8 = 0,
 
     pub fn ignore_flags(self: LookupFlags) bool {
         //  self & 0x000E != 0

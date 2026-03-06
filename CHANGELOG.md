@@ -11,6 +11,7 @@ All notable changes to this project will be documented in this file.
 
 ### Added 
 
+- Expose `LookupFlags` and added default init.
 - Expose `Feature`
 - `find_substitute` public method for `FeatureVariations`.
 - `find_index` public method for `FeatureVariations`.
