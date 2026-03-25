@@ -56,8 +56,8 @@ pub fn points(
 
 /// An anchor point.
 pub const Point = struct {
-    x: i16,
-    y: i16,
+    x: i16 = 0,
+    y: i16 = 0,
 
     const Self = @This();
     pub const FromData = struct {
