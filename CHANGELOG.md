@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+## 0.1.2 - 2026-03-27
+
+Last update before Zig 0.16 
+
 ### Fixed
 
 - Expose `SequenceRule` and `ChainedSequenceRule` and added missing `parse` methods that were not checked before. Damn you lazy compilation
@@ -11,6 +15,8 @@ All notable changes to this project will be documented in this file.
 
 ### Added 
 
+- Added default value for `ankr.Point`
+- Added predefined_state in `apple_layout` 
 - Expose `LookupFlags` and added default init.
 - Expose `Feature`
 - `find_substitute` public method for `FeatureVariations`.
