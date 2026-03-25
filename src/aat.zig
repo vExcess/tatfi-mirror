@@ -7,6 +7,11 @@ const lib = @import("lib.zig");
 const parser = @import("parser.zig");
 const utils = @import("utils.zig");
 
+/// Predefined states.
+pub const predefined_state = struct {
+    pub const START_OF_TEXT: u16 = 0;
+};
+
 /// Predefined classes.
 ///
 /// Search for _Class Code_ in [Apple Advanced Typography Font Tables](
