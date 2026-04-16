@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+## 0.1.3 - 2026-04-16
+
+Turns out 0.16.0 is just a one line change.
+
 ## 0.1.2 - 2026-03-27
 
 Last update before Zig 0.16 

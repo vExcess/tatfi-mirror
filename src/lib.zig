@@ -2202,5 +2202,5 @@ pub const RgbaColor = struct {
 
 test {
     _ = @import("tests/main.zig");
-    _ = std.testing.refAllDeclsRecursive(@This());
+    _ = std.testing.refAllDecls(@This());
 }
