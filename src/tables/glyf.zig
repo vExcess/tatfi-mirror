@@ -572,7 +572,7 @@ pub const Builder = struct {
         };
 
         if (self.first_on_curve) |p|
-            if (self.first_on_curve) |offcurve1|
+            if (self.first_off_curve) |offcurve1|
                 self.quad_to(offcurve1.x, offcurve1.y, p.x, p.y)
             else if (self.last_off_curve) |offcurve2|
                 self.quad_to(offcurve2.x, offcurve2.y, p.x, p.y)
