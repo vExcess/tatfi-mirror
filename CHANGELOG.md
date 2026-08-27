@@ -12,6 +12,7 @@ All notable changes to this project will be documented in this file.
 - Ignore the deprecated dotsection operator in CFF charstrings: https://github.com/harfbuzz/ttf-parser/pull/228
 - Fixed off by one error in `set_variation`. Now you can use up to 64 variation axis in your fonts instead of 63.
 - Fixed typo in `head` table `units_per_em` boundary.
+- Fixed bug in `finish_contour` in `glyf` table. Thanks to Michael Pollind for the patch.
 
 ## 0.1.3 - 2026-04-16
 
