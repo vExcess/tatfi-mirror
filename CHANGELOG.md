@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+## 0.1.4 - 2026-10-02
+
 ### Misc
 
 - Upgraded to Zig 0.17.0.
