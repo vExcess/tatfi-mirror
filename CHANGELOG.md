@@ -8,7 +8,7 @@ All notable changes to this project will be documented in this file.
 
 ### Misc
 
-- Upgraded to Zig 0.17.0.
+- Upgraded to Zig 0.17.0, using https://github.com/flying-swallow/tatfi/commit/9b0a84353a669595c3bc37d7b998dc185bb7ea44 as guide. Thanks again to Michael Pollind.
 
 ### Fixed
 
