@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+### Misc
+
+- Upgraded to Zig 0.17.0.
+
 ### Fixed
 
 - Fixed `VariationAxis.hidden` flag location. See `ttf-parser` PR: https://github.com/harfbuzz/ttf-parser/pull/216

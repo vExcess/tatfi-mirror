@@ -81,8 +81,9 @@ pub fn phantom_points(
 ) ?lib.PhantomPoints {
     const outline_points = glyf_table.outline_points(glyph_id);
 
-    var fba_state = std.heap.stackFallback(VariationTuples.STACK_ALLOCATION_SIZE, gpa);
-    const fba = fba_state.get();
+    var stack_buf: [cfg.gvar_max_stack_tuples_len]VariationTuple = undefined;
+    var fba_state = std.heap.BufferFirstAllocator.init(@ptrCast(&stack_buf), gpa);
+    const fba = fba_state.allocator();
 
     var tuples = VariationTuples.init(fba) catch return null;
     defer tuples.deinit();
@@ -182,8 +183,6 @@ const VariationTuples = struct {
     allocator: std.mem.Allocator,
     /// the ArrayList where the items are
     list: std.ArrayList(VariationTuple),
-
-    const STACK_ALLOCATION_SIZE = cfg.gvar_max_stack_tuples_len * @sizeOf(VariationTuple);
 
     /// input allocator be a stack fallback allocator with size at least
     /// `cfg.gvar_max_stack_tuples_len * @sizeOf(VariationTuple)`
@@ -1438,8 +1437,9 @@ fn outline_var_impl(
     // Instead, we have to manually calculate outline's bbox.
     s.advance(8);
 
-    var fba_state = std.heap.stackFallback(VariationTuples.STACK_ALLOCATION_SIZE, gpa);
-    const fba = fba_state.get();
+    var stack_buf: [cfg.gvar_max_stack_tuples_len]VariationTuple = undefined;
+    var fba_state = std.heap.BufferFirstAllocator.init(@ptrCast(&stack_buf), gpa);
+    const fba = fba_state.allocator();
 
     var tuples = VariationTuples.init(fba) catch return error.ParseFail;
     defer tuples.deinit();

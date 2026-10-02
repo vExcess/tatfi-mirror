@@ -52,7 +52,7 @@ pub fn LazyArray(I: type, T: type) type {
                 inline else => |F, tag| {
                     const i = std.mem.readInt(F, bytes, .big);
                     return switch (tag) {
-                        .@"enum" => @enumFromInt(i),
+                        .@"enum" => @fromBackingInt(@intCast(i)),
                         .wrapper => .{i},
                         .fancy_wrapper => .{ .inner = i },
                         .flags => @bitCast(i),
@@ -366,7 +366,7 @@ pub const Stream = struct {
             inline else => |F, tag| {
                 const i = std.mem.readInt(F, bytes[0..size], .big);
                 return switch (tag) {
-                    .@"enum" => @enumFromInt(i),
+                    .@"enum" => @fromBackingInt(@intCast(i)),
                     .wrapper => .{i},
                     .fancy_wrapper => .{ .inner = i },
                     .flags => @bitCast(i),
@@ -412,7 +412,7 @@ pub const Stream = struct {
         len: usize,
     ) Error![]const u8 {
         // [ARS] simulate Rust behaviour
-        const end = if (@import("builtin").mode == .Debug) e: {
+        const end = if (@import("builtin").mode == .debug) e: {
             const end = self.offset + len;
 
             // [RazrFalcon]
@@ -549,7 +549,7 @@ pub fn parse_struct_from_data(
     comptime {
         // Check whether T.FromData.SIZE is correct
         var sum = 0;
-        for (@typeInfo(T).@"struct".fields) |f| sum += size_of(f.type);
+        for (@typeInfo(T).@"struct".field_types) |F| sum += size_of(F);
         std.debug.assert(T.FromData.SIZE == sum);
     }
 
@@ -557,10 +557,11 @@ pub fn parse_struct_from_data(
     var ret: T = undefined;
 
     // hope it is order of declaration
-    inline for (@typeInfo(T).@"struct".fields) |f| switch (@typeInfo(f.type)) {
+    const info = @typeInfo(T).@"struct";
+    inline for (info.field_names, info.field_types) |name, F| switch (@typeInfo(F)) {
         .void => {},
-        .optional => |o| @field(ret, f.name) = try s.read_optional(o.child),
-        else => @field(ret, f.name) = try s.read(f.type),
+        .optional => |o| @field(ret, name) = try s.read_optional(o.child),
+        else => @field(ret, name) = try s.read(F),
     };
 
     return ret;
@@ -601,8 +602,8 @@ inline fn has_trait(
                 return .{ .flags = F };
             }
 
-            if (s.fields.len == 1) {
-                const F = s.fields[0].type;
+            if (s.field_types.len == 1) {
+                const F = s.field_types[0];
                 assert_divisible_by_8(F, T);
 
                 if (s.is_tuple)
@@ -615,7 +616,7 @@ inline fn has_trait(
         .@"enum" => |e| {
             if (@hasDecl(T, trait)) return .impl;
 
-            if (!e.is_exhaustive) {
+            if (e.mode == .nonexhaustive) {
                 assert_divisible_by_8(e.tag_type, T);
                 return .{ .@"enum" = e.tag_type };
             }

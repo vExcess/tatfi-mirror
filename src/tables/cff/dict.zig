@@ -42,7 +42,7 @@ pub fn parse_next(
     self: *DictionaryParser,
     T: type,
 ) ?T {
-    std.debug.assert(!@typeInfo(T).@"enum".is_exhaustive);
+    std.debug.assert(@typeInfo(T).@"enum".mode == .nonexhaustive);
     var s = parser.Stream.new_at(self.data, self.offset) catch return null;
     self.operands_offset = self.offset;
 
@@ -60,7 +60,7 @@ pub fn parse_next(
             }
 
             self.offset = s.offset;
-            return @enumFromInt(operator);
+            return @fromBackingInt(@intCast(operator));
         } else skip_number(b, &s) catch return null;
     }
 
