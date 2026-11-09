@@ -445,11 +445,13 @@ pub const PairSet = struct {
         flags: struct { ValueFormatFlags, ValueFormatFlags },
     ) parser.Error!PairSet {
         var s = parser.Stream.new(data);
-        const count = try s.read(u16);
+        const count = try s.read_at(u16);
         // Max len is 34, so u8 is just enough.
         const record_len: u8 = @truncate(parser.size_of(lib.GlyphId) + flags[0].size() + flags[1].size());
         return .{
-            .data = try s.read_bytes(count * @as(usize, record_len)),
+            // self.data should include the count as it is where `Device` calculates its offset from
+            // [ARS] https://github.com/harfbuzz/ttf-parser/issues/245
+            .data = try s.read_bytes(@sizeOf(u16) + count * @as(usize, record_len)), // includes
             .flags = flags,
             .record_len = record_len,
         };
@@ -459,6 +461,9 @@ pub const PairSet = struct {
         self: PairSet,
         second: lib.GlyphId,
     ) ?[]const u8 {
+        // [ARS] https://github.com/harfbuzz/ttf-parser/issues/245
+        self.data = self.data[@sizeOf(u16)..];
+
         // Based on Rust std implementation.
 
         var size = self.data.len / self.record_len;
@@ -513,7 +518,7 @@ pub const PairSet = struct {
         s.skip(lib.GlyphId);
         return .{
             try .parse(self.data, &s, self.flags[0]),
-            try .parse(self.data, &s, self.flags[0]),
+            try .parse(self.data, &s, self.flags[1]),
         };
     }
 };

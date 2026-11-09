@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+### Fixed
+
+- In `gpos.zig`, fixed `Device` in `ValueRecord` parsing inside `PairSet` starting from the wrong offset. See `ttf-parser` issue: https://github.com/harfbuzz/ttf-parser/issues/245 (Understanding what they were getting at was really difficult.)
+- Fixed a nearby but unrelated bug where both `ValueRecord`s were paraed using the first flags.
+
 ## 0.1.4 - 2026-10-02
 
 ### Misc
