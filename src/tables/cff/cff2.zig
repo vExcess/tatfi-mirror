@@ -265,6 +265,9 @@ fn parse_char_string(
     };
     try parse_char_string_recursive(&ctx, data, 0, &cs_parser);
 
+    // implied behaviour by CFF2 stanrdard
+    if (!cs_parser.is_first_move_to) cs_parser.builder.close();
+
     const bbox = cs_parser.builder.bbox;
 
     // Check that bbox was changed.
