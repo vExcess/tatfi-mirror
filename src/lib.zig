@@ -969,30 +969,19 @@ pub const Face = struct {
         glyph_id: GlyphId,
     ) ?u16 {
         const t = self.tables.hmtx orelse return null;
-        const advance_maybe = t.advance(glyph_id);
+        var advance: f32 = @floatFromInt(t.advance(glyph_id) orelse return null);
 
         if (cfg.variable_fonts) if (self.is_variable()) {
-            var advance = advance_maybe orelse return null;
 
             // Ignore variation offset when `hvar` is not set.
             if (self.tables.variable_fonts.hvar) |hvar| {
-                if (hvar.advance_offset(glyph_id, self.coords())) |offset| {
-                    // [ARS] bit of a hack re the TDOO in ttf_parser
-                    const offset_rounded = utils.f32_to_u16(@round(offset)) orelse
-                        return null;
-                    advance += offset_rounded;
-                }
-            } else if (self.glyph_phantom_points(gpa, glyph_id)) |points| {
-                // [ARS] bit of a hack re the TDOO in ttf_parser
-                const points_rounded = utils.f32_to_u16(@round(points.right.x)) orelse
-                    return null;
-                advance += points_rounded;
-            }
-
-            return advance;
+                if (hvar.advance_offset(glyph_id, self.coords())) |offset|
+                    advance += @round(offset);
+            } else if (self.glyph_phantom_points(gpa, glyph_id)) |points|
+                advance += @round(points.right.x);
         };
 
-        return advance_maybe;
+        return utils.f32_to_u16(advance);
     }
 
     /// Returns glyph's vertical advance.
@@ -1006,25 +995,18 @@ pub const Face = struct {
         glyph_id: GlyphId,
     ) ?u16 {
         const t = self.tables.vmtx orelse return null;
-        var advance = t.advance(glyph_id) orelse return null;
+        var advance: f32 = @floatFromInt(t.advance(glyph_id) orelse return null);
 
         if (cfg.variable_fonts) if (self.is_variable()) {
             // Ignore variation offset when `vvar` is not set.
             if (self.tables.variable_fonts.vvar) |vvar| {
-                if (vvar.advance_offset(glyph_id, self.coords())) |offset| {
-                    // [ARS] bit of a hack re the TDOO in ttf_parser
-                    const offset_rounded = utils.f32_to_u16(@round(offset)) orelse return null;
-                    advance += offset_rounded;
-                }
-            } else if (self.glyph_phantom_points(gpa, glyph_id)) |points| {
-                // [ARS] bit of a hack re the TDOO in ttf_parser
-                const points_rounded = utils.f32_to_u16(@round(points.bottom.x)) orelse
-                    return null;
-                advance += points_rounded;
-            }
+                if (vvar.advance_offset(glyph_id, self.coords())) |offset|
+                    advance += @round(offset);
+            } else if (self.glyph_phantom_points(gpa, glyph_id)) |points|
+                advance += @round(points.bottom.x);
         };
 
-        return advance;
+        return utils.f32_to_u16(advance);
     }
 
     /// Returns glyph's horizontal side bearing.
@@ -1035,19 +1017,15 @@ pub const Face = struct {
         glyph_id: GlyphId,
     ) ?i16 {
         const t = self.tables.hmtx orelse return null;
-        var bearing = t.side_bearing(glyph_id) orelse return null;
+        var bearing: f32 = @floatFromInt(t.side_bearing(glyph_id) orelse return null);
 
-        if (cfg.variable_fonts) if (self.is_variable()) {
-            if (self.tables.variable_fonts.hvar) |hvar| if (hvar
-                .left_side_bearing_offset(glyph_id, self.coords())) |offset|
-            {
-                // [ARS] bit of a hack re the TDOO in ttf_parser
-                const offset_rounded = utils.f32_to_i16(@round(offset)) orelse return null;
-                bearing += offset_rounded;
-            };
-        };
+        if (cfg.variable_fonts) if (self.is_variable())
+            if (self.tables.variable_fonts.hvar) |hvar|
+                if (hvar.left_side_bearing_offset(glyph_id, self.coords())) |offset| {
+                    bearing += @round(offset);
+                };
 
-        return bearing;
+        return utils.f32_to_i16(bearing);
     }
 
     /// Returns glyph's vertical side bearing.
@@ -1058,19 +1036,15 @@ pub const Face = struct {
         glyph_id: GlyphId,
     ) ?i16 {
         const t = self.tables.vmtx orelse return null;
-        var bearing = t.side_bearing(glyph_id) orelse return null;
+        var bearing: f32 = @floatFromInt(t.side_bearing(glyph_id) orelse return null);
 
-        if (cfg.variable_fonts) if (self.is_variable()) {
-            if (self.tables.variable_fonts.vvar) |vvar| if (vvar
-                .top_side_bearing_offset(glyph_id, self.coords())) |offset|
-            {
-                // [ARS] bit of a hack re the TDOO in ttf_parser
-                const offset_rounded = utils.f32_to_i16(@round(offset)) orelse return null;
-                bearing += offset_rounded;
-            };
-        };
+        if (cfg.variable_fonts) if (self.is_variable())
+            if (self.tables.variable_fonts.vvar) |vvar|
+                if (vvar.top_side_bearing_offset(glyph_id, self.coords())) |offset| {
+                    bearing += @round(offset);
+                };
 
-        return bearing;
+        return utils.f32_to_i16(bearing);
     }
 
     /// Returns glyph's vertical origin according to
@@ -1082,19 +1056,15 @@ pub const Face = struct {
         glyph_id: GlyphId,
     ) ?i16 {
         const t = self.tables.vorg orelse return null;
-        var origin = t.glyph_y_origin(glyph_id);
+        var origin: f32 = @floatFromInt(t.glyph_y_origin(glyph_id));
 
-        if (cfg.variable_fonts) if (self.is_variable()) {
-            if (self.tables.variable_fonts.vvar) |vvar| if (vvar
-                .vertical_origin_offset(glyph_id, self.coords())) |offset|
-            {
-                // [ARS] bit of a hack re the TDOO in ttf_parser
-                const offset_rounded = utils.f32_to_i16(@round(offset)) orelse return null;
-                origin += offset_rounded;
-            };
-        };
+        if (cfg.variable_fonts) if (self.is_variable())
+            if (self.tables.variable_fonts.vvar) |vvar|
+                if (vvar.vertical_origin_offset(glyph_id, self.coords())) |offset| {
+                    origin += @round(offset);
+                };
 
-        return origin;
+        return utils.f32_to_i16(origin);
     }
 
     /// Returns glyph's name.

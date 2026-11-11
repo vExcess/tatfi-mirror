@@ -6,6 +6,7 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- Fixed a very silly bug in `Face` methods that get glyph metrics returning null if the offset given by variable fonts was negative.
 - In `gpos.zig`, fixed `Device` in `ValueRecord` parsing inside `PairSet` starting from the wrong offset. See `ttf-parser` issue: https://github.com/harfbuzz/ttf-parser/issues/245 (Understanding what they were getting at was really difficult.)
 - Fixed a nearby but unrelated bug where both `ValueRecord`s were paraed using the first flags.
 - **Breaking**: Close paths left open by CFF2. Tests from the PR are ignored because they were vibe coded anyway. https://github.com/harfbuzz/ttf-parser/pull/244
