@@ -236,7 +236,17 @@ pub fn main() !void {
             const subtables = lookup.subtables; // also an iterator
             var sb_iter = subtables.iterator();
             const subtable = sb_iter.next().?;
-            _ = subtable.coverage();
+
+            switch (subtable.pair) {
+                .format1 => |pair| {
+                    const coverage = pair.coverage;
+                    const sets = pair.sets;
+
+                    _ = sets.get(coverage.get(.{4}).?).?.get(.{5}).?;
+                },
+                else => {},
+            }
+
             // api goes deeper when you go into the variants.
         }
     }

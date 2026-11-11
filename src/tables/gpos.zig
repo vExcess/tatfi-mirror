@@ -437,6 +437,7 @@ pub const PairSets = struct {
 /// A `ValueRecord` pairs set used by `PairAdjustment`.
 pub const PairSet = struct {
     data: []const u8,
+    count: u16,
     flags: struct { ValueFormatFlags, ValueFormatFlags },
     record_len: u8,
 
@@ -445,48 +446,31 @@ pub const PairSet = struct {
         flags: struct { ValueFormatFlags, ValueFormatFlags },
     ) parser.Error!PairSet {
         var s = parser.Stream.new(data);
-        const count = try s.read_at(u16);
+        const count = try s.read(u16);
         // Max len is 34, so u8 is just enough.
         const record_len: u8 = @truncate(parser.size_of(lib.GlyphId) + flags[0].size() + flags[1].size());
         return .{
             // self.data should include the count as it is where `Device` calculates its offset from
             // [ARS] https://github.com/harfbuzz/ttf-parser/issues/245
-            .data = try s.read_bytes(@sizeOf(u16) + count * @as(usize, record_len)), // includes
+            .data = data,
+            .count = count,
             .flags = flags,
             .record_len = record_len,
         };
     }
 
-    fn binary_search(
+    pub fn get(
         self: PairSet,
         second: lib.GlyphId,
-    ) ?[]const u8 {
+    ) ?struct { ValueRecord, ValueRecord } {
+        // binary search based on Rust std implementation.
+        // [ARS] consolidated functions `binary_search` and `get`.
+
         // [ARS] https://github.com/harfbuzz/ttf-parser/issues/245
-        self.data = self.data[@sizeOf(u16)..];
+        var s = parser.Stream.new(self.data[@sizeOf(u16)..]);
 
-        // Based on Rust std implementation.
-
-        var size = self.data.len / self.record_len;
+        var size: usize = self.count;
         if (size == 0) return null;
-
-        const get_record = struct {
-            fn func(
-                index: usize,
-                set: PairSet,
-            ) ?[]const u8 {
-                const start = index * set.record_len;
-                return utils.slice(set.data, .{ start, set.record_len }) catch null;
-            }
-        }.func;
-
-        const get_glyph = struct {
-            fn func(
-                data: []const u8,
-            ) lib.GlyphId {
-                const bytes = data[0..2];
-                return .{std.mem.readInt(u16, bytes, .big)};
-            }
-        }.func;
 
         var base: usize = 0;
         while (size > 1) {
@@ -495,7 +479,7 @@ pub const PairSet = struct {
             // mid is always in [0, size), that means mid is >= 0 and < size.
             // mid >= 0: by definition
             // mid < size: mid = size / 2 + size / 4 + size / 8 ...
-            const glyph = get_glyph(get_record(mid, self) orelse return null);
+            const glyph = s.read_at(lib.GlyphId, mid * self.record_len) catch return null;
             const cmp = std.math.order(glyph[0], second[0]);
 
             base = if (cmp == .gt) base else mid;
@@ -503,23 +487,13 @@ pub const PairSet = struct {
         }
 
         // base is always in [0, size) because base <= mid.
-        const value = get_record(base, self) orelse return null;
-        const cmp = std.math.order(get_glyph(value)[0], second[0]);
-        return if (cmp == .eq) value else null;
-    }
 
-    /// Returns a `ValueRecord` pair using the second glyph.
-    pub fn get(
-        self: PairSet,
-        second: lib.GlyphId,
-    ) parser.Error!struct { ValueRecord, ValueRecord } {
-        const record_data = self.binary_search(second) orelse return error.ParseFail;
-        var s = parser.Stream.new(record_data);
-        s.skip(lib.GlyphId);
-        return .{
-            try .parse(self.data, &s, self.flags[0]),
-            try .parse(self.data, &s, self.flags[1]),
-        };
+        const glyph = s.read_at(lib.GlyphId, base * self.record_len) catch return null;
+        const cmp = std.math.order(glyph[0], second[0]);
+        return if (cmp == .eq) .{
+            ValueRecord.parse(self.data, &s, self.flags[0]) catch return null,
+            ValueRecord.parse(self.data, &s, self.flags[1]) catch return null,
+        } else null;
     }
 };
 
