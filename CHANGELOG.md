@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+## 0.1.5 - 2026-11-11
+
 ### Fixed
 
 - Fixed a very silly bug in `Face` methods that get glyph metrics returning null if the offset given by variable fonts was negative.
